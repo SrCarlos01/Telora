@@ -1,0 +1,8 @@
+# Archivos temporales de Microsoft Word
+~WRL*.tmp
+~$*.docx
+
+# Temporales varios de Office / sistema
+~$*.xlsx
+Thumbs.db
+desktop.ini

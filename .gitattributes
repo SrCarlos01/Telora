@@ -1,0 +1,13 @@
+# Normaliza los saltos de línea: en el repo se guardan como LF,
+# en el checkout de Windows se usan CRLF automáticamente.
+* text=auto
+
+*.html text
+*.css  text
+*.js   text
+*.json text
+*.md   text
+
+# Documentos de Office: binarios, sin conversión de EOL ni diff de texto.
+*.docx binary
+*.xlsx binary
