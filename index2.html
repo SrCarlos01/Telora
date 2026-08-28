@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MisFinanzas</title>
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -53,7 +53,8 @@ button{font-family:inherit;}
 
 #app{
   max-width:480px; margin:0 auto; height:100%; display:flex; flex-direction:column; position:relative;
-  overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:none;
+  overflow-y:auto; overscroll-behavior:none;
+  touch-action:pan-y;
   padding-top:env(safe-area-inset-top);
 }
 
@@ -90,7 +91,7 @@ button{font-family:inherit;}
 .month-label{font-size:18px; font-weight:500; color:var(--cream); min-width:160px; text-align:center;}
 
 /* ---------- SCREENS ---------- */
-.screen{display:none; padding:0 20px 110px; animation:fadeIn .28s ease;}
+.screen{display:none; padding:0 20px 110px; animation:fadeIn .28s ease; touch-action:pan-y;}
 .screen.active{display:block;}
 @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
 
@@ -311,6 +312,7 @@ button{font-family:inherit;}
   background:var(--surface); width:100%; max-width:480px; margin:0 auto;
   border-radius:22px 22px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom));
   max-height:88vh; overflow-y:auto; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+  touch-action:pan-y;
 }
 .sheet-overlay.open .sheet{transform:translateY(0);}
 .sheet-handle{width:36px; height:4px; background:var(--border); border-radius:4px; margin:6px auto 16px;}
@@ -1108,20 +1110,37 @@ document.getElementById('nextMonth').onclick = nextMonth;
 // Se limitan a punteros táctiles (pointerType 'touch') para no interferir en escritorio.
 (function initSwipeGestures(){
   const appEl = document.getElementById('app');
-  const monthSel = document.querySelector('.month-select');
 
-  // --- Swipe horizontal: cambia de pestaña (contenido) o de mes (selector de mes) ---
-  let sx=0, sy=0, st=0, tracking=false, onMonthSel=false;
+  // Quita cualquier estilo inline que un arrastre haya dejado a medias.
+  function resetSheetVisual(sheet){
+    if(!sheet) return;
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+  }
+
+  /* --- Swipe horizontal: cambia de pestaña (contenido) o de mes (selector de mes) ---
+     Rastrea un único pointerId, escucha el fin del gesto en window (no en appEl) para
+     no perderlo si iOS re-clasifica el gesto, y tiene un timeout de seguridad que
+     limpia el estado si nunca llega pointerup/pointercancel (toques muy rápidos). */
+  let hId=null, hx=0, hy=0, ht=0, hOnMonthSel=false, hTimer=0;
+  function hClear(){
+    hId = null; hOnMonthSel = false;
+    if(hTimer){ clearTimeout(hTimer); hTimer = 0; }
+  }
   appEl.addEventListener('pointerdown', e=>{
     if(e.pointerType !== 'touch') return;
+    if(hId !== null) hClear();                                  // reset defensivo: gesto anterior sin cerrar
     if(document.querySelector('.sheet-overlay.open')) return;   // hay un sheet abierto: no navegar
-    sx = e.clientX; sy = e.clientY; st = Date.now(); tracking = true;
-    onMonthSel = !!(e.target.closest && e.target.closest('.month-select'));
+    hId = e.pointerId;
+    hx = e.clientX; hy = e.clientY; ht = Date.now();
+    hOnMonthSel = !!(e.target.closest && e.target.closest('.month-select'));
+    hTimer = setTimeout(hClear, 1000);
   });
-  appEl.addEventListener('pointerup', e=>{
-    if(!tracking || e.pointerType !== 'touch') return;
-    tracking = false;
-    const dx = e.clientX - sx, dy = e.clientY - sy, dt = Date.now() - st;
+  window.addEventListener('pointerup', e=>{
+    if(hId === null || e.pointerId !== hId) return;
+    const dx = e.clientX - hx, dy = e.clientY - hy, dt = Date.now() - ht;
+    const onMonthSel = hOnMonthSel;
+    hClear();
     if(dt > 700) return;
     if(Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.7) return;   // no es horizontal claro
     if(onMonthSel){
@@ -1132,37 +1151,57 @@ document.getElementById('nextMonth').onclick = nextMonth;
     if(dx < 0 && idx < SCREEN_ORDER.length - 1) switchScreen(SCREEN_ORDER[idx + 1]);
     else if(dx > 0 && idx > 0) switchScreen(SCREEN_ORDER[idx - 1]);
   });
-  appEl.addEventListener('pointercancel', ()=>{ tracking = false; });
+  window.addEventListener('pointercancel', e=>{
+    if(hId !== null && e.pointerId === hId) hClear();
+  });
 
-  // --- Swipe vertical hacia abajo sobre un sheet abierto: lo cierra ---
+  /* --- Swipe vertical hacia abajo sobre un sheet abierto: lo cierra ---
+     Igual que arriba: un solo pointerId, pointer capture para que el fin del gesto
+     llegue siempre al sheet, limpieza garantizada de flags + estilos inline, respaldo
+     en window y timeout de seguridad. Así un pointerup/pointercancel perdido nunca
+     deja el .sheet-overlay fijo capturando todos los toques. */
   document.querySelectorAll('.sheet-overlay').forEach(ov=>{
     const sheet = ov.querySelector('.sheet');
-    let dy0=0, dx0=0, dragging=false, curDy=0;
+    if(!sheet) return;
+    let vId=null, vy0=0, vx0=0, curDy=0, vTimer=0;
+
+    function vClear(){
+      const had = vId;
+      vId = null; curDy = 0;
+      if(vTimer){ clearTimeout(vTimer); vTimer = 0; }
+      if(had !== null){ try { sheet.releasePointerCapture(had); } catch(_){} }
+      resetSheetVisual(sheet);
+    }
+
     sheet.addEventListener('pointerdown', e=>{
       if(e.pointerType !== 'touch') return;
+      if(vId !== null) vClear();                                // reset defensivo
       const nearTop = (e.clientY - sheet.getBoundingClientRect().top) < 64;
       // Solo arranca el gesto si estamos arriba del scroll o cerca del handle,
       // así no pisa el scroll normal de un sheet largo.
       if(sheet.scrollTop > 0 && !nearTop) return;
-      dy0 = e.clientY; dx0 = e.clientX; dragging = true; curDy = 0;
+      vId = e.pointerId; vy0 = e.clientY; vx0 = e.clientX; curDy = 0;
       sheet.style.transition = 'none';
+      try { sheet.setPointerCapture(e.pointerId); } catch(_){}
+      vTimer = setTimeout(vClear, 1000);
     });
     sheet.addEventListener('pointermove', e=>{
-      if(!dragging || e.pointerType !== 'touch') return;
-      const dy = e.clientY - dy0, dx = e.clientX - dx0;
+      if(vId === null || e.pointerId !== vId) return;
+      const dy = e.clientY - vy0, dx = e.clientX - vx0;
       if(dy <= 0 || Math.abs(dx) > Math.abs(dy)){ curDy = 0; sheet.style.transform = ''; return; }
       curDy = dy;
       sheet.style.transform = `translateY(${dy}px)`;
     });
-    const endDrag = ()=>{
-      if(!dragging) return;
-      dragging = false;
-      sheet.style.transition = '';
-      sheet.style.transform = '';
-      if(curDy > 80) closeSheet(ov.id);
-    };
+    function endDrag(e){
+      if(vId === null || (e && e.pointerId !== vId)) return;
+      const shouldClose = curDy > 80;
+      vClear();
+      if(shouldClose) closeSheet(ov.id);
+    }
     sheet.addEventListener('pointerup', endDrag);
     sheet.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endDrag);              // respaldo si el gesto termina fuera
+    window.addEventListener('pointercancel', endDrag);
   });
 })();
 
