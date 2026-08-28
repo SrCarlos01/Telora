@@ -219,6 +219,7 @@ button{font-family:inherit;}
   background:rgba(180,84,74,0.16); color:var(--danger);
 }
 .goal-pause-badge .icon{width:11px; height:11px;}
+.ahorrado-nota{font-size:10.5px; color:var(--gold-dim); font-weight:400;}
 .goal-card.paused{
   border-color:var(--danger);
   background:var(--surface-2);
@@ -800,6 +801,7 @@ button{font-family:inherit;}
       </div>
       <button class="btn-primary" id="btnSaveCatEmoji">Guardar emoji</button>
     </div>
+    <button class="btn-ghost" id="btnCatIconDefault">Usar ícono por defecto</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
@@ -1051,6 +1053,27 @@ function calcularEstadoAportesDelMes(refDate){
     }
   }
   return pausadas;
+}
+// Ids de metas que estuvieron pausadas en ALGÚN mes entre su activación y el mes visto.
+// Sirve para aclarar en la tarjeta que el "acumulado" no descuenta esos meses.
+function metasAlgunaVezPausadas(){
+  const set = new Set();
+  let startMk = null;
+  state.goals.forEach(g=>{
+    const aa = g.aporteAutomatico;
+    if(aa && aa.activo && aa.fechaActivacion){
+      const mk = monthKey(new Date(aa.fechaActivacion+"T00:00:00"));
+      if(startMk === null || mk < startMk) startMk = mk;
+    }
+  });
+  if(startMk === null) return set;
+  const endMk = monthKey(currentDate);
+  // acotado a los últimos 48 meses por si hay fechas de activación muy viejas
+  for(let mk = Math.max(startMk + 1, endMk - 48); mk <= endMk; mk++){
+    const d = new Date(Math.floor(mk / 12), mk % 12, 1);
+    calcularEstadoAportesDelMes(d).forEach(id=> set.add(id));
+  }
+  return set;
 }
 // Categoría de mayor gasto normal del mes visto (recorre el mismo cálculo que catTotals).
 function topGastoCategoria(refDate){
@@ -1550,6 +1573,7 @@ function renderMetas(){
   // (mismo criterio notCutOff que getExpensesForMonth con los gastos fijos).
   const visibles = state.goals.filter(g=> goalNotCutOff(g, currentDate));
   const pausadasAuto = calcularEstadoAportesDelMes(currentDate);   // Día 11
+  const everPaused = metasAlgunaVezPausadas();                     // pausa en cualquier mes pasado
   const topGasto = topGastoCategoria(currentDate);
 
   if(visibles.length === 0){
@@ -1596,6 +1620,8 @@ function renderMetas(){
     // Aporte mensual pactado, siempre visible (igual que el monto por cuota en debt-card).
     const aporteLine = `<span>Aporte mensual <b>${money(aporteMensual)}</b></span>`;
     const pausada = aa.activo && pausadasAuto.has(g.id);
+    // Si tiene/tuvo alguna pausa, aclara que el acumulado no descuenta esos meses.
+    const ahorradoNota = everPaused.has(g.id) ? ` <span class="ahorrado-nota">(no descuenta meses pausados)</span>` : '';
     let autoNote = '';
     if(pausada){
       const extra = topGasto ? ` Mayor gasto: ${topGasto.categoria} (${money(topGasto.monto)}).` : '';
@@ -1626,7 +1652,7 @@ function renderMetas(){
         <div class="debt-amt">${money(ahorrado)}<small>acumulado</small></div>
       </div>
       <div class="debt-foot">
-        <span>Ahorrado <b>${money(ahorrado)}</b></span>
+        <span>Ahorrado <b>${money(ahorrado)}</b>${ahorradoNota}</span>
         ${aporteLine}
       </div>
       <div class="goal-expand">${expandInner}</div>
@@ -1649,7 +1675,7 @@ function renderMetas(){
       </div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
       <div class="debt-foot">
-        <span>Ahorrado <b>${money(ahorrado)}</b></span>
+        <span>Ahorrado <b>${money(ahorrado)}</b>${ahorradoNota}</span>
         <span><b>${pct}%</b></span>
       </div>
       <div class="debt-foot" style="margin-top:4px;">
@@ -1936,7 +1962,11 @@ function openCategoriaDetalle(categoria, normalExpenses){
   });
   state.debts.filter(d=> d.category===categoria).forEach(d=>{
     const info = cuotaInfoForMonth(d, currentDate);
-    if(info){ items.push({ tipo:'Cuota', descripcion: d.description + ` (cuota ${info.cuotaNum} de ${info.total})`, monto: info.monto, fecha: null }); }
+    if(info){
+      const cuotaLbl = `cuota ${info.cuotaNum} de ${info.total}`;
+      const desc = d.description ? `${d.description} (${cuotaLbl})` : `Cuota ${info.cuotaNum} de ${info.total}`;
+      items.push({ tipo:'Cuota', descripcion: desc, monto: info.monto, fecha: null });
+    }
   });
   items.sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||''));
 
@@ -2233,6 +2263,14 @@ document.getElementById('btnSaveCatEmoji').onclick = ()=>{
   const v = document.getElementById('catEmojiInput').value.trim();
   if(!v){ alert('Escribe un emoji.'); return; }
   setCatIcon(catIconTarget, { tipo:'emoji', valor:v });
+};
+document.getElementById('btnCatIconDefault').onclick = ()=>{
+  // Borra la entrada -> catIcon() vuelve a CAT_ICONS[cat] || 'tag'.
+  if(catIconTarget && state.config.categoriaIconos) delete state.config.categoriaIconos[catIconTarget];
+  saveState();
+  closeSheet('sheetCatIcon');
+  renderConfig();
+  renderAll();
 };
 
 /* ==================== RESPALDO / RESTAURAR DATOS (JSON) ==================== */
