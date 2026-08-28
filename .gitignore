@@ -6,3 +6,7 @@
 ~$*.xlsx
 Thumbs.db
 desktop.ini
+
+# El prototipo index2.html solo se versiona desde la raíz,
+# nunca las copias dentro de las carpetas de snapshots diarios.
+Dia */index2.html
