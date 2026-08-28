@@ -102,10 +102,10 @@ button{font-family:inherit;}
 .balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
 .balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 18px; color:#FBEFE9;}
 .amount.neg{color:#F3D3CE;}
-.balance-row{display:flex; gap:14px;}
-.balance-item{flex:1;}
-.balance-item .k{font-size:12.5px; color:#E7C3CB; margin:0 0 3px;}
-.balance-item .v{font-size:16px; font-weight:600; color:#FBEFE9; margin:0;}
+.balance-row{display:flex; gap:10px;}
+.balance-item{flex:1; min-width:0;}
+.balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
+.balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
 
 .section-title{
   font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
@@ -190,7 +190,8 @@ button{font-family:inherit;}
 .debt-manual-note .icon{width:13px; height:13px;}
 
 /* ---------- METAS (reutiliza .debt-card) ---------- */
-.goal-card{animation:fadeIn .3s ease;}
+.goal-card{animation:fadeIn .3s ease; cursor:pointer;}
+.goal-card:active{transform:scale(0.99);}
 .goal-card .progress-fill{background:linear-gradient(90deg, var(--gold-dim) 0%, var(--gold) 100%);}
 .goal-card.done .progress-fill{background:linear-gradient(90deg, var(--success) 0%, #A7C08D 100%);}
 .goal-done-badge{
@@ -198,6 +199,8 @@ button{font-family:inherit;}
   background:rgba(125,155,105,0.16); color:var(--success); display:inline-block; margin-top:2px;
 }
 .metas-add{margin-bottom:18px;}
+/* el bloque de campos "meta definida" tiene 2 campos: más alto que .cuota-fields base */
+#metaDefinidaFields.open{max-height:260px;}
 
 /* ---------- FAB + BOTTOM NAV ---------- */
 .bottom-zone{
@@ -342,6 +345,7 @@ button{font-family:inherit;}
         <div class="balance-item"><p class="k">Ingresos</p><p class="v" id="rIngresos">$0</p></div>
         <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p></div>
         <div class="balance-item"><p class="k">Cuotas</p><p class="v" id="rCuotas">$0</p></div>
+        <div class="balance-item"><p class="k">Metas</p><p class="v" id="rMetas">$0</p></div>
       </div>
     </div>
     <p class="section-title">Gasto por categoría</p>
@@ -471,9 +475,72 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="metaTitle">Nueva meta</h2>
     <div class="field"><label>Nombre</label><input type="text" id="mNombre" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
-    <div class="field"><label>Monto objetivo</label><input type="number" id="mMonto" placeholder="0" inputmode="numeric"></div>
-    <div class="field"><label>Fecha límite</label><input type="date" id="mFecha"></div>
+    <div class="field">
+      <label>Meta indefinida</label>
+      <div class="toggle-row">
+        <div class="toggle-opt" data-metaindef="Sí">Sí</div>
+        <div class="toggle-opt active" data-metaindef="No">No</div>
+      </div>
+      <p id="metaIndefNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Sin monto objetivo ni fecha límite: solo defines un aporte mensual y la app te muestra cuánto llevas acumulado.</p>
+    </div>
+    <div class="cuota-fields open" id="metaDefinidaFields">
+      <div class="field"><label>Monto objetivo</label><input type="number" id="mMonto" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Fecha límite</label><input type="date" id="mFecha"></div>
+    </div>
+    <div class="cuota-fields" id="metaIndefFields">
+      <div class="field"><label>Aporte mensual</label><input type="number" id="mAporteMensual" placeholder="0" inputmode="numeric"></div>
+    </div>
     <button class="btn-primary" id="btnSaveMeta">Guardar meta</button>
+    <button class="btn-danger" id="btnDeleteMeta" style="display:none;">Eliminar meta</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: confirmar eliminar meta con historial -->
+<div class="sheet-overlay" id="sheetConfirmGoal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Eliminar esta meta</h2>
+    <p style="font-size:13.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;" id="confirmGoalText"></p>
+    <button class="btn-danger" id="btnConfirmDeleteGoal">Sí, eliminar</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: aportar a una meta (2 pasos: monto -> confirmar) -->
+<div class="sheet-overlay" id="sheetAportar">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="aportarTitle">Aportar a la meta</h2>
+
+    <div id="aportarPaso1">
+      <div class="field"><label>Monto a aportar</label><input type="number" id="apMonto" placeholder="0" inputmode="numeric"></div>
+      <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Se registra con fecha de hoy y se descuenta del disponible de este mes.</p>
+      <button class="btn-primary" id="btnAportarRevisar">Continuar</button>
+      <button class="btn-ghost" data-close>Cancelar</button>
+    </div>
+
+    <div id="aportarPaso2" style="display:none;">
+      <p style="font-size:14.5px; color:var(--cream); line-height:1.55; margin:0 0 6px;" id="aportarConfirmText"></p>
+      <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 18px;">Revisa el monto antes de confirmar.</p>
+      <button class="btn-primary" id="btnAportarConfirmar">Confirmar aporte</button>
+      <button class="btn-ghost" id="btnAportarVolver">Volver</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET: aporte automático mensual de una meta -->
+<div class="sheet-overlay" id="sheetAutoMeta">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="autoMetaTitle">Aporte automático</h2>
+    <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 16px;">
+      Cada mes se sumará un aporte por este monto al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
+    </p>
+    <div class="field"><label>Monto mensual</label><input type="number" id="autoMonto" placeholder="0" inputmode="numeric"></div>
+    <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="autoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
+    <button class="btn-primary" id="btnSaveAutoMeta">Activar aporte automático</button>
+    <button class="btn-danger" id="btnDisableAutoMeta" style="display:none;">Desactivar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
@@ -613,6 +680,11 @@ function loadState(){
   if(s){
     const parsed = JSON.parse(s);
     if(!Array.isArray(parsed.goals)) parsed.goals = [];   // migración: metas de ahorro (Día 5)
+    parsed.goals.forEach(g=>{                              // migración: campos nuevos de meta (Días 4-9)
+      if(typeof g.indefinida !== 'boolean') g.indefinida = false;
+      if(!Array.isArray(g.aportes)) g.aportes = [];
+      if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
+    });
     return parsed;
   }
   return { config: {...DEFAULTS}, expenses: [], incomes: [], debts: [], goals: [] };
@@ -664,6 +736,41 @@ function getExpensesForMonth(refDate){
     });
 
   return [...real, ...virtualFixed];
+}
+
+/* ==================== APORTE AUTOMÁTICO DE METAS: recurrencia ==================== */
+// Mismo criterio que getExpensesForMonth() para los gastos fijos: el aporte automático
+// genera una "ocurrencia virtual" en cada mes POSTERIOR al mes de activación, el día
+// configurado (ajustado al último día si el mes fuera más corto — con el tope de 28 casi
+// nunca aplica, pero se mantiene por paridad). Es 100% virtual: no se escribe en
+// goal.aportes; solo afecta el "Disponible" del mes y el acumulado que se muestra.
+// Un aporte automático pausado (lógica del Día 11) no genera ocurrencias.
+// Una meta eliminada (goalEndMonthKey) no genera ocurrencias desde ese mes en adelante.
+function goalNotCutOff(goal, refDate){
+  return goal.goalEndMonthKey == null || monthKey(refDate) < goal.goalEndMonthKey;
+}
+function aporteAutomaticoVirtualParaMes(goal, refDate){
+  const aa = goal && goal.aporteAutomatico;
+  if(!aa || !aa.activo || aa.pausado || !aa.fechaActivacion) return null;
+  if(!goalNotCutOff(goal, refDate)) return null;   // meta eliminada: no genera aportes desde el corte
+  const mk = monthKey(refDate);
+  const activacionMk = monthKey(new Date(aa.fechaActivacion+"T00:00:00"));
+  if(activacionMk >= mk) return null;   // solo meses posteriores a la activación
+  const lastDayOfMonth = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
+  const useDay = Math.min(aa.diaDelMes || 1, lastDayOfMonth);
+  const yyyy = refDate.getFullYear(), mm = String(refDate.getMonth()+1).padStart(2,'0'), dd = String(useDay).padStart(2,'0');
+  return { id: 'auto-'+goal.id+'-'+mk, fecha: `${yyyy}-${mm}-${dd}`, monto: aa.monto || 0, tipo: 'automatico', isVirtual: true };
+}
+// Acumulado aportado por el aporte automático desde su activación hasta el mes visto
+// (nº de meses posteriores a la activación × monto). Sirve para la tarjeta de la meta.
+function aporteAutomaticoAcumulado(goal, hastaDate){
+  const aa = goal && goal.aporteAutomatico;
+  if(!aa || !aa.activo || aa.pausado || !aa.fechaActivacion) return 0;
+  let endMk = monthKey(hastaDate);
+  // Si la meta fue eliminada, no se acumula nada desde el mes de corte en adelante.
+  if(goal.goalEndMonthKey != null) endMk = Math.min(endMk, goal.goalEndMonthKey - 1);
+  const meses = Math.max(0, endMk - monthKey(new Date(aa.fechaActivacion+"T00:00:00")));
+  return meses * (aa.monto || 0);
 }
 
 
@@ -877,15 +984,63 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
 };
 
 /* ==================== FORM: META ==================== */
-function openMetaForm(){
-  if(state.goals.length >= GOALS_FREE_LIMIT){
+// Toggle "Meta indefinida": alterna qué bloque de campos se ve, reutilizando la
+// animación de .cuota-fields (max-height). "No" (por defecto) => monto objetivo + fecha.
+// "Sí" => solo aporte mensual (montoObjetivo y fechaLimite quedan en 0 / "").
+document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    const indef = el.dataset.metaindef === 'Sí';
+    document.getElementById('metaDefinidaFields').classList.toggle('open', !indef);
+    document.getElementById('metaIndefFields').classList.toggle('open', indef);
+    document.getElementById('metaIndefNote').style.display = indef ? 'block' : 'none';
+  });
+});
+
+let editingGoalId = null;
+// Nº de metas que cuentan para el límite freemium: solo las que NO fueron eliminadas.
+function activeGoalsCount(){ return state.goals.filter(g=> g.goalEndMonthKey == null).length; }
+
+function openMetaForm(goalId){
+  editingGoalId = goalId || null;
+
+  if(!editingGoalId && activeGoalsCount() >= GOALS_FREE_LIMIT){
     alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
     return;
   }
+
+  // Estado por defecto (modo crear).
   document.getElementById('metaTitle').textContent = 'Nueva meta';
   document.getElementById('mNombre').value = '';
   document.getElementById('mMonto').value = '';
   document.getElementById('mFecha').value = '';
+  document.getElementById('mAporteMensual').value = '';
+  document.getElementById('btnDeleteMeta').style.display = 'none';
+  let indef = false;
+
+  if(editingGoalId){
+    const g = state.goals.find(x=>x.id===editingGoalId);
+    if(!g) return;
+    document.getElementById('metaTitle').textContent = 'Editar meta';
+    document.getElementById('mNombre').value = g.name;
+    indef = !!g.indefinida;
+    if(indef){
+      // El "aporte mensual" de una meta indefinida vive en aporteAutomatico.monto.
+      document.getElementById('mAporteMensual').value = (g.aporteAutomatico && g.aporteAutomatico.monto) ? g.aporteAutomatico.monto : '';
+    } else {
+      document.getElementById('mMonto').value = g.montoObjetivo || '';
+      document.getElementById('mFecha').value = g.fechaLimite || '';
+    }
+    document.getElementById('btnDeleteMeta').style.display = 'block';
+  }
+
+  // Aplica el toggle definida/indefinida y muestra el bloque de campos correcto.
+  document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(x=>
+    x.classList.toggle('active', x.dataset.metaindef === (indef ? 'Sí' : 'No')));
+  document.getElementById('metaDefinidaFields').classList.toggle('open', !indef);
+  document.getElementById('metaIndefFields').classList.toggle('open', indef);
+  document.getElementById('metaIndefNote').style.display = indef ? 'block' : 'none';
   openSheet('sheetMeta');
 }
 document.getElementById('btnNuevaMeta').onclick = ()=> openMetaForm();
@@ -894,27 +1049,52 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   const nombre = document.getElementById('mNombre').value.trim();
   const montoObjetivo = parseFloat(document.getElementById('mMonto').value);
   const fechaLimite = document.getElementById('mFecha').value;
+  const indefinida = document.querySelector('#sheetMeta [data-metaindef].active').dataset.metaindef === 'Sí';
+  const aporteMensual = parseFloat(document.getElementById('mAporteMensual').value);
 
-  if(!nombre || !montoObjetivo || montoObjetivo <= 0){
-    alert('Completa el nombre y un monto objetivo válido.'); return;
+  if(!nombre){ alert('Ponle un nombre a la meta.'); return; }
+  if(indefinida){
+    if(!aporteMensual || aporteMensual <= 0){ alert('Para una meta indefinida, ingresa un aporte mensual válido.'); return; }
+  } else {
+    if(!montoObjetivo || montoObjetivo <= 0){ alert('Completa un monto objetivo válido (o marca la meta como indefinida).'); return; }
   }
-  // Guarda por si el límite se alcanzó con la hoja ya abierta.
-  if(state.goals.length >= GOALS_FREE_LIMIT){
-    alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
+
+  if(editingGoalId){
+    // ---- MODO EDICIÓN: actualiza el objeto existente, sin restricciones ----
+    const g = state.goals.find(x=>x.id===editingGoalId);
+    if(!g){ closeSheet('sheetMeta'); return; }
+    g.name = nombre;
+    g.indefinida = indefinida;
+    g.montoObjetivo = indefinida ? 0 : montoObjetivo;
+    g.fechaLimite = indefinida ? "" : (fechaLimite || "");
+    if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
+    if(indefinida){
+      g.aporteAutomatico.monto = aporteMensual;
+    } else if(!g.aporteAutomatico.activo){
+      // Pasó a definida y no tiene aporte automático activo: limpia el monto heredado.
+      g.aporteAutomatico.monto = 0;
+    }
+    saveState(); closeSheet('sheetMeta'); renderAll();
     return;
   }
 
+  // ---- MODO CREAR ----
+  if(activeGoalsCount() >= GOALS_FREE_LIMIT){
+    alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
+    return;
+  }
   const hoy = new Date().toISOString().slice(0,10);
   const nuevaMeta = {
     id: uid(),
     name: nombre,
-    montoObjetivo: montoObjetivo,
-    fechaLimite: fechaLimite || "",     // YYYY-MM-DD
+    indefinida: indefinida,             // true => sin monto objetivo ni fecha límite
+    montoObjetivo: indefinida ? 0 : montoObjetivo,
+    fechaLimite: indefinida ? "" : (fechaLimite || ""),   // YYYY-MM-DD
     fechaCreacion: hoy,                  // YYYY-MM-DD, se setea al crear, no editable
     aportes: [],                         // { id, fecha, monto, tipo: "manual"|"automatico" }
     aporteAutomatico: {
-      activo: false,
-      monto: 0,
+      activo: false,                     // se activa recién en el Bloque 3 (Días 8-9)
+      monto: indefinida ? aporteMensual : 0,
       diaDelMes: 1,
       pausado: false,
       razonPausa: null
@@ -924,23 +1104,93 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   saveState(); closeSheet('sheetMeta'); renderAll();
 };
 
+/* ==================== ELIMINAR META ==================== */
+// Criterio (igual que fixedEndMonthKey de gastos fijos): NO se borra el objeto del
+// arreglo; se marca goalEndMonthKey = mes actual. Desde ese mes la meta deja de
+// aparecer y deja de generar aportes automáticos virtuales; los meses ya
+// transcurridos NO se recalculan. Excepción: si la meta no tiene NINGÚN historial
+// (sin aportes y sin aporte automático activo) se elimina de verdad, porque no hay
+// nada que proteger.
+let pendingDeleteGoalId = null;
+document.getElementById('btnDeleteMeta').onclick = ()=>{
+  const g = state.goals.find(x=>x.id===editingGoalId);
+  if(!g){ closeSheet('sheetMeta'); return; }
+  const tieneHistorial = (g.aportes && g.aportes.length > 0) || (g.aporteAutomatico && g.aporteAutomatico.activo);
+  if(!tieneHistorial){
+    state.goals = state.goals.filter(x=>x.id!==g.id);
+    saveState(); closeSheet('sheetMeta'); renderAll();
+    return;
+  }
+  pendingDeleteGoalId = g.id;
+  const nombreMes = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
+  document.getElementById('confirmGoalText').textContent =
+    `Esta meta dejará de aparecer desde ${nombreMes} en adelante. Los aportes ya realizados y el efecto que tuvieron en tu Disponible de meses anteriores se mantienen sin cambios. Esta acción no se puede deshacer.`;
+  closeSheet('sheetMeta');
+  openSheet('sheetConfirmGoal');
+};
+document.getElementById('btnConfirmDeleteGoal').onclick = ()=>{
+  const g = state.goals.find(x=>x.id===pendingDeleteGoalId);
+  if(g){ g.goalEndMonthKey = monthKey(currentDate); saveState(); }
+  pendingDeleteGoalId = null;
+  closeSheet('sheetConfirmGoal'); renderAll();
+};
+
 /* ==================== RENDER: METAS ==================== */
 function renderMetas(){
   const box = document.getElementById('mList');
   document.getElementById('btnNuevaMeta').style.display =
-    state.goals.length >= GOALS_FREE_LIMIT ? 'none' : 'block';
+    activeGoalsCount() >= GOALS_FREE_LIMIT ? 'none' : 'block';
 
-  if(!state.goals || state.goals.length === 0){
+  // Metas visibles este mes: las no eliminadas, o eliminadas en un mes futuro al visto
+  // (mismo criterio notCutOff que getExpensesForMonth con los gastos fijos).
+  const visibles = state.goals.filter(g=> goalNotCutOff(g, currentDate));
+
+  if(visibles.length === 0){
     box.innerHTML = `<div class="empty-state">${icon('target')}<p>Aún no tienes metas de ahorro.<br>Crea una para seguir tu progreso mes a mes.</p></div>`;
     return;
   }
 
-  box.innerHTML = state.goals.map(g=>{
-    const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0);
+  box.innerHTML = visibles.map(g=>{
+    const aa = g.aporteAutomatico || {};
+    const aporteMensual = aa.monto || 0;
+    // "Ahorrado" = aportes manuales reales + lo ya devengado por el aporte automático
+    // (mismo dinero que se descontó del Disponible mes a mes). Ver nota en el reporte.
+    const ahorradoManual = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0);
+    const ahorrado = ahorradoManual + aporteAutomaticoAcumulado(g, currentDate);
+    // Aporte mensual pactado, siempre visible (igual que el monto por cuota en debt-card).
+    const aporteLine = `<span>Aporte mensual <b>${money(aporteMensual)}</b></span>`;
+    const autoNote = aa.activo
+      ? `<p class="debt-manual-note">${icon('tag')} Aporte automático activo · ${money(aporteMensual)} el día ${aa.diaDelMes||1}</p>`
+      : '';
+
+    const actionsHtml =
+      `<button class="debt-action" data-aportar="${g.id}">Aportar</button>` +
+      `<button class="debt-action" data-auto="${g.id}">${aa.activo ? 'Editar aporte automático' : 'Activar aporte automático'}</button>`;
+
+    if(g.indefinida){
+      // Meta sin objetivo numérico: no hay barra que llenar, solo acumulado + aporte.
+      return `
+    <div class="debt-card goal-card" data-editgoal="${g.id}">
+      <div class="debt-top">
+        <div>
+          <p class="debt-title">${g.name}</p>
+          <p class="debt-cat">Meta indefinida · sin fecha límite</p>
+        </div>
+        <div class="debt-amt">${money(ahorrado)}<small>acumulado</small></div>
+      </div>
+      <div class="debt-foot">
+        <span>Ahorrado <b>${money(ahorrado)}</b></span>
+        ${aporteLine}
+      </div>
+      ${autoNote}
+      ${actionsHtml}
+    </div>`;
+    }
+
     const pct = g.montoObjetivo > 0 ? Math.min(100, Math.round(ahorrado / g.montoObjetivo * 100)) : 0;
     const done = pct >= 100;
     return `
-    <div class="debt-card goal-card${done ? ' done' : ''}">
+    <div class="debt-card goal-card${done ? ' done' : ''}" data-editgoal="${g.id}">
       <div class="debt-top">
         <div>
           <p class="debt-title">${g.name}</p>
@@ -954,9 +1204,106 @@ function renderMetas(){
         <span>Ahorrado <b>${money(ahorrado)}</b></span>
         <span><b>${pct}%</b></span>
       </div>
+      <div class="debt-foot" style="margin-top:4px;">
+        ${aporteLine}
+      </div>
+      ${autoNote}
+      ${actionsHtml}
     </div>`;
   }).join('');
+
+  // Tocar la tarjeta abre el editor (igual que tocar un gasto/ingreso en Historial).
+  box.querySelectorAll('[data-editgoal]').forEach(el=>{
+    el.addEventListener('click', ()=> openMetaForm(el.dataset.editgoal));
+  });
+  // Los botones internos no deben disparar además el editor de la tarjeta.
+  box.querySelectorAll('[data-aportar]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openAportar(el.dataset.aportar); });
+  });
+  box.querySelectorAll('[data-auto]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openAutoMeta(el.dataset.auto); });
+  });
 }
+
+/* ==================== APORTE MANUAL A UNA META ==================== */
+let aportarGoalId = null;
+function openAportar(goalId){
+  const g = state.goals.find(x=>x.id===goalId);
+  if(!g) return;
+  aportarGoalId = goalId;
+  document.getElementById('aportarTitle').textContent = 'Aportar a ' + g.name;
+  // Sugerencia: si tiene aporte mensual pactado, lo pre-carga.
+  const sugerido = (g.aporteAutomatico && g.aporteAutomatico.monto) ? g.aporteAutomatico.monto : '';
+  document.getElementById('apMonto').value = sugerido;
+  document.getElementById('aportarPaso1').style.display = 'block';
+  document.getElementById('aportarPaso2').style.display = 'none';
+  openSheet('sheetAportar');
+}
+document.getElementById('btnAportarRevisar').onclick = ()=>{
+  const monto = parseFloat(document.getElementById('apMonto').value);
+  if(!monto || monto <= 0){ alert('Ingresa un monto válido.'); return; }
+  const g = state.goals.find(x=>x.id===aportarGoalId);
+  if(!g){ closeSheet('sheetAportar'); return; }
+  document.getElementById('aportarConfirmText').textContent =
+    `Vas a aportar ${money(monto)} a "${g.name}" con fecha de hoy. Se descontará del disponible de este mes.`;
+  document.getElementById('aportarPaso1').style.display = 'none';
+  document.getElementById('aportarPaso2').style.display = 'block';
+};
+document.getElementById('btnAportarVolver').onclick = ()=>{
+  document.getElementById('aportarPaso2').style.display = 'none';
+  document.getElementById('aportarPaso1').style.display = 'block';
+};
+document.getElementById('btnAportarConfirmar').onclick = ()=>{
+  const g = state.goals.find(x=>x.id===aportarGoalId);
+  const monto = parseFloat(document.getElementById('apMonto').value);
+  if(!g || !monto || monto <= 0){ closeSheet('sheetAportar'); return; }
+  if(!Array.isArray(g.aportes)) g.aportes = [];
+  g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
+  saveState(); closeSheet('sheetAportar'); renderAll();
+};
+
+/* ==================== APORTE AUTOMÁTICO MENSUAL: configuración ==================== */
+let autoMetaGoalId = null;
+function openAutoMeta(goalId){
+  const g = state.goals.find(x=>x.id===goalId);
+  if(!g) return;
+  autoMetaGoalId = goalId;
+  const aa = g.aporteAutomatico || { activo:false, monto:0, diaDelMes:1 };
+  document.getElementById('autoMetaTitle').textContent = 'Aporte automático · ' + g.name;
+  document.getElementById('autoMonto').value = aa.monto || '';
+  document.getElementById('autoDia').value = aa.diaDelMes || 1;
+  document.getElementById('btnDisableAutoMeta').style.display = aa.activo ? 'block' : 'none';
+  document.getElementById('btnSaveAutoMeta').textContent = aa.activo ? 'Guardar cambios' : 'Activar aporte automático';
+  openSheet('sheetAutoMeta');
+}
+document.getElementById('btnSaveAutoMeta').onclick = ()=>{
+  const g = state.goals.find(x=>x.id===autoMetaGoalId);
+  if(!g){ closeSheet('sheetAutoMeta'); return; }
+  const monto = parseFloat(document.getElementById('autoMonto').value);
+  const dia = parseInt(document.getElementById('autoDia').value, 10);
+  if(!monto || monto <= 0){ alert('Ingresa un monto mensual válido.'); return; }
+  if(!dia || dia < 1 || dia > 28){ alert('El día del mes debe estar entre 1 y 28.'); return; }
+  const prev = g.aporteAutomatico || {};
+  g.aporteAutomatico = {
+    activo: true,
+    monto: monto,
+    diaDelMes: dia,
+    pausado: false,
+    razonPausa: null,
+    // La activación fija el mes desde el cual se generan las ocurrencias virtuales
+    // (las del mes siguiente en adelante). Si ya estaba activo, se conserva.
+    fechaActivacion: prev.fechaActivacion || new Date().toISOString().slice(0,10)
+  };
+  saveState(); closeSheet('sheetAutoMeta'); renderAll();
+};
+document.getElementById('btnDisableAutoMeta').onclick = ()=>{
+  const g = state.goals.find(x=>x.id===autoMetaGoalId);
+  if(!g){ closeSheet('sheetAutoMeta'); return; }
+  const prev = g.aporteAutomatico || {};
+  // Se desactiva pero se recuerda el último monto/día para reactivar rápido.
+  g.aporteAutomatico = { activo:false, monto: prev.monto || 0, diaDelMes: prev.diaDelMes || 1, pausado:false, razonPausa:null };
+  saveState(); closeSheet('sheetAutoMeta'); renderAll();
+};
 
 /* ==================== CUOTAS: cálculo ==================== */
 function addMonths(dateStr, n){
@@ -1018,13 +1365,28 @@ function renderResumen(){
     if(info){ totalCuotas += info.monto; cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto; }
   });
 
-  const disponible = totalIngresos - totalGastos - totalCuotas;
+  // Aportes a metas que caen en el mes visible: manuales (reales, en goal.aportes) +
+  // automáticos (virtuales, generados por aporteAutomaticoVirtualParaMes — Bloque 3).
+  // Una meta eliminada (goalEndMonthKey) no suma nada desde el mes de corte en adelante;
+  // los meses anteriores se calculan en su propia vista y no se recalculan.
+  let totalAportesMetas = 0;
+  state.goals.forEach(g=>{
+    if(!goalNotCutOff(g, currentDate)) return;
+    (g.aportes||[]).forEach(a=>{
+      if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) totalAportesMetas += a.monto;
+    });
+    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
+    if(va) totalAportesMetas += va.monto;
+  });
+
+  const disponible = totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
 
   document.getElementById('rDisponible').textContent = money(disponible);
   document.getElementById('rDisponible').classList.toggle('neg', disponible<0);
   document.getElementById('rIngresos').textContent = money(totalIngresos);
   document.getElementById('rGastos').textContent = money(totalGastos);
   document.getElementById('rCuotas').textContent = money(totalCuotas);
+  document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
   const catTotals = {};
   state.config.categorias.forEach(c=> catTotals[c]=0);
@@ -1300,6 +1662,11 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
   if(pendingRestoreData){
     state = pendingRestoreData;
     if(!Array.isArray(state.goals)) state.goals = [];   // respaldos previos a las metas
+    state.goals.forEach(g=>{                            // normaliza campos nuevos de meta
+      if(typeof g.indefinida !== 'boolean') g.indefinida = false;
+      if(!Array.isArray(g.aportes)) g.aportes = [];
+      if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
+    });
     saveState();
     pendingRestoreData = null;
   }
