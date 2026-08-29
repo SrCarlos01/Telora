@@ -106,8 +106,16 @@ button{font-family:inherit;}
   border-radius:20px; padding:22px 20px; margin-bottom:22px;
 }
 .balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
-.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 18px; color:#FBEFE9;}
+.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9;}
 .amount.neg{color:#F3D3CE;}
+/* Saldo de meses anteriores (cuenta corriente) — visible solo si != $0 */
+.balance-carry{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  margin:0 0 14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14);
+}
+.balance-carry .bc-k{font-size:12.5px; color:#E7C3CB;}
+.balance-carry .bc-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
+.balance-carry .bc-v.neg{color:#F3D3CE;}
 .balance-row{display:flex; gap:10px;}
 .balance-item{flex:1; min-width:0;}
 .balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
@@ -206,8 +214,6 @@ button{font-family:inherit;}
   background:rgba(125,155,105,0.16); color:var(--success); display:inline-block; margin-top:2px;
 }
 .metas-add{margin-bottom:18px;}
-/* el bloque de campos "meta definida" tiene 2 campos: más alto que .cuota-fields base */
-#metaDefinidaFields.open{max-height:260px;}
 .debt-manual-note.paused{color:var(--danger);}
 
 /* ---------- TARJETAS COMPACTAS + EXPANSIÓN (C/D) ---------- */
@@ -359,8 +365,28 @@ button{font-family:inherit;}
 }
 .field select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center;}
 .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.field input.input-lg{font-size:19px; font-weight:600;}
 .field-row{display:flex; gap:10px;}
 .field-row .field{flex:1;}
+
+/* checkbox + texto (reemplaza toggles Sí/No en algunos formularios) */
+.check-row{
+  display:flex; align-items:flex-start; gap:10px; margin-bottom:16px; cursor:pointer;
+  font-size:14.5px; color:var(--cream); line-height:1.4;
+}
+.check-row input[type=checkbox]{
+  width:20px; height:20px; margin:1px 0 0; flex-shrink:0; accent-color:var(--burgundy);
+  font-size:16px;   /* evita el auto-zoom de iOS al enfocar */
+}
+.check-row small{color:var(--cream-dim); font-size:12.5px;}
+
+/* aviso no bloqueante en el aporte manual */
+.aportar-warn{
+  font-size:12.5px; line-height:1.5; color:var(--gold);
+  background:rgba(201,166,107,0.10); border:1px solid var(--gold-dim);
+  border-radius:var(--radius-sm); padding:10px 12px; margin:0 0 12px;
+}
+.aportar-disp{font-size:12.5px; color:var(--cream-dim); margin:0 0 10px;}
 .toggle-row{display:flex; gap:10px;}
 .toggle-opt{
   flex:1; text-align:center; padding:11px; border-radius:var(--radius-sm); background:var(--surface-2);
@@ -522,6 +548,10 @@ button{font-family:inherit;}
     <div class="balance-card">
       <p class="label">Disponible este mes</p>
       <p class="amount" id="rDisponible">$0</p>
+      <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
+        <span class="bc-k">Saldo de meses anteriores</span>
+        <span class="bc-v" id="rSaldoAnterior">$0</span>
+      </p>
       <div class="balance-row">
         <div class="balance-item"><p class="k">Ingresos</p><p class="v" id="rIngresos">$0</p></div>
         <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p></div>
@@ -668,21 +698,37 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="metaTitle">Nueva meta</h2>
     <div class="field"><label>Nombre</label><input type="text" id="mNombre" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
-    <div class="field">
-      <label>Meta indefinida</label>
-      <div class="toggle-row">
-        <div class="toggle-opt" data-metaindef="Sí">Sí</div>
-        <div class="toggle-opt active" data-metaindef="No">No</div>
+    <div class="field" id="mFechaField"><label>Fecha límite</label><input type="date" id="mFecha"></div>
+    <label class="check-row">
+      <input type="checkbox" id="mIndef">
+      <span>Meta indefinida <small>(sin monto objetivo ni fecha límite)</small></span>
+    </label>
+    <div class="field" id="mMontoField">
+      <label>Monto objetivo</label>
+      <input type="text" id="mMonto" class="input-lg" placeholder="0" inputmode="numeric" autocomplete="off">
+    </div>
+
+    <details class="cfg-group" id="mAutoGroup" style="margin-bottom:16px;">
+      <summary>Aporte automático (opcional) <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <label class="check-row" style="margin-top:6px;">
+          <input type="checkbox" id="mAutoOn">
+          <span>Activar un aporte automático cada mes</span>
+        </label>
+        <div id="mAutoFields" style="display:none;">
+          <div class="field">
+            <label>Tipo de aporte</label>
+            <div class="toggle-row">
+              <div class="toggle-opt active" data-mautotipo="monto">Monto fijo</div>
+              <div class="toggle-opt" data-mautotipo="porcentaje">% del Disponible</div>
+            </div>
+          </div>
+          <div class="field"><label id="mAutoValorLabel">Monto mensual</label><input type="text" id="mAutoValor" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+          <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="mAutoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
+        </div>
       </div>
-      <p id="metaIndefNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Sin monto objetivo ni fecha límite: solo defines un aporte mensual y la app te muestra cuánto llevas acumulado.</p>
-    </div>
-    <div class="cuota-fields open" id="metaDefinidaFields">
-      <div class="field"><label>Monto objetivo</label><input type="text" id="mMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
-      <div class="field"><label>Fecha límite</label><input type="date" id="mFecha"></div>
-    </div>
-    <div class="cuota-fields" id="metaIndefFields">
-      <div class="field"><label>Aporte mensual</label><input type="text" id="mAporteMensual" placeholder="0" inputmode="numeric" autocomplete="off"></div>
-    </div>
+    </details>
+
     <button class="btn-primary" id="btnSaveMeta">Guardar meta</button>
     <button class="btn-danger" id="btnDeleteMeta" style="display:none;">Eliminar meta</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -715,6 +761,11 @@ button{font-family:inherit;}
 
     <div id="aportarPaso2" style="display:none;">
       <p style="font-size:14.5px; color:var(--cream); line-height:1.55; margin:0 0 6px;" id="aportarConfirmText"></p>
+      <p class="aportar-disp" id="aportarDisponibleLine"></p>
+      <p class="aportar-warn" id="aportarWarn" style="display:none;"></p>
+      <label class="check-row" id="aportarNoWarnRow" style="display:none; margin-bottom:12px;">
+        <input type="checkbox" id="aportarNoWarn"><span>No volver a advertir esto</span>
+      </label>
       <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 18px;">Revisa el monto antes de confirmar.</p>
       <button class="btn-primary" id="btnAportarConfirmar">Confirmar aporte</button>
       <button class="btn-ghost" id="btnAportarVolver">Volver</button>
@@ -728,9 +779,16 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="autoMetaTitle">Aporte automático</h2>
     <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 16px;">
-      Cada mes se sumará un aporte por este monto al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
+      Cada mes se sumará un aporte (monto fijo o un % de tu Disponible) al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
     </p>
-    <div class="field"><label>Monto mensual</label><input type="text" id="autoMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+    <div class="field">
+      <label>Tipo de aporte</label>
+      <div class="toggle-row">
+        <div class="toggle-opt active" data-autotipo="monto">Monto fijo</div>
+        <div class="toggle-opt" data-autotipo="porcentaje">% del Disponible</div>
+      </div>
+    </div>
+    <div class="field"><label id="autoMontoLabel">Monto mensual</label><input type="text" id="autoMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="autoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
     <button class="btn-primary" id="btnSaveAutoMeta">Activar aporte automático</button>
     <button class="btn-danger" id="btnDisableAutoMeta" style="display:none;">Desactivar</button>
@@ -966,6 +1024,8 @@ function loadState(){
       if(typeof g.indefinida !== 'boolean') g.indefinida = false;
       if(!Array.isArray(g.aportes)) g.aportes = [];
       if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
+      if(!g.aporteAutomatico.tipo) g.aporteAutomatico.tipo = 'monto';           // 'monto' | 'porcentaje'
+      if(typeof g.aporteAutomatico.valor !== 'number') g.aporteAutomatico.valor = 0;  // % cuando tipo='porcentaje'
     });
     return parsed;
   }
@@ -995,7 +1055,7 @@ const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 // Los inputs de dinero son type="text": se muestran con separador de miles
 // (1.000.000) mientras se escribe y se parsean sin puntos al guardar.
 // No se aplica a inputs que no son dinero (tasa, día del mes, nº de cuotas, meses).
-const MONEY_INPUT_IDS = ['gMonto','iMonto','mMonto','mAporteMensual','apMonto','autoMonto'];
+const MONEY_INPUT_IDS = ['gMonto','iMonto','mMonto','apMonto'];
 function soloDigitos(str){ return String(str==null?'':str).replace(/\D+/g, ''); }
 function formatMiles(str){
   const d = soloDigitos(str).replace(/^0+(?=\d)/, '');
@@ -1033,6 +1093,35 @@ function initMoneyInputs(){
   });
 }
 initMoneyInputs();
+
+/* ==================== INPUT DUAL "MONTO / %" (aporte automático) ==================== */
+// El mismo input sirve para un monto fijo (formateo de miles) o un porcentaje
+// (dígitos + un punto decimal), según el toggle de tipo activo del sheet.
+function initMontoPctInput(inputId, activeTipoSelector){
+  const el = document.getElementById(inputId);
+  if(!el) return;
+  el.addEventListener('input', ()=>{
+    if(el !== document.activeElement) return;
+    const activo = document.querySelector(activeTipoSelector);
+    const esPct = !!(activo && (activo.dataset.autotipo === 'porcentaje' || activo.dataset.mautotipo === 'porcentaje'));
+    if(esPct){
+      const v = el.value.replace(/[^\d.,]/g, '').replace(',', '.').replace(/(\.\d*)\./g, '$1');
+      if(v !== el.value) el.value = v;
+    } else {
+      const f = formatMiles(el.value);
+      if(f !== el.value) el.value = f;
+    }
+  });
+}
+// Lee el valor de un input dual según el tipo: entero (monto) o float (porcentaje).
+function leerMontoPct(inputId, tipo){
+  const raw = document.getElementById(inputId).value;
+  if(tipo === 'porcentaje') return parseFloat(String(raw).replace(',', '.'));
+  const d = soloDigitos(raw);
+  return d ? parseInt(d, 10) : NaN;
+}
+initMontoPctInput('autoMonto', '#sheetAutoMeta [data-autotipo].active');
+initMontoPctInput('mAutoValor', '#sheetMeta [data-mautotipo].active');
 
 /* ==================== GASTOS FIJOS RECURRENTES ==================== */
 // Un gasto marcado como "Fijo" (y que no sea una cuota) se repite automáticamente
@@ -1092,6 +1181,103 @@ function getIncomesForMonth(refDate){
   return [...real, ...virtualFixed];
 }
 
+/* ==================== CUENTA CORRIENTE: saldo acumulado entre meses ==================== */
+// Disponible de un mes = saldoAnterior + (Ingresos - Gastos - Cuotas - Metas) de ese mes.
+// saldoAnterior = suma del flujo neto de TODOS los meses anteriores, desde el primero con
+// datos. Todo se calcula en vivo; los resultados se memorizan por mes y la caché se limpia
+// al inicio de cada renderAll() (el estado pudo cambiar). La recursión está acotada por el
+// primer mes con datos; cada función deja un centinela por si algún caso raro se reentra.
+let MONEY_CACHE = { flujo:new Map(), saldo:new Map(), base:new Map(), metas:new Map(), first:undefined };
+function resetMoneyCache(){
+  MONEY_CACHE = { flujo:new Map(), saldo:new Map(), base:new Map(), metas:new Map(), first:undefined };
+}
+function primerMesConDatos(){
+  if(MONEY_CACHE.first !== undefined) return MONEY_CACHE.first;
+  let mk = null;
+  const add = d=>{
+    if(!d) return;
+    const k = monthKey(new Date(d+"T00:00:00"));
+    if(!isNaN(k) && (mk === null || k < mk)) mk = k;
+  };
+  state.expenses.forEach(e=> add(e.date));
+  state.incomes.forEach(i=> add(i.date));
+  state.debts.forEach(d=> add(d.purchaseDate));
+  state.goals.forEach(g=>{
+    add(g.fechaCreacion);
+    (g.aportes||[]).forEach(a=> add(a.fecha));
+    if(g.aporteAutomatico && g.aporteAutomatico.fechaActivacion) add(g.aporteAutomatico.fechaActivacion);
+  });
+  MONEY_CACHE.first = mk;
+  return mk;
+}
+// Ingresos - Gastos - Cuotas de un mes (sin metas, sin arrastre).
+function flujoBrutoDelMes(refDate){
+  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
+  const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
+  let cuotas = 0;
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  return ingresos - gastos - cuotas;
+}
+// disponibleBase de un mes = arrastre de meses anteriores + flujo bruto del mes (aún sin metas).
+// Es el número contra el que se miden los aportes automáticos (incluidos los de tipo %).
+function disponibleBaseDelMes(refDate){
+  const mk = monthKey(refDate);
+  if(MONEY_CACHE.base.has(mk)) return MONEY_CACHE.base.get(mk);
+  MONEY_CACHE.base.set(mk, 0);
+  const val = saldoAcumuladoHasta(refDate) + flujoBrutoDelMes(refDate);
+  MONEY_CACHE.base.set(mk, val);
+  return val;
+}
+// Aportes a metas que caen en un mes: manuales reales + automáticos virtuales que caben (Día 11).
+function totalAportesMetasDelMes(refDate){
+  const mk = monthKey(refDate);
+  if(MONEY_CACHE.metas.has(mk)) return MONEY_CACHE.metas.get(mk);
+  MONEY_CACHE.metas.set(mk, 0);
+  const pausadasAuto = calcularEstadoAportesDelMes(refDate);
+  let total = 0;
+  state.goals.forEach(g=>{
+    if(!goalNotCutOff(g, refDate)) return;
+    (g.aportes||[]).forEach(a=>{
+      if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) total += a.monto;
+    });
+    const va = aporteAutomaticoVirtualParaMes(g, refDate);
+    if(va && !pausadasAuto.has(g.id)) total += va.monto;
+  });
+  MONEY_CACHE.metas.set(mk, total);
+  return total;
+}
+// Flujo neto COMPLETO de un mes (ya con metas), sin el arrastre.
+function flujoNetoDelMes(refDate){
+  const mk = monthKey(refDate);
+  if(MONEY_CACHE.flujo.has(mk)) return MONEY_CACHE.flujo.get(mk);
+  MONEY_CACHE.flujo.set(mk, 0);
+  const val = flujoBrutoDelMes(refDate) - totalAportesMetasDelMes(refDate);
+  MONEY_CACHE.flujo.set(mk, val);
+  return val;
+}
+// Suma del flujo neto de todos los meses ANTERIORES a refDate (exclusivo), desde el primer
+// mes con datos. Puede ser negativo. 0 si no hay meses previos.
+function saldoAcumuladoHasta(refDate){
+  const mk = monthKey(refDate);
+  if(MONEY_CACHE.saldo.has(mk)) return MONEY_CACHE.saldo.get(mk);
+  MONEY_CACHE.saldo.set(mk, 0);
+  const first = primerMesConDatos();
+  let total = 0;
+  if(first !== null){
+    const endMk = mk - 1;
+    const startMk = Math.max(first, endMk - 600);   // tope defensivo
+    for(let k = startMk; k <= endMk; k++){
+      total += flujoNetoDelMes(new Date(Math.floor(k / 12), k % 12, 1));
+    }
+  }
+  MONEY_CACHE.saldo.set(mk, total);
+  return total;
+}
+// Disponible mostrado de un mes = arrastre + flujo bruto - metas.
+function disponibleDelMes(refDate){
+  return disponibleBaseDelMes(refDate) - totalAportesMetasDelMes(refDate);
+}
+
 /* ==================== APORTE AUTOMÁTICO DE METAS: recurrencia ==================== */
 // Mismo criterio que getExpensesForMonth() para los gastos fijos: el aporte automático
 // genera una "ocurrencia virtual" en cada mes POSTERIOR al mes de activación, el día
@@ -1113,18 +1299,30 @@ function aporteAutomaticoVirtualParaMes(goal, refDate){
   const lastDayOfMonth = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
   const useDay = Math.min(aa.diaDelMes || 1, lastDayOfMonth);
   const yyyy = refDate.getFullYear(), mm = String(refDate.getMonth()+1).padStart(2,'0'), dd = String(useDay).padStart(2,'0');
-  return { id: 'auto-'+goal.id+'-'+mk, fecha: `${yyyy}-${mm}-${dd}`, monto: aa.monto || 0, tipo: 'automatico', isVirtual: true };
+  let monto;
+  if(aa.tipo === 'porcentaje'){
+    // % del disponibleBase de ESE mes (con el arrastre de la cuenta corriente).
+    monto = Math.max(0, Math.round(disponibleBaseDelMes(refDate) * (aa.valor || 0) / 100));
+  } else {
+    monto = aa.monto || 0;
+  }
+  return { id: 'auto-'+goal.id+'-'+mk, fecha: `${yyyy}-${mm}-${dd}`, monto: monto, autoTipo: aa.tipo || 'monto', tipo: 'automatico', isVirtual: true };
 }
-// Acumulado aportado por el aporte automático desde su activación hasta el mes visto
-// (nº de meses posteriores a la activación × monto). Sirve para la tarjeta de la meta.
+// Acumulado aportado por el aporte automático desde su activación hasta el mes visto.
+// Suma el monto real de cada ocurrencia mensual (para tipo % cada mes puede diferir).
 function aporteAutomaticoAcumulado(goal, hastaDate){
   const aa = goal && goal.aporteAutomatico;
   if(!aa || !aa.activo || aa.pausado || !aa.fechaActivacion) return 0;
   let endMk = monthKey(hastaDate);
   // Si la meta fue eliminada, no se acumula nada desde el mes de corte en adelante.
   if(goal.goalEndMonthKey != null) endMk = Math.min(endMk, goal.goalEndMonthKey - 1);
-  const meses = Math.max(0, endMk - monthKey(new Date(aa.fechaActivacion+"T00:00:00")));
-  return meses * (aa.monto || 0);
+  const startMk = monthKey(new Date(aa.fechaActivacion+"T00:00:00")) + 1;
+  let total = 0;
+  for(let k = startMk; k <= endMk; k++){
+    const va = aporteAutomaticoVirtualParaMes(goal, new Date(Math.floor(k / 12), k % 12, 1));
+    if(va) total += va.monto;
+  }
+  return total;
 }
 
 /* ==================== PAUSA DE APORTES AUTOMÁTICOS POR MES (Día 11) ==================== */
@@ -1134,12 +1332,8 @@ function aporteAutomaticoAcumulado(goal, hastaDate){
 // quedan "pausadas ESTE MES". Es efímero: se recalcula en cada render, nunca se
 // escribe en aporteAutomatico.pausado. Devuelve un Set de goal.id pausados.
 function calcularEstadoAportesDelMes(refDate){
-  const mk = monthKey(refDate);
-  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
-  const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
-  let cuotas = 0;
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
-  const disponibleBase = ingresos - gastos - cuotas;
+  // disponibleBase ahora incluye el arrastre de meses anteriores (cuenta corriente).
+  const disponibleBase = disponibleBaseDelMes(refDate);
 
   const conAuto = state.goals
     .map(g=> ({ g, va: aporteAutomaticoVirtualParaMes(g, refDate) }))
@@ -1643,17 +1837,29 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
 };
 
 /* ==================== FORM: META ==================== */
-// Toggle "Meta indefinida": alterna qué bloque de campos se ve, reutilizando la
-// animación de .cuota-fields (max-height). "No" (por defecto) => monto objetivo + fecha.
-// "Sí" => solo aporte mensual (montoObjetivo y fechaLimite quedan en 0 / "").
-document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(el=>{
+// "Meta indefinida" es un checkbox simple: al marcarlo se ocultan Monto objetivo y
+// Fecha límite (quedan en 0 / ""). La sección "Aporte automático (opcional)" expone
+// aquí los MISMOS campos que #sheetAutoMeta (tipo monto/%, valor, día); si se activa,
+// se guarda igual que "Activar aporte automático".
+function syncMetaIndef(){
+  const indef = document.getElementById('mIndef').checked;
+  document.getElementById('mMontoField').style.display = indef ? 'none' : 'block';
+  document.getElementById('mFechaField').style.display = indef ? 'none' : 'block';
+}
+function aplicarMautoTipoLabel(tipo){
+  document.getElementById('mAutoValorLabel').textContent =
+    tipo === 'porcentaje' ? 'Porcentaje del Disponible del mes (%)' : 'Monto mensual';
+}
+document.getElementById('mIndef').addEventListener('change', syncMetaIndef);
+document.getElementById('mAutoOn').addEventListener('change', ()=>{
+  document.getElementById('mAutoFields').style.display = document.getElementById('mAutoOn').checked ? 'block' : 'none';
+});
+document.querySelectorAll('#sheetMeta [data-mautotipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
-    document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('#sheetMeta [data-mautotipo]').forEach(x=>x.classList.remove('active'));
     el.classList.add('active');
-    const indef = el.dataset.metaindef === 'Sí';
-    document.getElementById('metaDefinidaFields').classList.toggle('open', !indef);
-    document.getElementById('metaIndefFields').classList.toggle('open', indef);
-    document.getElementById('metaIndefNote').style.display = indef ? 'block' : 'none';
+    aplicarMautoTipoLabel(el.dataset.mautotipo);
+    document.getElementById('mAutoValor').value = '';   // evita reinterpretar 50.000 como 50.000 %
   });
 });
 
@@ -1674,32 +1880,38 @@ function openMetaForm(goalId){
   document.getElementById('mNombre').value = '';
   document.getElementById('mMonto').value = '';
   document.getElementById('mFecha').value = '';
-  document.getElementById('mAporteMensual').value = '';
+  document.getElementById('mIndef').checked = false;
   document.getElementById('btnDeleteMeta').style.display = 'none';
-  let indef = false;
+  let aa = { activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1 };
 
   if(editingGoalId){
     const g = state.goals.find(x=>x.id===editingGoalId);
     if(!g) return;
     document.getElementById('metaTitle').textContent = 'Editar meta';
     document.getElementById('mNombre').value = g.name;
-    indef = !!g.indefinida;
-    if(indef){
-      // El "aporte mensual" de una meta indefinida vive en aporteAutomatico.monto.
-      setMonto('mAporteMensual', (g.aporteAutomatico && g.aporteAutomatico.monto) || '');
-    } else {
+    document.getElementById('mIndef').checked = !!g.indefinida;
+    if(!g.indefinida){
       setMonto('mMonto', g.montoObjetivo || '');
       document.getElementById('mFecha').value = g.fechaLimite || '';
     }
+    if(g.aporteAutomatico) aa = g.aporteAutomatico;
     document.getElementById('btnDeleteMeta').style.display = 'block';
   }
 
-  // Aplica el toggle definida/indefinida y muestra el bloque de campos correcto.
-  document.querySelectorAll('#sheetMeta [data-metaindef]').forEach(x=>
-    x.classList.toggle('active', x.dataset.metaindef === (indef ? 'Sí' : 'No')));
-  document.getElementById('metaDefinidaFields').classList.toggle('open', !indef);
-  document.getElementById('metaIndefFields').classList.toggle('open', indef);
-  document.getElementById('metaIndefNote').style.display = indef ? 'block' : 'none';
+  syncMetaIndef();
+
+  // Sección "Aporte automático (opcional)".
+  const tipo = aa.tipo === 'porcentaje' ? 'porcentaje' : 'monto';
+  document.getElementById('mAutoOn').checked = !!aa.activo;
+  document.querySelectorAll('#sheetMeta [data-mautotipo]').forEach(x=> x.classList.toggle('active', x.dataset.mautotipo === tipo));
+  aplicarMautoTipoLabel(tipo);
+  document.getElementById('mAutoValor').value = tipo === 'porcentaje'
+    ? (aa.valor ? String(aa.valor) : '')
+    : (aa.monto ? formatMiles(String(aa.monto)) : '');
+  document.getElementById('mAutoDia').value = aa.diaDelMes || 1;
+  document.getElementById('mAutoFields').style.display = aa.activo ? 'block' : 'none';
+  document.getElementById('mAutoGroup').open = !!aa.activo;
+
   openSheet('sheetMeta');
 }
 document.getElementById('btnNuevaMeta').onclick = ()=> openMetaForm();
@@ -1708,58 +1920,75 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   const nombre = document.getElementById('mNombre').value.trim();
   const montoObjetivo = parseMonto('mMonto');
   const fechaLimite = document.getElementById('mFecha').value;
-  const indefinida = document.querySelector('#sheetMeta [data-metaindef].active').dataset.metaindef === 'Sí';
-  const aporteMensual = parseMonto('mAporteMensual');
+  const indefinida = document.getElementById('mIndef').checked;
+
+  const autoOn = document.getElementById('mAutoOn').checked;
+  const autoTipo = document.querySelector('#sheetMeta [data-mautotipo].active').dataset.mautotipo;
+  const autoValor = leerMontoPct('mAutoValor', autoTipo);
+  const autoDia = parseInt(document.getElementById('mAutoDia').value, 10);
 
   if(!nombre){ alert('Ponle un nombre a la meta.'); return; }
-  if(indefinida){
-    if(!aporteMensual || aporteMensual <= 0){ alert('Para una meta indefinida, ingresa un aporte mensual válido.'); return; }
-  } else {
-    if(!montoObjetivo || montoObjetivo <= 0){ alert('Completa un monto objetivo válido (o marca la meta como indefinida).'); return; }
+  if(!indefinida && (!montoObjetivo || montoObjetivo <= 0)){
+    alert('Completa un monto objetivo válido (o marca la meta como indefinida).'); return;
+  }
+  if(autoOn){
+    if(autoTipo === 'porcentaje'){
+      if(isNaN(autoValor) || autoValor <= 0 || autoValor > 100){ alert('El porcentaje del aporte automático debe estar entre 1 y 100.'); return; }
+    } else {
+      if(!autoValor || autoValor <= 0){ alert('Ingresa un monto mensual válido para el aporte automático.'); return; }
+    }
+    if(!autoDia || autoDia < 1 || autoDia > 28){ alert('El día del mes del aporte automático debe estar entre 1 y 28.'); return; }
   }
 
+  const construirAA = (prev)=>{
+    prev = prev || {};
+    if(autoOn){
+      return {
+        activo: true,
+        tipo: autoTipo,
+        monto: autoTipo === 'monto' ? autoValor : 0,
+        valor: autoTipo === 'porcentaje' ? autoValor : 0,
+        diaDelMes: autoDia,
+        pausado: false, razonPausa: null,
+        fechaActivacion: prev.fechaActivacion || new Date().toISOString().slice(0,10)
+      };
+    }
+    return {
+      activo: false,
+      tipo: prev.tipo || 'monto',
+      monto: prev.monto || 0,
+      valor: prev.valor || 0,
+      diaDelMes: prev.diaDelMes || 1,
+      pausado: false, razonPausa: null
+    };
+  };
+
   if(editingGoalId){
-    // ---- MODO EDICIÓN: actualiza el objeto existente, sin restricciones ----
     const g = state.goals.find(x=>x.id===editingGoalId);
     if(!g){ closeSheet('sheetMeta'); return; }
     g.name = nombre;
     g.indefinida = indefinida;
     g.montoObjetivo = indefinida ? 0 : montoObjetivo;
     g.fechaLimite = indefinida ? "" : (fechaLimite || "");
-    if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
-    if(indefinida){
-      g.aporteAutomatico.monto = aporteMensual;
-    } else if(!g.aporteAutomatico.activo){
-      // Pasó a definida y no tiene aporte automático activo: limpia el monto heredado.
-      g.aporteAutomatico.monto = 0;
-    }
+    g.aporteAutomatico = construirAA(g.aporteAutomatico);
     saveState(); closeSheet('sheetMeta'); renderAll();
     return;
   }
 
-  // ---- MODO CREAR ----
   if(activeGoalsCount() >= GOALS_FREE_LIMIT){
     alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
     return;
   }
-  const hoy = new Date().toISOString().slice(0,10);
-  const nuevaMeta = {
+  state.goals.push({
     id: uid(),
     name: nombre,
-    indefinida: indefinida,             // true => sin monto objetivo ni fecha límite
+    indefinida: indefinida,
     montoObjetivo: indefinida ? 0 : montoObjetivo,
-    fechaLimite: indefinida ? "" : (fechaLimite || ""),   // YYYY-MM-DD
-    fechaCreacion: hoy,                  // YYYY-MM-DD, se setea al crear, no editable
-    aportes: [],                         // { id, fecha, monto, tipo: "manual"|"automatico" }
-    aporteAutomatico: {
-      activo: false,                     // se activa recién en el Bloque 3 (Días 8-9)
-      monto: indefinida ? aporteMensual : 0,
-      diaDelMes: 1,
-      pausado: false,
-      razonPausa: null
-    }
-  };
-  state.goals.push(nuevaMeta);
+    fechaLimite: indefinida ? "" : (fechaLimite || ""),
+    fechaCreacion: new Date().toISOString().slice(0,10),
+    aportes: [],
+    aporteAutomatico: construirAA(null)
+  });
   saveState(); closeSheet('sheetMeta'); renderAll();
 };
 
@@ -1845,13 +2074,15 @@ function renderMetas(){
 
   box.innerHTML = visibles.map(g=>{
     const aa = g.aporteAutomatico || {};
-    const aporteMensual = aa.monto || 0;
+    const esPctAuto = aa.tipo === 'porcentaje';
+    // Texto del aporte mensual pactado: monto fijo o "N% del Disponible".
+    const aporteMensualTxt = esPctAuto ? `${aa.valor || 0}% del Disponible` : money(aa.monto || 0);
     // "Ahorrado" = aportes manuales reales + lo ya devengado por el aporte automático
     // (mismo dinero que se descontó del Disponible mes a mes). Ver nota en el reporte.
     const ahorradoManual = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0);
     const ahorrado = ahorradoManual + aporteAutomaticoAcumulado(g, currentDate);
     // Aporte mensual pactado, siempre visible (igual que el monto por cuota en debt-card).
-    const aporteLine = `<span>Aporte mensual <b>${money(aporteMensual)}</b></span>`;
+    const aporteLine = `<span>Aporte mensual <b>${aporteMensualTxt}</b></span>`;
     const pausada = aa.activo && pausadasAuto.has(g.id);
     // Si tiene/tuvo alguna pausa, aclara que el acumulado no descuenta esos meses.
     const ahorradoNota = everPaused.has(g.id) ? ` <span class="ahorrado-nota">(no descuenta meses pausados)</span>` : '';
@@ -1860,7 +2091,7 @@ function renderMetas(){
       const extra = topGasto ? ` Mayor gasto: ${topGasto.categoria} (${money(topGasto.monto)}).` : '';
       autoNote = `<p class="debt-manual-note paused">${icon('pause')} Aporte automático pausado este mes — no alcanzó el disponible.${extra}</p>`;
     } else if(aa.activo){
-      autoNote = `<p class="debt-manual-note">${icon('tag')} Aporte automático activo · ${money(aporteMensual)} el día ${aa.diaDelMes||1}</p>`;
+      autoNote = `<p class="debt-manual-note">${icon('tag')} Aporte automático activo · ${aporteMensualTxt} el día ${aa.diaDelMes||1}</p>`;
     }
 
     // Lista de aportes manuales (más recientes primero), cada uno eliminable.
@@ -1972,13 +2203,25 @@ function renderMetas(){
 
 /* ==================== APORTE MANUAL A UNA META ==================== */
 let aportarGoalId = null;
+// Aporte mensual pactado de una meta (número) o null si no tiene. Para tipo %, el
+// monto estimado del mes actual (con el arrastre incluido).
+function aportePactadoDeMeta(g){
+  const aa = g && g.aporteAutomatico;
+  if(!aa) return null;
+  if(aa.activo && aa.tipo === 'porcentaje'){
+    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
+    if(va) return va.monto;
+    return Math.max(0, Math.round(disponibleBaseDelMes(currentDate) * (aa.valor || 0) / 100));
+  }
+  return aa.monto ? aa.monto : null;
+}
 function openAportar(goalId){
   const g = state.goals.find(x=>x.id===goalId);
   if(!g) return;
   aportarGoalId = goalId;
   document.getElementById('aportarTitle').textContent = 'Aportar a ' + g.name;
   // Sugerencia: si tiene aporte mensual pactado, lo pre-carga.
-  const sugerido = (g.aporteAutomatico && g.aporteAutomatico.monto) ? g.aporteAutomatico.monto : '';
+  const sugerido = aportePactadoDeMeta(g);
   setMonto('apMonto', sugerido || '');
   document.getElementById('aportarPaso1').style.display = 'block';
   document.getElementById('aportarPaso2').style.display = 'none';
@@ -1991,6 +2234,27 @@ document.getElementById('btnAportarRevisar').onclick = ()=>{
   if(!g){ closeSheet('sheetAportar'); return; }
   document.getElementById('aportarConfirmText').textContent =
     `Vas a aportar ${money(monto)} a "${g.name}" con fecha de hoy. Se descontará del disponible de este mes.`;
+
+  // Disponible actual del mes (con el saldo acumulado de meses anteriores).
+  const disp = disponibleDelMes(currentDate);
+  document.getElementById('aportarDisponibleLine').textContent =
+    `Disponible de este mes (con saldo anterior): ${money(disp)}`;
+
+  // Advertencia NO bloqueante si el aporte supera el aporte mensual pactado.
+  const pactado = aportePactadoDeMeta(g);
+  const avisosOn = !(state.config && state.config.avisosAporteExceso === false);
+  const warnEl = document.getElementById('aportarWarn');
+  const noWarnRow = document.getElementById('aportarNoWarnRow');
+  if(pactado != null && monto > pactado && avisosOn){
+    warnEl.textContent = `Este aporte (${money(monto)}) supera el aporte mensual pactado de la meta (${money(pactado)}). Puedes continuar igual.`;
+    warnEl.style.display = 'block';
+    document.getElementById('aportarNoWarn').checked = false;
+    noWarnRow.style.display = 'flex';
+  } else {
+    warnEl.style.display = 'none';
+    noWarnRow.style.display = 'none';
+  }
+
   document.getElementById('aportarPaso1').style.display = 'none';
   document.getElementById('aportarPaso2').style.display = 'block';
 };
@@ -2002,6 +2266,10 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
   const g = state.goals.find(x=>x.id===aportarGoalId);
   const monto = parseMonto('apMonto');
   if(!g || !monto || monto <= 0){ closeSheet('sheetAportar'); return; }
+  if(document.getElementById('aportarNoWarn').checked){
+    if(!state.config) state.config = {};
+    state.config.avisosAporteExceso = false;   // preferencia: no volver a advertir excesos
+  }
   if(!Array.isArray(g.aportes)) g.aportes = [];
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
   saveState(); closeSheet('sheetAportar'); renderAll();
@@ -2009,13 +2277,30 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
 
 /* ==================== APORTE AUTOMÁTICO MENSUAL: configuración ==================== */
 let autoMetaGoalId = null;
+function aplicarAutoTipoLabel(tipo){
+  document.getElementById('autoMontoLabel').textContent =
+    tipo === 'porcentaje' ? 'Porcentaje del Disponible del mes (%)' : 'Monto mensual';
+}
+document.querySelectorAll('#sheetAutoMeta [data-autotipo]').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('#sheetAutoMeta [data-autotipo]').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    aplicarAutoTipoLabel(el.dataset.autotipo);
+    document.getElementById('autoMonto').value = '';
+  });
+});
 function openAutoMeta(goalId){
   const g = state.goals.find(x=>x.id===goalId);
   if(!g) return;
   autoMetaGoalId = goalId;
-  const aa = g.aporteAutomatico || { activo:false, monto:0, diaDelMes:1 };
+  const aa = g.aporteAutomatico || { activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1 };
+  const tipo = aa.tipo === 'porcentaje' ? 'porcentaje' : 'monto';
   document.getElementById('autoMetaTitle').textContent = 'Aporte automático · ' + g.name;
-  setMonto('autoMonto', aa.monto || '');
+  document.querySelectorAll('#sheetAutoMeta [data-autotipo]').forEach(x=> x.classList.toggle('active', x.dataset.autotipo === tipo));
+  aplicarAutoTipoLabel(tipo);
+  document.getElementById('autoMonto').value = tipo === 'porcentaje'
+    ? (aa.valor ? String(aa.valor) : '')
+    : (aa.monto ? formatMiles(String(aa.monto)) : '');
   document.getElementById('autoDia').value = aa.diaDelMes || 1;
   document.getElementById('btnDisableAutoMeta').style.display = aa.activo ? 'block' : 'none';
   document.getElementById('btnSaveAutoMeta').textContent = aa.activo ? 'Guardar cambios' : 'Activar aporte automático';
@@ -2024,14 +2309,21 @@ function openAutoMeta(goalId){
 document.getElementById('btnSaveAutoMeta').onclick = ()=>{
   const g = state.goals.find(x=>x.id===autoMetaGoalId);
   if(!g){ closeSheet('sheetAutoMeta'); return; }
-  const monto = parseMonto('autoMonto');
+  const tipo = document.querySelector('#sheetAutoMeta [data-autotipo].active').dataset.autotipo;
+  const valor = leerMontoPct('autoMonto', tipo);
   const dia = parseInt(document.getElementById('autoDia').value, 10);
-  if(!monto || monto <= 0){ alert('Ingresa un monto mensual válido.'); return; }
+  if(tipo === 'porcentaje'){
+    if(isNaN(valor) || valor <= 0 || valor > 100){ alert('El porcentaje debe estar entre 1 y 100.'); return; }
+  } else {
+    if(!valor || valor <= 0){ alert('Ingresa un monto mensual válido.'); return; }
+  }
   if(!dia || dia < 1 || dia > 28){ alert('El día del mes debe estar entre 1 y 28.'); return; }
   const prev = g.aporteAutomatico || {};
   g.aporteAutomatico = {
     activo: true,
-    monto: monto,
+    tipo: tipo,
+    monto: tipo === 'monto' ? valor : 0,
+    valor: tipo === 'porcentaje' ? valor : 0,
     diaDelMes: dia,
     pausado: false,
     razonPausa: null,
@@ -2045,8 +2337,12 @@ document.getElementById('btnDisableAutoMeta').onclick = ()=>{
   const g = state.goals.find(x=>x.id===autoMetaGoalId);
   if(!g){ closeSheet('sheetAutoMeta'); return; }
   const prev = g.aporteAutomatico || {};
-  // Se desactiva pero se recuerda el último monto/día para reactivar rápido.
-  g.aporteAutomatico = { activo:false, monto: prev.monto || 0, diaDelMes: prev.diaDelMes || 1, pausado:false, razonPausa:null };
+  // Se desactiva pero se recuerda el último tipo/valor/día para reactivar rápido.
+  g.aporteAutomatico = {
+    activo:false, tipo: prev.tipo || 'monto',
+    monto: prev.monto || 0, valor: prev.valor || 0,
+    diaDelMes: prev.diaDelMes || 1, pausado:false, razonPausa:null
+  };
   saveState(); closeSheet('sheetAutoMeta'); renderAll();
 };
 
@@ -2081,9 +2377,20 @@ function calcInteres(){
     box.innerHTML = `<p class="sub">Ingresa una tasa (0 o más) y un número de meses (1 o más) para ver la simulación.</p>`;
     return;
   }
+  const aa = g.aporteAutomatico || {};
   const i = (tasaAnual / 100) / 12;                 // tasa mensual
   const inicial = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
-  const aporteMensual = (g.aporteAutomatico && g.aporteAutomatico.monto) || 0;
+  let aporteMensual, notaPct = '';
+  if(aa.activo && aa.tipo === 'porcentaje'){
+    // El % varía mes a mes según el Disponible: no se puede proyectar un monto fijo.
+    // Se usa el estimado del mes actual como aproximación.
+    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
+    const est = va ? va.monto : Math.max(0, Math.round(disponibleBaseDelMes(currentDate) * (aa.valor || 0) / 100));
+    aporteMensual = est;
+    notaPct = `<br>El aporte varía según tu Disponible; se usó ${money(est)} (estimado del mes actual).`;
+  } else {
+    aporteMensual = aa.monto || 0;
+  }
   const factor = Math.pow(1 + i, n);
   const fvInicial = inicial * factor;
   const fvAnualidad = i === 0 ? aporteMensual * n : aporteMensual * ((factor - 1) / i);
@@ -2095,7 +2402,7 @@ function calcInteres(){
     <p class="sub">
       Valor futuro estimado en ${n} ${n===1?'mes':'meses'} a ${tasaAnual}% anual.<br>
       Partiendo de ${money(inicial)}${aporteMensual>0 ? ' + '+money(aporteMensual)+'/mes' : ''}.<br>
-      Total aportado: ${money(aportado)} · Intereses estimados: <b>${money(intereses)}</b>.
+      Total aportado: ${money(aportado)} · Intereses estimados: <b>${money(intereses)}</b>.${notaPct}
     </p>`;
 }
 document.getElementById('intTasa').addEventListener('input', calcInteres);
@@ -2146,7 +2453,6 @@ function toggleManualPaid(debtId, refDate){
 
 /* ==================== RENDER: RESUMEN ==================== */
 function renderResumen(){
-  const mk = monthKey(currentDate);
   const monthExpenses = getExpensesForMonth(currentDate);
   const monthIncomes = getIncomesForMonth(currentDate);
   const normalExpenses = monthExpenses.filter(e=>!e.debtId);
@@ -2161,23 +2467,11 @@ function renderResumen(){
     if(info){ totalCuotas += info.monto; cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto; }
   });
 
-  // Aportes a metas que caen en el mes visible: manuales (reales, en goal.aportes) +
-  // automáticos (virtuales, generados por aporteAutomaticoVirtualParaMes — Bloque 3).
-  // Una meta eliminada (goalEndMonthKey) no suma nada desde el mes de corte en adelante;
-  // los meses anteriores se calculan en su propia vista y no se recalculan.
-  // Metas cuyo aporte automático NO cabe este mes (Día 11): no suman al total.
-  const pausadasAuto = calcularEstadoAportesDelMes(currentDate);
-  let totalAportesMetas = 0;
-  state.goals.forEach(g=>{
-    if(!goalNotCutOff(g, currentDate)) return;
-    (g.aportes||[]).forEach(a=>{
-      if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) totalAportesMetas += a.monto;
-    });
-    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
-    if(va && !pausadasAuto.has(g.id)) totalAportesMetas += va.monto;
-  });
-
-  const disponible = totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
+  // Metas del mes (manuales reales + automáticos virtuales que caben — Día 11) y
+  // arrastre de la cuenta corriente. El Disponible es: saldoAnterior + flujo del mes.
+  const totalAportesMetas = totalAportesMetasDelMes(currentDate);
+  const saldoAnterior = saldoAcumuladoHasta(currentDate);
+  const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
 
   document.getElementById('rDisponible').textContent = money(disponible);
   document.getElementById('rDisponible').classList.toggle('neg', disponible<0);
@@ -2185,6 +2479,17 @@ function renderResumen(){
   document.getElementById('rGastos').textContent = money(totalGastos);
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
+
+  // Línea "Saldo de meses anteriores": visible solo si es distinto de $0.
+  const carryRow = document.getElementById('rSaldoAnteriorRow');
+  if(Math.round(saldoAnterior) !== 0){
+    const el = document.getElementById('rSaldoAnterior');
+    el.textContent = (saldoAnterior < 0 ? '−' : '+') + money(Math.abs(saldoAnterior));
+    el.classList.toggle('neg', saldoAnterior < 0);
+    carryRow.style.display = '';
+  } else {
+    carryRow.style.display = 'none';
+  }
 
   const catTotals = {};
   state.config.categorias.forEach(c=> catTotals[c]=0);
@@ -2648,6 +2953,8 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
       if(typeof g.indefinida !== 'boolean') g.indefinida = false;
       if(!Array.isArray(g.aportes)) g.aportes = [];
       if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
+      if(!g.aporteAutomatico.tipo) g.aporteAutomatico.tipo = 'monto';
+      if(typeof g.aporteAutomatico.valor !== 'number') g.aporteAutomatico.valor = 0;
     });
     aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // aplica/normaliza la paleta del respaldo
     aplicarFontScale((state.config && state.config.fontScale) || '1'); // aplica/normaliza el tamaño de letra del respaldo
@@ -2950,6 +3257,7 @@ aplicarFontScale((state.config && state.config.fontScale) || '1');
 
 /* ==================== RENDER GENERAL ==================== */
 function renderAll(){
+  resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
   if(currentScreen==='resumen') renderResumen();
   if(currentScreen==='historial') renderHistorial();
