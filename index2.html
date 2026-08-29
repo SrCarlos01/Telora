@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>MisFinanzas</title>
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -350,7 +350,7 @@ button{font-family:inherit;}
 }
 .add-inline input{
   flex:1; background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
-  padding:11px 12px; color:var(--cream); font-size:15px; font-family:inherit;
+  padding:11px 12px; color:var(--cream); font-size:16px; font-family:inherit;  /* 16px: evita el auto-zoom de iOS al enfocar */
 }
 .add-inline input::placeholder{color:var(--cream-dim);}
 .add-inline input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
@@ -470,7 +470,7 @@ button{font-family:inherit;}
   display:flex; align-items:center; gap:10px; padding:13px 14px; background:var(--surface-2);
   border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px; cursor:pointer;
 }
-.export-opt input{accent-color:var(--burgundy); width:18px; height:18px;}
+.export-opt input{accent-color:var(--burgundy); width:18px; height:18px; font-size:16px;}  /* 16px: sin efecto visual en el radio, evita el auto-zoom de iOS */
 .export-opt span{font-size:15px; color:var(--cream);}
 </style>
 </head>
@@ -580,7 +580,7 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="gastoTitle">Nuevo gasto</h2>
     <div class="field"><label>Fecha</label><input type="date" id="gFecha"></div>
-    <div class="field"><label>Monto</label><input type="number" id="gMonto" placeholder="0" inputmode="numeric"></div>
+    <div class="field"><label>Monto</label><input type="text" id="gMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     <div class="field">
       <label>Categoría</label>
       <select id="gCategoria"></select>
@@ -629,7 +629,7 @@ button{font-family:inherit;}
       <label>Fuente</label>
       <select id="iFuente"></select>
     </div>
-    <div class="field"><label>Monto</label><input type="number" id="iMonto" placeholder="0" inputmode="numeric"></div>
+    <div class="field"><label>Monto</label><input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="iDescripcion" placeholder="Opcional"></div>
     <button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button>
     <button class="btn-danger" id="btnDeleteIngreso" style="display:none;">Eliminar ingreso</button>
@@ -652,11 +652,11 @@ button{font-family:inherit;}
       <p id="metaIndefNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Sin monto objetivo ni fecha límite: solo defines un aporte mensual y la app te muestra cuánto llevas acumulado.</p>
     </div>
     <div class="cuota-fields open" id="metaDefinidaFields">
-      <div class="field"><label>Monto objetivo</label><input type="number" id="mMonto" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Monto objetivo</label><input type="text" id="mMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <div class="field"><label>Fecha límite</label><input type="date" id="mFecha"></div>
     </div>
     <div class="cuota-fields" id="metaIndefFields">
-      <div class="field"><label>Aporte mensual</label><input type="number" id="mAporteMensual" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Aporte mensual</label><input type="text" id="mAporteMensual" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     </div>
     <button class="btn-primary" id="btnSaveMeta">Guardar meta</button>
     <button class="btn-danger" id="btnDeleteMeta" style="display:none;">Eliminar meta</button>
@@ -682,7 +682,7 @@ button{font-family:inherit;}
     <h2 id="aportarTitle">Aportar a la meta</h2>
 
     <div id="aportarPaso1">
-      <div class="field"><label>Monto a aportar</label><input type="number" id="apMonto" placeholder="0" inputmode="numeric"></div>
+      <div class="field"><label>Monto a aportar</label><input type="text" id="apMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Se registra con fecha de hoy y se descuenta del disponible de este mes.</p>
       <button class="btn-primary" id="btnAportarRevisar">Continuar</button>
       <button class="btn-ghost" data-close>Cancelar</button>
@@ -705,7 +705,7 @@ button{font-family:inherit;}
     <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 16px;">
       Cada mes se sumará un aporte por este monto al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
     </p>
-    <div class="field"><label>Monto mensual</label><input type="number" id="autoMonto" placeholder="0" inputmode="numeric"></div>
+    <div class="field"><label>Monto mensual</label><input type="text" id="autoMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="autoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
     <button class="btn-primary" id="btnSaveAutoMeta">Activar aporte automático</button>
     <button class="btn-danger" id="btnDisableAutoMeta" style="display:none;">Desactivar</button>
@@ -719,7 +719,7 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="interesTitle">Calculadora de intereses <span class="premium-badge">PREMIUM</span></h2>
     <p class="int-disclaimer">Simulación, no mueve dinero real.</p>
-    <div class="field"><label>Tasa anual de referencia (%)</label><input type="number" id="intTasa" value="4" inputmode="decimal"></div>
+    <div class="field"><label>Tasa anual de referencia (%)</label><input type="text" id="intTasa" value="4" inputmode="decimal" autocomplete="off"></div>
     <div class="field"><label>Meses a simular</label><input type="number" id="intMeses" placeholder="12" inputmode="numeric"></div>
     <div class="int-result" id="intResult"></div>
     <button class="btn-ghost" data-close>Cerrar</button>
@@ -958,6 +958,49 @@ const money = n => "$" + Math.round(n).toLocaleString('es-CL');
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
+/* ==================== FORMATO DE MILES EN INPUTS DE MONTO ==================== */
+// Los inputs de dinero son type="text": se muestran con separador de miles
+// (1.000.000) mientras se escribe y se parsean sin puntos al guardar.
+// No se aplica a inputs que no son dinero (tasa, día del mes, nº de cuotas, meses).
+const MONEY_INPUT_IDS = ['gMonto','iMonto','mMonto','mAporteMensual','apMonto','autoMonto'];
+function soloDigitos(str){ return String(str==null?'':str).replace(/\D+/g, ''); }
+function formatMiles(str){
+  const d = soloDigitos(str).replace(/^0+(?=\d)/, '');
+  return d ? d.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+}
+// Valor numérico real (sin puntos) de un input de dinero o de un string formateado.
+function parseMonto(elOrId){
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  const raw = el && el.value !== undefined ? el.value : elOrId;
+  const d = soloDigitos(raw);
+  return d ? parseInt(d, 10) : NaN;
+}
+// Escribe un número ya formateado en un input de dinero (modo edición / sugerencias).
+function setMonto(id, num){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.value = (num || num === 0) && !isNaN(num) ? formatMiles(String(Math.round(num))) : '';
+}
+// Formateo en vivo: reformatea al escribir (agrupa miles con puntos).
+// A propósito NO se toca selectionStart/End ni se llama setSelectionRange:
+// mover el cursor por script en cada tecla hacía que iOS Safari se saltara
+// el reset de escala del viewport al descartar el teclado (zoom "pegado").
+// Reasignar value ya deja el cursor al final, que es lo natural al escribir
+// un monto de izquierda a derecha. El guard de foco evita mutar el campo con
+// el "input" de despedida que iOS puede emitir mientras se cierra el teclado.
+function initMoneyInputs(){
+  MONEY_INPUT_IDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', ()=>{
+      if(el !== document.activeElement) return;
+      const f = formatMiles(el.value);
+      if(f !== el.value) el.value = f;
+    });
+  });
+}
+initMoneyInputs();
+
 /* ==================== GASTOS FIJOS RECURRENTES ==================== */
 // Un gasto marcado como "Fijo" (y que no sea una cuota) se repite automáticamente
 // cada mes posterior a su fecha de registro, el mismo día del mes, hasta que se
@@ -1163,38 +1206,49 @@ document.getElementById('nextMonth').onclick = nextMonth;
   document.querySelectorAll('.sheet-overlay').forEach(ov=>{
     const sheet = ov.querySelector('.sheet');
     if(!sheet) return;
-    let vId=null, vy0=0, vx0=0, curDy=0, vTimer=0;
+    let vId=null, vy0=0, vx0=0, vt0=0, curDy=0, vTimer=0, vActive=false;
 
     function vClear(){
       const had = vId;
-      vId = null; curDy = 0;
+      vId = null; curDy = 0; vActive = false;
       if(vTimer){ clearTimeout(vTimer); vTimer = 0; }
       if(had !== null){ try { sheet.releasePointerCapture(had); } catch(_){} }
       resetSheetVisual(sheet);
     }
 
+    // Arranca el seguimiento SIEMPRE que el sheet esté arriba del todo (scrollTop 0),
+    // desde cualquier punto del sheet — no solo cerca del handle. Si el contenido está
+    // scrolleado, es scroll normal y no interceptamos. El gesto solo se "activa"
+    // (empieza a mover el sheet) tras un pequeño umbral vertical, así un tap o un
+    // swipe horizontal no lo disparan y no se roba el scroll hacia arriba.
     sheet.addEventListener('pointerdown', e=>{
       if(e.pointerType !== 'touch') return;
       if(vId !== null) vClear();                                // reset defensivo
-      const nearTop = (e.clientY - sheet.getBoundingClientRect().top) < 64;
-      // Solo arranca el gesto si estamos arriba del scroll o cerca del handle,
-      // así no pisa el scroll normal de un sheet largo.
-      if(sheet.scrollTop > 0 && !nearTop) return;
-      vId = e.pointerId; vy0 = e.clientY; vx0 = e.clientX; curDy = 0;
-      sheet.style.transition = 'none';
-      try { sheet.setPointerCapture(e.pointerId); } catch(_){}
-      vTimer = setTimeout(vClear, 1000);
+      if(sheet.scrollTop > 0) return;
+      vId = e.pointerId; vy0 = e.clientY; vx0 = e.clientX; vt0 = Date.now();
+      curDy = 0; vActive = false;
+      vTimer = setTimeout(vClear, 1200);
     });
     sheet.addEventListener('pointermove', e=>{
       if(vId === null || e.pointerId !== vId) return;
       const dy = e.clientY - vy0, dx = e.clientX - vx0;
-      if(dy <= 0 || Math.abs(dx) > Math.abs(dy)){ curDy = 0; sheet.style.transform = ''; return; }
-      curDy = dy;
-      sheet.style.transform = `translateY(${dy}px)`;
+      if(!vActive){
+        // Gesto hacia arriba o claramente horizontal: soltamos, que el navegador scrollee.
+        if(dy < -4 || (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12)){ vClear(); return; }
+        if(dy < 6) return;                                      // slop: aún no es arrastre
+        vActive = true;
+        sheet.style.transition = 'none';
+        try { sheet.setPointerCapture(vId); } catch(_){}
+      }
+      curDy = Math.max(0, dy);
+      sheet.style.transform = `translateY(${curDy}px)`;
     });
     function endDrag(e){
       if(vId === null || (e && e.pointerId !== vId)) return;
-      const shouldClose = curDy > 80;
+      const dt = Date.now() - vt0;
+      const vel = dt > 0 ? curDy / dt : 0;                      // px/ms
+      // Cierra por distancia (más permisivo: 55px) o por "flick" corto pero rápido.
+      const shouldClose = curDy > 55 || (curDy > 22 && vel > 0.3);
       vClear();
       if(shouldClose) closeSheet(ov.id);
     }
@@ -1218,7 +1272,12 @@ document.querySelectorAll('.sheet-overlay').forEach(ov=>{
 document.getElementById('btnAdd').onclick = ()=> openSheet('sheetChoice');
 document.getElementById('choiceGasto').onclick = ()=>{ closeSheet('sheetChoice'); openGastoForm(null); };
 document.getElementById('choiceIngreso').onclick = ()=>{ closeSheet('sheetChoice'); openIngresoForm(null); };
-document.getElementById('btnConfig').onclick = ()=>{ renderConfig(); openSheet('sheetConfig'); };
+document.getElementById('btnConfig').onclick = ()=>{
+  // Las 3 secciones colapsables vuelven siempre a su estado por defecto (cerradas).
+  document.querySelectorAll('#sheetConfig details.cfg-group').forEach(d=> d.open = false);
+  renderConfig();
+  openSheet('sheetConfig');
+};
 document.getElementById('btnExport').onclick = ()=>{
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   openSheet('sheetExportar');
@@ -1289,7 +1348,7 @@ function openGastoForm(expenseId){
     const e = state.expenses.find(x=>x.id===expenseId);
     document.getElementById('gastoTitle').textContent = 'Editar gasto';
     document.getElementById('gFecha').value = e.date;
-    document.getElementById('gMonto').value = e.amount;
+    setMonto('gMonto', e.amount);
     fillSelect('gCategoria', state.config.categorias, e.category);
     fillSelect('gMetodo', state.config.metodos, e.method);
     document.getElementById('gDescripcion').value = e.description;
@@ -1317,7 +1376,7 @@ function openGastoForm(expenseId){
     favBox.querySelectorAll('[data-fav]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const f = favs[parseInt(btn.dataset.fav, 10)];
-        document.getElementById('gMonto').value = f.amount;
+        setMonto('gMonto', f.amount);
         fillSelect('gCategoria', state.config.categorias, f.category);
         fillSelect('gMetodo', state.config.metodos, f.method);
         document.getElementById('gDescripcion').value = f.label;
@@ -1334,7 +1393,7 @@ function openGastoForm(expenseId){
 document.getElementById('btnSaveGasto').onclick = ()=>{
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
   const fecha = document.getElementById('gFecha').value || new Date().toISOString().slice(0,10);
-  const monto = parseFloat(document.getElementById('gMonto').value);
+  const monto = parseMonto('gMonto');
   const categoria = document.getElementById('gCategoria').value;
   const metodo = document.getElementById('gMetodo').value;
   const descripcion = document.getElementById('gDescripcion').value.trim();   // opcional (puede quedar vacía)
@@ -1422,7 +1481,7 @@ function openIngresoForm(incomeId){
     document.getElementById('ingresoTitle').textContent = 'Editar ingreso';
     document.getElementById('iFecha').value = i.date;
     fillSelect('iFuente', state.config.fuentes, i.source);
-    document.getElementById('iMonto').value = i.amount;
+    setMonto('iMonto', i.amount);
     document.getElementById('iDescripcion').value = i.description;
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
@@ -1431,7 +1490,7 @@ function openIngresoForm(incomeId){
 document.getElementById('btnSaveIngreso').onclick = ()=>{
   const fecha = document.getElementById('iFecha').value || new Date().toISOString().slice(0,10);
   const fuente = document.getElementById('iFuente').value;
-  const monto = parseFloat(document.getElementById('iMonto').value);
+  const monto = parseMonto('iMonto');
   const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional
   if(!monto || monto<=0){ alert('Ingresa un monto mayor a 0.'); return; }
   if(!fuente){ alert('Elige una fuente.'); return; }
@@ -1492,9 +1551,9 @@ function openMetaForm(goalId){
     indef = !!g.indefinida;
     if(indef){
       // El "aporte mensual" de una meta indefinida vive en aporteAutomatico.monto.
-      document.getElementById('mAporteMensual').value = (g.aporteAutomatico && g.aporteAutomatico.monto) ? g.aporteAutomatico.monto : '';
+      setMonto('mAporteMensual', (g.aporteAutomatico && g.aporteAutomatico.monto) || '');
     } else {
-      document.getElementById('mMonto').value = g.montoObjetivo || '';
+      setMonto('mMonto', g.montoObjetivo || '');
       document.getElementById('mFecha').value = g.fechaLimite || '';
     }
     document.getElementById('btnDeleteMeta').style.display = 'block';
@@ -1512,10 +1571,10 @@ document.getElementById('btnNuevaMeta').onclick = ()=> openMetaForm();
 
 document.getElementById('btnSaveMeta').onclick = ()=>{
   const nombre = document.getElementById('mNombre').value.trim();
-  const montoObjetivo = parseFloat(document.getElementById('mMonto').value);
+  const montoObjetivo = parseMonto('mMonto');
   const fechaLimite = document.getElementById('mFecha').value;
   const indefinida = document.querySelector('#sheetMeta [data-metaindef].active').dataset.metaindef === 'Sí';
-  const aporteMensual = parseFloat(document.getElementById('mAporteMensual').value);
+  const aporteMensual = parseMonto('mAporteMensual');
 
   if(!nombre){ alert('Ponle un nombre a la meta.'); return; }
   if(indefinida){
@@ -1752,13 +1811,13 @@ function openAportar(goalId){
   document.getElementById('aportarTitle').textContent = 'Aportar a ' + g.name;
   // Sugerencia: si tiene aporte mensual pactado, lo pre-carga.
   const sugerido = (g.aporteAutomatico && g.aporteAutomatico.monto) ? g.aporteAutomatico.monto : '';
-  document.getElementById('apMonto').value = sugerido;
+  setMonto('apMonto', sugerido || '');
   document.getElementById('aportarPaso1').style.display = 'block';
   document.getElementById('aportarPaso2').style.display = 'none';
   openSheet('sheetAportar');
 }
 document.getElementById('btnAportarRevisar').onclick = ()=>{
-  const monto = parseFloat(document.getElementById('apMonto').value);
+  const monto = parseMonto('apMonto');
   if(!monto || monto <= 0){ alert('Ingresa un monto válido.'); return; }
   const g = state.goals.find(x=>x.id===aportarGoalId);
   if(!g){ closeSheet('sheetAportar'); return; }
@@ -1773,7 +1832,7 @@ document.getElementById('btnAportarVolver').onclick = ()=>{
 };
 document.getElementById('btnAportarConfirmar').onclick = ()=>{
   const g = state.goals.find(x=>x.id===aportarGoalId);
-  const monto = parseFloat(document.getElementById('apMonto').value);
+  const monto = parseMonto('apMonto');
   if(!g || !monto || monto <= 0){ closeSheet('sheetAportar'); return; }
   if(!Array.isArray(g.aportes)) g.aportes = [];
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
@@ -1788,7 +1847,7 @@ function openAutoMeta(goalId){
   autoMetaGoalId = goalId;
   const aa = g.aporteAutomatico || { activo:false, monto:0, diaDelMes:1 };
   document.getElementById('autoMetaTitle').textContent = 'Aporte automático · ' + g.name;
-  document.getElementById('autoMonto').value = aa.monto || '';
+  setMonto('autoMonto', aa.monto || '');
   document.getElementById('autoDia').value = aa.diaDelMes || 1;
   document.getElementById('btnDisableAutoMeta').style.display = aa.activo ? 'block' : 'none';
   document.getElementById('btnSaveAutoMeta').textContent = aa.activo ? 'Guardar cambios' : 'Activar aporte automático';
@@ -1797,7 +1856,7 @@ function openAutoMeta(goalId){
 document.getElementById('btnSaveAutoMeta').onclick = ()=>{
   const g = state.goals.find(x=>x.id===autoMetaGoalId);
   if(!g){ closeSheet('sheetAutoMeta'); return; }
-  const monto = parseFloat(document.getElementById('autoMonto').value);
+  const monto = parseMonto('autoMonto');
   const dia = parseInt(document.getElementById('autoDia').value, 10);
   if(!monto || monto <= 0){ alert('Ingresa un monto mensual válido.'); return; }
   if(!dia || dia < 1 || dia > 28){ alert('El día del mes debe estar entre 1 y 28.'); return; }
@@ -1848,7 +1907,7 @@ function calcInteres(){
   const g = state.goals.find(x=>x.id===interesGoalId);
   const box = document.getElementById('intResult');
   if(!g){ box.innerHTML = ''; return; }
-  const tasaAnual = parseFloat(document.getElementById('intTasa').value);
+  const tasaAnual = parseFloat(String(document.getElementById('intTasa').value).replace(',', '.'));
   const n = parseInt(document.getElementById('intMeses').value, 10);
   if(isNaN(tasaAnual) || tasaAnual < 0 || !n || n < 1){
     box.innerHTML = `<p class="sub">Ingresa una tasa (0 o más) y un número de meses (1 o más) para ver la simulación.</p>`;
@@ -2067,8 +2126,9 @@ function renderHistorial(){
         renderPieChart(chartBox, data, { empty:'Sin ingresos este mes para la torta.' });
       }
     } else {
-      // 'barra': evolución de gastos de los últimos 6 meses (reemplaza a la línea).
-      renderBarChart(chartBox, gastosUltimos6Meses());
+      // 'barra': evolución de los últimos 6 meses. Igual que la torta, usa los datos
+      // del tab activo (gastos o ingresos), no siempre gastos.
+      renderBarChart(chartBox, hTab === 'ingresos' ? ingresosUltimos6Meses() : gastosUltimos6Meses());
     }
     return;
   }
@@ -2556,6 +2616,19 @@ function gastosUltimos6Meses(){
   for(let k = 5; k >= 0; k--){
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - k, 1);
     const total = getExpensesForMonth(d).filter(e=> !e.debtId).reduce((s,e)=> s + e.amount, 0);
+    arr.push({ label: MESES[d.getMonth()].slice(0,3), value: total });
+  }
+  return arr;
+}
+// Total de ingresos de los últimos 6 meses (incluye el mes visto), hacia atrás.
+function ingresosUltimos6Meses(){
+  const arr = [];
+  for(let k = 5; k >= 0; k--){
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - k, 1);
+    const mk = monthKey(d);
+    const total = state.incomes
+      .filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk)
+      .reduce((s,i)=> s + i.amount, 0);
     arr.push({ label: MESES[d.getMonth()].slice(0,3), value: total });
   }
   return arr;
