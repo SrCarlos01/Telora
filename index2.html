@@ -32,6 +32,7 @@
   --success:#7D9B69;
   --radius:16px;
   --radius-sm:10px;
+  --font-scale:1;   /* Tamaño de letra (accesibilidad): 1 / 1.15 / 1.3 — ver Configuración */
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
 html,body{
@@ -40,6 +41,10 @@ html,body{
   height:100%; overscroll-behavior:none;
   position:fixed; inset:0; width:100%;
 }
+/* Escala toda la tipografía/UI de forma proporcional (contenedores incluidos, así
+   los textos largos nunca desbordan sus tarjetas). Aplica a #app y a los sheets,
+   que cuelgan de <body> por separado. */
+#app, .sheet-overlay{ zoom: var(--font-scale, 1); }
 h1,h2,h3,.serif{font-family:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;}
 button{font-family:inherit;}
 ::-webkit-scrollbar{display:none;}
@@ -230,10 +235,28 @@ button{font-family:inherit;}
 .goal-expand, .cuota-expand{
   max-height:0; overflow:hidden; opacity:0; transition:max-height .28s ease, opacity .2s ease;
 }
-/* topes generosos para que no recorten nombres de meta / categoría largos */
-.goal-card.expanded .goal-expand{max-height:900px; opacity:1; margin-top:10px;}
+/* topes generosos para que no recorten nombres de meta / categoría largos ni la lista de aportes */
+.goal-card.expanded .goal-expand{max-height:2400px; opacity:1; margin-top:10px;}
 .debt-card.expanded .cuota-expand{max-height:600px; opacity:1; margin-top:8px;}
 .goal-expand, .goal-expand *, .cuota-expand, .cuota-expand *{overflow-wrap:anywhere;}
+
+/* lista de aportes manuales dentro del detalle de una meta */
+.aportes-list{margin:6px 0 4px; border-top:1px solid var(--border); padding-top:8px;}
+.aportes-list-title{
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold-dim); margin:0 0 4px;
+}
+.aporte-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  font-size:13px; color:var(--cream); padding:5px 0;
+}
+.aporte-row + .aporte-row{border-top:1px solid var(--border);}
+.aporte-info b{font-weight:600;}
+.aporte-del{
+  background:none; border:none; color:var(--danger); cursor:pointer; line-height:0;
+  min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.aporte-del .icon{width:15px; height:15px;}
+.aporte-del:active{transform:scale(0.9);}
 
 .row-expand{
   display:block; margin:8px 0 0 auto; background:none; border:none; color:var(--gold-dim);
@@ -517,6 +540,7 @@ button{font-family:inherit;}
     <div class="segmented">
       <button class="active" data-htab="gastos">Gastos</button>
       <button data-htab="ingresos">Ingresos</button>
+      <button data-htab="todo">Todo</button>
     </div>
     <button class="chart-toggle" id="tgHistorial"></button>
     <div class="field" style="margin-bottom:14px;">
@@ -602,16 +626,9 @@ button{font-family:inherit;}
       </div>
       <p id="fijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
     </div>
-    <div class="field">
-      <label>¿Es cuota?</label>
-      <div class="toggle-row">
-        <div class="toggle-opt" data-escuota="Sí">Sí</div>
-        <div class="toggle-opt active" data-escuota="No">No</div>
-      </div>
-    </div>
     <div class="cuota-fields" id="cuotaFields">
-      <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="Ej: 1, 3, 6" inputmode="numeric"></div>
-      <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">La cuota se cobra a partir del mes siguiente a esta fecha. Si pones 1, se cobra completo el mes siguiente (típico de un pago con crédito a una sola cuota).</p>
+      <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
+      <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Las cuotas se cobran a partir del mes siguiente a esta fecha. Déjalo vacío o en 1 para un pago único a una sola cuota.</p>
     </div>
     <button class="btn-primary" id="btnSaveGasto">Guardar gasto</button>
     <button class="btn-danger" id="btnDeleteGasto" style="display:none;">Eliminar gasto</button>
@@ -631,6 +648,14 @@ button{font-family:inherit;}
     </div>
     <div class="field"><label>Monto</label><input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="iDescripcion" placeholder="Opcional"></div>
+    <div class="field">
+      <label>Tipo</label>
+      <div class="toggle-row">
+        <div class="toggle-opt" data-itipo="Fijo">Fijo</div>
+        <div class="toggle-opt active" data-itipo="Casual">Casual</div>
+      </div>
+      <p id="iFijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
+    </div>
     <button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button>
     <button class="btn-danger" id="btnDeleteIngreso" style="display:none;">Eliminar ingreso</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -771,6 +796,13 @@ button{font-family:inherit;}
 
     <p class="section-title" style="margin-top:20px;">Paleta de colores</p>
     <div class="palette-row" id="paletteRow"></div>
+
+    <p class="section-title" style="margin-top:20px;">Tamaño de letra</p>
+    <div class="toggle-row" id="fontScaleRow">
+      <div class="toggle-opt" data-fontscale="1">Normal</div>
+      <div class="toggle-opt" data-fontscale="1.15">Grande</div>
+      <div class="toggle-opt" data-fontscale="1.3">Muy grande</div>
+    </div>
 
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
     <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 12px;">
@@ -950,6 +982,7 @@ let cTab = 'activas';
 let editingExpenseId = null;
 let editingIncomeId = null;
 let pendingDeleteExpenseId = null;
+let pendingDeleteIncomeId = null;
 
 const GOALS_FREE_LIMIT = 3; // metas activas permitidas en la versión gratuita (freemium)
 
@@ -1031,6 +1064,34 @@ function getExpensesForMonth(refDate){
   return [...real, ...virtualFixed];
 }
 
+/* ==================== INGRESOS FIJOS RECURRENTES ==================== */
+// Mismo motor que getExpensesForMonth(): un ingreso "Fijo" se repite cada mes
+// posterior a su fecha de registro, el mismo día, generando una "ocurrencia
+// virtual" (no se duplica el registro). Al eliminarlo se guarda fixedEndMonthKey
+// y deja de aparecer desde ese mes en adelante; los meses previos quedan intactos.
+function getIncomesForMonth(refDate){
+  const mk = monthKey(refDate);
+  const notCutOff = i => i.fixedEndMonthKey == null || mk < i.fixedEndMonthKey;
+
+  const real = state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk && notCutOff(i));
+
+  const virtualFixed = state.incomes
+    .filter(i=> i.tipo==='Fijo')
+    .filter(i=> monthKey(new Date(i.date+"T00:00:00")) < mk)
+    .filter(notCutOff)
+    .map(i=>{
+      const regDate = new Date(i.date+"T00:00:00");
+      const day = regDate.getDate();
+      const lastDayOfMonth = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
+      const useDay = Math.min(day, lastDayOfMonth);
+      const vDate = new Date(refDate.getFullYear(), refDate.getMonth(), useDay);
+      const yyyy = vDate.getFullYear(), mm=String(vDate.getMonth()+1).padStart(2,'0'), dd=String(vDate.getDate()).padStart(2,'0');
+      return { ...i, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true };
+    });
+
+  return [...real, ...virtualFixed];
+}
+
 /* ==================== APORTE AUTOMÁTICO DE METAS: recurrencia ==================== */
 // Mismo criterio que getExpensesForMonth() para los gastos fijos: el aporte automático
 // genera una "ocurrencia virtual" en cada mes POSTERIOR al mes de activación, el día
@@ -1074,9 +1135,7 @@ function aporteAutomaticoAcumulado(goal, hastaDate){
 // escribe en aporteAutomatico.pausado. Devuelve un Set de goal.id pausados.
 function calcularEstadoAportesDelMes(refDate){
   const mk = monthKey(refDate);
-  const ingresos = state.incomes
-    .filter(i=> monthKey(new Date(i.date+"T00:00:00"))===mk)
-    .reduce((s,i)=> s + i.amount, 0);
+  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
   const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0;
   state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
@@ -1291,11 +1350,22 @@ document.querySelectorAll('#sheetGasto [data-tipo]').forEach(el=>{
     document.getElementById('fijoNote').style.display = el.dataset.tipo==='Fijo' ? 'block' : 'none';
   });
 });
-document.querySelectorAll('#sheetGasto [data-escuota]').forEach(el=>{
+// Cuotas directas: cuando el método es Crédito el gasto SIEMPRE es una cuota y se
+// muestra sin paso intermedio el campo "Número de cuotas". Con cualquier otro
+// método, ese campo se oculta por completo y se limpia.
+function syncCuotaFields(){
+  const isCredito = document.getElementById('gMetodo').value === 'Crédito';
+  document.getElementById('cuotaFields').classList.toggle('open', isCredito);
+  if(!isCredito) document.getElementById('gNumCuotas').value = '';
+}
+document.getElementById('gMetodo').addEventListener('change', syncCuotaFields);
+
+// Toggle Fijo/Casual del formulario de ingreso (mismo comportamiento que en gastos).
+document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
-    document.querySelectorAll('#sheetGasto [data-escuota]').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.remove('active'));
     el.classList.add('active');
-    document.getElementById('cuotaFields').classList.toggle('open', el.dataset.escuota === 'Sí');
+    document.getElementById('iFijoNote').style.display = el.dataset.itipo==='Fijo' ? 'block' : 'none';
   });
 });
 
@@ -1305,26 +1375,44 @@ function fillSelect(id, options, selected){
   sel.innerHTML = options.map(o=>`<option value="${o}" ${o===selected?'selected':''}>${o}</option>`).join('');
 }
 
-/* ==================== GASTOS FRECUENTES (chips, solo en "Nuevo gasto") ==================== */
-// Descripciones de gasto que se repiten (>=2 veces, comparando sin mayúsculas ni
-// espacios extra). Devuelve hasta 6, con los datos del registro MÁS RECIENTE de
-// cada descripción (monto, categoría, método exactos — no promedios).
+/* ==================== CATEGORÍAS FRECUENTES (chips, solo en "Nuevo gasto") ==================== */
+// Agrupa el historial de gastos por CATEGORÍA (últimos ~3 meses para mantenerlo
+// relevante; si eso deja menos de 2 categorías, usa todo el historial) y devuelve
+// las 4-6 más usadas. Cada chip solo pre-llena Categoría, y Método si esa categoría
+// tiene uno claramente dominante (>70% de sus gastos). Monto y Descripción los
+// completa el usuario, porque varían demasiado dentro de una misma categoría.
+// A prueba de fallos: nunca debe tumbar la apertura de openGastoForm().
 function gastosFavoritos(){
-  const norm = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
-  const groups = {};
-  state.expenses.forEach(e=>{
-    const k = norm(e.description);
-    if(!k) return;
-    (groups[k] = groups[k] || []).push(e);
-  });
-  return Object.values(groups)
-    .filter(arr=> arr.length >= 2)
-    .sort((a,b)=> b.length - a.length)
-    .slice(0, 6)
-    .map(arr=>{
-      const latest = arr.slice().sort((a,b)=> b.date.localeCompare(a.date))[0];
-      return { label: latest.description, category: latest.category, method: latest.method, amount: latest.amount };
-    });
+  try{
+    const contar = (desde)=>{
+      const byCat = {};
+      state.expenses.forEach(e=>{
+        if(!e || !e.category) return;
+        if(desde && String(e.date||'') < desde) return;
+        const c = byCat[e.category] || (byCat[e.category] = { count:0, methods:{} });
+        c.count++;
+        if(e.method) c.methods[e.method] = (c.methods[e.method]||0) + 1;
+      });
+      return byCat;
+    };
+    const d = new Date(); d.setMonth(d.getMonth() - 3);
+    const desde = d.toISOString().slice(0,10);
+    let byCat = contar(desde);
+    if(Object.keys(byCat).filter(k=> byCat[k].count >= 2).length < 2) byCat = contar(null);
+
+    return Object.entries(byCat)
+      .filter(([,c])=> c.count >= 2)
+      .sort((a,b)=> b[1].count - a[1].count)
+      .slice(0, 6)
+      .map(([category, c])=>{
+        const top = Object.entries(c.methods).sort((a,b)=> b[1]-a[1])[0];
+        const method = (top && top[1] / c.count > 0.7) ? top[0] : null;
+        return { category, method };
+      });
+  }catch(err){
+    console.warn('gastosFavoritos falló, se omiten los chips:', err);
+    return [];
+  }
 }
 
 /* ==================== FORM: GASTO ==================== */
@@ -1338,7 +1426,6 @@ function openGastoForm(expenseId){
   document.getElementById('gDescripcion').value = '';
   document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo==='Casual'));
   document.getElementById('fijoNote').style.display = 'none';
-  document.querySelectorAll('#sheetGasto [data-escuota]').forEach(x=>x.classList.toggle('active', x.dataset.escuota==='No'));
   document.getElementById('cuotaFields').classList.remove('open');
   document.getElementById('gNumCuotas').value = '';
   document.getElementById('btnDeleteGasto').style.display = 'none';
@@ -1354,39 +1441,46 @@ function openGastoForm(expenseId){
     document.getElementById('gDescripcion').value = e.description;
     document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo===e.tipo));
     document.getElementById('fijoNote').style.display = e.tipo==='Fijo' ? 'block' : 'none';
-    const isCuota = !!e.debtId;
-    document.querySelectorAll('#sheetGasto [data-escuota]').forEach(x=>x.classList.toggle('active', x.dataset.escuota===(isCuota?'Sí':'No')));
-    document.getElementById('cuotaFields').classList.toggle('open', isCuota);
-    if(isCuota){
+    if(e.debtId){
       const debt = state.debts.find(d=>d.id===e.debtId);
       if(debt) document.getElementById('gNumCuotas').value = debt.numCuotas;
     }
     document.getElementById('btnDeleteGasto').style.display = 'block';
   }
 
-  // Chips de gastos frecuentes: solo al crear un gasto nuevo, no al editar.
-  const favField = document.getElementById('favChipsField');
-  const favBox = document.getElementById('favChips');
-  const favs = expenseId ? [] : gastosFavoritos();
-  if(favs.length){
-    favBox.innerHTML = favs.map((f,idx)=>
-      `<button type="button" class="chip" data-fav="${idx}">${f.label}<small>${money(f.amount)}</small></button>`
-    ).join('');
-    favField.style.display = 'block';
-    favBox.querySelectorAll('[data-fav]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const f = favs[parseInt(btn.dataset.fav, 10)];
-        setMonto('gMonto', f.amount);
-        fillSelect('gCategoria', state.config.categorias, f.category);
-        fillSelect('gMetodo', state.config.metodos, f.method);
-        document.getElementById('gDescripcion').value = f.label;
+  // Chips de categorías frecuentes: solo al crear un gasto nuevo, no al editar.
+  // Aislado en try/catch: pase lo que pase aquí, el formulario debe abrirse igual.
+  try{
+    const favField = document.getElementById('favChipsField');
+    const favBox = document.getElementById('favChips');
+    const favs = expenseId ? [] : gastosFavoritos();
+    if(favs.length){
+      favBox.innerHTML = favs.map((f,idx)=>
+        `<button type="button" class="chip" data-fav="${idx}">${catIcon(f.category)}${f.category}</button>`
+      ).join('');
+      favField.style.display = 'block';
+      favBox.querySelectorAll('[data-fav]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const f = favs[parseInt(btn.dataset.fav, 10)];
+          // Pre-llena solo Categoría (y Método si hay uno dominante). Monto y
+          // Descripción los completa el usuario.
+          fillSelect('gCategoria', state.config.categorias, f.category);
+          if(f.method && state.config.metodos.includes(f.method)){
+            fillSelect('gMetodo', state.config.metodos, f.method);
+          }
+          syncCuotaFields();
+        });
       });
-    });
-  } else {
-    favBox.innerHTML = '';
-    favField.style.display = 'none';
+    } else {
+      favBox.innerHTML = '';
+      favField.style.display = 'none';
+    }
+  }catch(err){
+    console.warn('No se pudieron renderizar los chips de categorías frecuentes:', err);
+    document.getElementById('favChipsField').style.display = 'none';
   }
 
+  syncCuotaFields();
   openSheet('sheetGasto');
 }
 
@@ -1398,25 +1492,34 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   const metodo = document.getElementById('gMetodo').value;
   const descripcion = document.getElementById('gDescripcion').value.trim();   // opcional (puede quedar vacía)
   const tipo = document.querySelector('#sheetGasto [data-tipo].active').dataset.tipo;
-  const esCuota = document.querySelector('#sheetGasto [data-escuota].active').dataset.escuota === 'Sí';
-  const numCuotas = parseInt(document.getElementById('gNumCuotas').value) || 0;
+  // Con método Crédito el gasto es SIEMPRE una cuota; nº de cuotas = 1 por defecto
+  // (pago único a crédito), tal como antes con "¿Es cuota? = Sí" y 1 cuota.
+  const esCredito = metodo === 'Crédito';
+  const numCuotas = esCredito ? (parseInt(document.getElementById('gNumCuotas').value, 10) || 1) : 0;
 
   if(!monto || monto<=0){ alert('Ingresa un monto mayor a 0.'); return; }
   if(!categoria){ alert('Elige una categoría.'); return; }
-  if(esCuota && numCuotas < 1){
-    alert('Ingresa un número de cuotas válido (1 o más).'); return;
-  }
+  if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
 
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
     e.date=fecha; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
-    if(e.debtId){
-      const debt = state.debts.find(d=>d.id===e.debtId);
-      if(debt){ debt.description=descripcion; debt.category=categoria; debt.purchaseDate=fecha; debt.totalAmount=monto; debt.numCuotas=numCuotas; }
+    if(esCredito){
+      const debt = e.debtId ? state.debts.find(d=>d.id===e.debtId) : null;
+      if(debt){
+        debt.description=descripcion; debt.category=categoria; debt.purchaseDate=fecha; debt.totalAmount=monto; debt.numCuotas=numCuotas;
+      } else {
+        // Cambió a Crédito en la edición: ahora es una cuota.
+        const nd = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[] };
+        state.debts.push(nd);
+        e.debtId = nd.id;
+      }
     }
+    // Si tenía deuda y el método dejó de ser Crédito, se conserva la deuda intacta
+    // (caso borde); para quitarla del todo hay que eliminar el gasto.
   } else {
     const expense = { id:uid(), date:fecha, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null };
-    if(esCuota){
+    if(esCredito){
       const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[] };
       state.debts.push(debt);
       expense.debtId = debt.id;
@@ -1451,6 +1554,16 @@ document.getElementById('btnDeleteGasto').onclick = ()=>{
   }
 };
 document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
+  if(pendingDeleteType === 'fijoIngreso'){
+    // Ingreso fijo recurrente: corta la recurrencia desde el mes visto en adelante;
+    // los meses anteriores quedan intactos (mismo criterio que los gastos fijos).
+    const i = state.incomes.find(x=>x.id===pendingDeleteIncomeId);
+    if(i) i.fixedEndMonthKey = monthKey(currentDate);
+    saveState();
+    pendingDeleteType = null; pendingDeleteIncomeId = null;
+    closeSheet('sheetConfirmDebt'); renderAll();
+    return;
+  }
   const e = state.expenses.find(x=>x.id===pendingDeleteExpenseId);
   if(e){
     if(pendingDeleteType==='cuota'){
@@ -1471,18 +1584,26 @@ document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
 function openIngresoForm(incomeId){
   editingIncomeId = incomeId;
   fillSelect('iFuente', state.config.fuentes);
+  // Sin fuente preseleccionada al crear: opción vacía al inicio (obliga a elegir).
+  document.getElementById('iFuente').insertAdjacentHTML('afterbegin', '<option value="" disabled selected>Elige una fuente…</option>');
   document.getElementById('iFecha').value = new Date().toISOString().slice(0,10);
   document.getElementById('iMonto').value = '';
   document.getElementById('iDescripcion').value = '';
+  // Tipo Fijo/Casual (mismo motor de recurrencia que los gastos): por defecto Casual.
+  document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo==='Casual'));
+  document.getElementById('iFijoNote').style.display = 'none';
   document.getElementById('btnDeleteIngreso').style.display = 'none';
   document.getElementById('ingresoTitle').textContent = 'Nuevo ingreso';
   if(incomeId){
     const i = state.incomes.find(x=>x.id===incomeId);
     document.getElementById('ingresoTitle').textContent = 'Editar ingreso';
     document.getElementById('iFecha').value = i.date;
-    fillSelect('iFuente', state.config.fuentes, i.source);
+    document.getElementById('iFuente').value = i.source;
     setMonto('iMonto', i.amount);
     document.getElementById('iDescripcion').value = i.description;
+    const itipo = i.tipo === 'Fijo' ? 'Fijo' : 'Casual';
+    document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo===itipo));
+    document.getElementById('iFijoNote').style.display = itipo==='Fijo' ? 'block' : 'none';
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
   openSheet('sheetIngreso');
@@ -1492,19 +1613,33 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   const fuente = document.getElementById('iFuente').value;
   const monto = parseMonto('iMonto');
   const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional
+  const itipo = document.querySelector('#sheetIngreso [data-itipo].active').dataset.itipo;
   if(!monto || monto<=0){ alert('Ingresa un monto mayor a 0.'); return; }
   if(!fuente){ alert('Elige una fuente.'); return; }
+  if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
-    i.date=fecha; i.source=fuente; i.amount=monto; i.description=descripcion;
+    i.date=fecha; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
   } else {
-    state.incomes.push({id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion});
+    state.incomes.push({id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion, tipo:itipo});
   }
   saveState(); closeSheet('sheetIngreso'); renderAll();
 };
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
-  state.incomes = state.incomes.filter(x=>x.id!==editingIncomeId);
-  saveState(); closeSheet('sheetIngreso'); renderAll();
+  const i = state.incomes.find(x=>x.id===editingIncomeId);
+  if(i && i.tipo==='Fijo'){
+    // Ingreso fijo recurrente: confirmación + corte hacia adelante (no se borra el objeto).
+    pendingDeleteIncomeId = editingIncomeId;
+    pendingDeleteType = 'fijoIngreso';
+    const nombreMes = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
+    document.getElementById('confirmDeleteTitle').textContent = 'Este es un ingreso fijo recurrente';
+    document.getElementById('confirmDeleteText').textContent = `Dejará de aparecer desde ${nombreMes} en adelante. Los meses anteriores mantendrán este ingreso en su historial, tal como ocurrió. Esta acción no se puede deshacer.`;
+    closeSheet('sheetIngreso');
+    openSheet('sheetConfirmDebt');
+  } else {
+    state.incomes = state.incomes.filter(x=>x.id!==editingIncomeId);
+    saveState(); closeSheet('sheetIngreso'); renderAll();
+  }
 };
 
 /* ==================== FORM: META ==================== */
@@ -1728,10 +1863,28 @@ function renderMetas(){
       autoNote = `<p class="debt-manual-note">${icon('tag')} Aporte automático activo · ${money(aporteMensual)} el día ${aa.diaDelMes||1}</p>`;
     }
 
+    // Lista de aportes manuales (más recientes primero), cada uno eliminable.
+    const manualAportes = (g.aportes||[])
+      .filter(a=> a && a.tipo === 'manual')
+      .slice()
+      .sort((a,b)=> String(b.fecha||'').localeCompare(String(a.fecha||'')));
+    const aportesListHtml = manualAportes.length ? (
+      `<div class="aportes-list">
+         <p class="aportes-list-title">Aportes manuales</p>` +
+      manualAportes.map(a=>
+        `<div class="aporte-row">
+           <span class="aporte-info">${fmtDate(a.fecha)} · <b>${money(a.monto)}</b></span>
+           <button class="aporte-del" data-delaporte="${g.id}:${a.id}" aria-label="Eliminar este aporte">${icon('x')}</button>
+         </div>`
+      ).join('') +
+      `</div>`
+    ) : '';
+
     // Lápiz de edición (siempre visible) + acciones dentro del bloque colapsable.
     const editBtn = `<button class="card-edit" data-editgoal="${g.id}" aria-label="Editar meta">${icon('edit')}</button>`;
     const expandInner =
       autoNote +
+      aportesListHtml +
       `<button class="debt-action" data-aportar="${g.id}">Aportar</button>` +
       `<button class="debt-action" data-auto="${g.id}">${aa.activo ? 'Editar aporte automático' : 'Activar aporte automático'}</button>` +
       `<button class="debt-action" data-calc="${g.id}">Calculadora</button>`;
@@ -1799,6 +1952,21 @@ function renderMetas(){
   });
   box.querySelectorAll('[data-calc]').forEach(el=>{
     el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openInteres(el.dataset.calc); });
+  });
+  // Eliminar un aporte manual puntual (registrado por error). Solo tipo:'manual'.
+  // El "ahorrado" y el Disponible del mes se recalculan solos en el próximo render.
+  box.querySelectorAll('[data-delaporte]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      const [gid, aid] = el.dataset.delaporte.split(':');
+      const g = state.goals.find(x=>x.id===gid);
+      if(!g || !Array.isArray(g.aportes)) return;
+      const a = g.aportes.find(x=> x.id===aid && x.tipo==='manual');
+      if(!a) return;
+      if(!confirm(`¿Eliminar el aporte de ${money(a.monto)} del ${fmtDate(a.fecha)}? Se recalculará lo ahorrado y el disponible de ese mes.`)) return;
+      g.aportes = g.aportes.filter(x=> x.id!==aid);
+      saveState(); renderAll();
+    });
   });
 }
 
@@ -1980,7 +2148,7 @@ function toggleManualPaid(debtId, refDate){
 function renderResumen(){
   const mk = monthKey(currentDate);
   const monthExpenses = getExpensesForMonth(currentDate);
-  const monthIncomes = state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk);
+  const monthIncomes = getIncomesForMonth(currentDate);
   const normalExpenses = monthExpenses.filter(e=>!e.debtId);
 
   const totalIngresos = monthIncomes.reduce((s,i)=>s+i.amount,0);
@@ -2112,7 +2280,19 @@ function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
+  const tgBtn = document.getElementById('tgHistorial');
   document.getElementById('hSortSelect').value = hSortMode;
+
+  // Pestaña "Todo": lista mezclada de gastos + ingresos. El gráfico Barra/Torta no
+  // aporta claridad sobre datos de signo mixto, así que aquí se oculta el toggle.
+  if(hTab === 'todo'){
+    if(tgBtn) tgBtn.style.display = 'none';
+    box.style.display = ''; chartBox.style.display = 'none';
+    renderHistorialTodo(box);
+    return;
+  }
+  if(tgBtn) tgBtn.style.display = '';
+
   syncChartToggle('historial');
   if(chartView.historial !== 'lista'){
     box.style.display = 'none'; chartBox.style.display = '';
@@ -2121,7 +2301,7 @@ function renderHistorial(){
         renderPieChart(chartBox, gastoPorCategoriaData(currentDate), { empty:'Sin gastos este mes para la torta.' });
       } else {
         const bySrc = {};
-        state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00"))===mk).forEach(i=> bySrc[i.source] = (bySrc[i.source]||0) + i.amount);
+        getIncomesForMonth(currentDate).forEach(i=> bySrc[i.source] = (bySrc[i.source]||0) + i.amount);
         const data = Object.entries(bySrc).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
         renderPieChart(chartBox, data, { empty:'Sin ingresos este mes para la torta.' });
       }
@@ -2154,16 +2334,13 @@ function renderHistorial(){
     });
     wireRowExpand(box);
   } else {
-    const items = applySort(
-      state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00"))===mk),
-      'source', 'amount', 'date'
-    );
+    const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date');
     if(items.length===0){ box.innerHTML = emptyMsg('Sin ingresos registrados este mes.'); return; }
     box.innerHTML = items.map(i=>`
       <div class="list-item income" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${i.source}</span></p>
+          <p class="li-title"><span class="li-title-text">${i.source}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
           <p class="li-sub">${fmtDate(i.date)}${i.description? ' · '+i.description:''}</p>
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
@@ -2174,6 +2351,55 @@ function renderHistorial(){
     });
     wireRowExpand(box);
   }
+}
+
+/* ==================== RENDER: HISTORIAL · pestaña "Todo" ==================== */
+// Gastos e ingresos del mes en una sola lista, ordenados con applySort. Indicador
+// visual de tipo por fila: ícono/color (verde = ingreso), signo +/− en el monto y
+// badge "Gasto"/"Ingreso". Cada fila abre su editor correspondiente.
+function renderHistorialTodo(box){
+  const gastos = getExpensesForMonth(currentDate).map(e=>({
+    kind:'gasto', id:e.id, date:e.date, amount:e.amount,
+    name:e.description||'', category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
+  }));
+  const ingresos = getIncomesForMonth(currentDate).map(i=>({
+    kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
+    name:i.source||'', source:i.source, description:i.description||'', tipo:i.tipo
+  }));
+  const items = applySort([...gastos, ...ingresos], 'name', 'amount', 'date');
+  if(items.length===0){ box.innerHTML = emptyMsg('Sin movimientos registrados este mes.'); return; }
+  box.innerHTML = items.map(it=>{
+    if(it.kind==='ingreso'){
+      return `
+      <div class="list-item income" data-editincome="${it.id}">
+        <div class="li-icon">${icon('arrow-down-left')}</div>
+        <div class="li-body">
+          <p class="li-title"><span class="li-title-text">${it.source}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
+          <p class="li-sub">${fmtDate(it.date)}${it.description ? ' · '+it.description : ''}</p>
+        </div>
+        <span class="li-amount income">+${money(it.amount)}</span>
+        <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
+      </div>`;
+    }
+    const badge = it.debtId ? '<span class="li-badge">Cuota</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+    return `
+      <div class="list-item" data-editexpense="${it.id}">
+        <div class="li-icon">${catIcon(it.category)}</div>
+        <div class="li-body">
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
+          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}</p>
+        </div>
+        <span class="li-amount">−${money(it.amount)}</span>
+        <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
+      </div>`;
+  }).join('');
+  box.querySelectorAll('[data-editexpense]').forEach(el=>{
+    el.addEventListener('click', ()=> openGastoForm(el.dataset.editexpense));
+  });
+  box.querySelectorAll('[data-editincome]').forEach(el=>{
+    el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
+  });
+  wireRowExpand(box);
 }
 // Chevron "aparte" que expande/colapsa el sub-detalle de una fila, sin disparar el tap de edición.
 function wireRowExpand(box){
@@ -2279,6 +2505,7 @@ function renderConfig(){
   renderConfigList('metodos','cfgMetodos');
   renderConfigList('fuentes','cfgFuentes');
   renderPaletteRow();
+  renderFontScaleRow();
 }
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -2423,6 +2650,7 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
       if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
     });
     aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // aplica/normaliza la paleta del respaldo
+    aplicarFontScale((state.config && state.config.fontScale) || '1'); // aplica/normaliza el tamaño de letra del respaldo
     saveState();
     pendingRestoreData = null;
   }
@@ -2488,8 +2716,22 @@ function exportExcel(fromDate, toDate){
   }
   const expenseRows = allExpenseRows.sort((a,b)=>a.date.localeCompare(b.date))
     .map(e=>({ Fecha:e.date, Monto:e.amount, Categoría:e.category, Método:e.method, Descripción:e.description, Tipo:e.tipo, "¿Es cuota?": e.debtId? "Sí":"No" }));
-  const incomeRows = state.incomes.filter(i=>inRange(i.date)).sort((a,b)=>a.date.localeCompare(b.date))
-    .map(i=>({ Fecha:i.date, Fuente:i.source, Monto:i.amount, Descripción:i.description }));
+
+  // Ingresos: misma expansión mes por mes que los gastos (incluye ocurrencias de los ingresos Fijos).
+  const allIncomeRows = [];
+  const seenIncomeKeys = new Set();
+  let icursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+  while(icursor <= endCursor){
+    getIncomesForMonth(icursor).forEach(i=>{
+      const key = i.id + '-' + i.date;
+      if(seenIncomeKeys.has(key)) return;
+      seenIncomeKeys.add(key);
+      if(inRange(i.date)) allIncomeRows.push(i);
+    });
+    icursor.setMonth(icursor.getMonth()+1);
+  }
+  const incomeRows = allIncomeRows.sort((a,b)=>a.date.localeCompare(b.date))
+    .map(i=>({ Fecha:i.date, Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
   const debtRows = state.debts.map(d=>({
     Descripción:d.description, "Fecha compra":d.purchaseDate, Categoría:d.category,
     "Monto total":d.totalAmount, "N° cuotas":d.numCuotas, "Monto por cuota": Math.round(d.totalAmount/d.numCuotas),
@@ -2625,10 +2867,7 @@ function ingresosUltimos6Meses(){
   const arr = [];
   for(let k = 5; k >= 0; k--){
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - k, 1);
-    const mk = monthKey(d);
-    const total = state.incomes
-      .filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk)
-      .reduce((s,i)=> s + i.amount, 0);
+    const total = getIncomesForMonth(d).reduce((s,i)=> s + i.amount, 0);
     arr.push({ label: MESES[d.getMonth()].slice(0,3), value: total });
   }
   return arr;
@@ -2683,6 +2922,31 @@ function renderPaletteRow(){
 }
 // Aplica la paleta guardada al arrancar (antes del primer render).
 if(state.config && state.config.paleta) aplicarPaleta(state.config.paleta);
+
+/* ==================== TAMAÑO DE LETRA (accesibilidad) ==================== */
+// Igual patrón que la paleta: guarda la elección en state.config.fontScale y la
+// aplica como multiplicador (variable CSS --font-scale) al cargar.
+const FONT_SCALES = { '1':'Normal', '1.15':'Grande', '1.3':'Muy grande' };
+function aplicarFontScale(val){
+  const v = FONT_SCALES[String(val)] ? String(val) : '1';
+  document.documentElement.style.setProperty('--font-scale', v);
+  if(state.config) state.config.fontScale = v;
+}
+function renderFontScaleRow(){
+  const box = document.getElementById('fontScaleRow');
+  if(!box) return;
+  const cur = String((state.config && state.config.fontScale) || '1');
+  box.querySelectorAll('[data-fontscale]').forEach(el=>
+    el.classList.toggle('active', el.dataset.fontscale === cur));
+}
+document.querySelectorAll('#fontScaleRow [data-fontscale]').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    aplicarFontScale(el.dataset.fontscale);
+    saveState(); renderFontScaleRow();
+  });
+});
+// Aplica el tamaño guardado al arrancar (antes del primer render).
+aplicarFontScale((state.config && state.config.fontScale) || '1');
 
 /* ==================== RENDER GENERAL ==================== */
 function renderAll(){
