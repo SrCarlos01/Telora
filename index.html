@@ -282,6 +282,23 @@ button{font-family:inherit;}
 .li-expand .icon{width:16px; height:16px; transition:transform .2s ease;}
 .list-item.expanded .li-expand .icon{transform:rotate(180deg);}
 
+/* ---------- HISTORIAL: fila de controles (Detalle + selector de vista) ---------- */
+.hist-controls{display:flex; align-items:center; justify-content:flex-end; gap:8px; margin:0 0 14px;}
+.hist-controls .chart-toggle{margin:0;}
+.chart-toggle.toggle-on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+
+/* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
+.hist-day-sep{
+  font-size:12px; font-weight:600; color:var(--gold-dim); letter-spacing:.02em;
+  margin:16px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--border);
+}
+.hist-day-sep:first-child{margin-top:2px;}
+
+/* ---------- HISTORIAL "Todo": saldo acumulado por fila ---------- */
+.li-amount-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;}
+.li-saldo{font-size:10px; color:var(--cream-dim); white-space:nowrap; letter-spacing:.01em;}
+.li-saldo.neg{color:var(--danger);}
+
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
   display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.08em;
@@ -572,7 +589,10 @@ button{font-family:inherit;}
       <button data-htab="ingresos">Ingresos</button>
       <button data-htab="todo">Todo</button>
     </div>
-    <button class="chart-toggle" id="tgHistorial"></button>
+    <div class="hist-controls">
+      <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
+      <button class="chart-toggle" id="tgHistorial"></button>
+    </div>
     <div class="field" style="margin-bottom:14px;">
       <select id="hSortSelect">
         <option value="fecha-desc">Fecha (recientes primero)</option>
@@ -1276,6 +1296,45 @@ function saldoAcumuladoHasta(refDate){
 // Disponible mostrado de un mes = arrastre + flujo bruto - metas.
 function disponibleDelMes(refDate){
   return disponibleBaseDelMes(refDate) - totalAportesMetasDelMes(refDate);
+}
+
+/* ==================== SALDO ACUMULADO POR MOVIMIENTO (pestaña "Todo") ==================== */
+// El "Saldo: $X" que se muestra en cada fila de la pestaña Todo es el mismo motor de
+// cuenta corriente, pero a nivel de movimiento individual dentro del mes: se parte del
+// saldo acumulado de meses anteriores (saldoAcumuladoHasta) y se van sumando los
+// ingresos y restando los gastos del mes en orden cronológico ascendente. En un mismo
+// día no hay hora, así que se ordena: ingresos antes que gastos, y dentro de cada grupo
+// en el orden en que los devuelve getIncomesForMonth/getExpensesForMonth. El resultado
+// se memoiza por mes visible (una sola pasada), no se recalcula por fila; la caché se
+// limpia en cada renderAll() junto con la de la cuenta corriente.
+// Nota: participa CADA fila de la lista (incl. la compra a crédito, que se muestra por
+// su monto total). Por eso el saldo de la última fila calza con el Disponible del
+// Resumen solo cuando el mes no tiene cuotas ni aportes a metas (que el Resumen
+// descuenta aparte y no son filas de esta lista).
+let SALDO_ROW_CACHE = { mk:null, map:null };
+function resetSaldoRowCache(){ SALDO_ROW_CACHE = { mk:null, map:null }; }
+function saldoRowKey(kind, id, date){ return (kind === 'ingreso' ? 'i:' : 'g:') + id + ':' + date; }
+// Movimientos del mes (gastos + ingresos) en orden cronológico ascendente canónico.
+function movimientosCronoAsc(refDate){
+  const ingresos = getIncomesForMonth(refDate).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
+  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-e.amount, _ord:idx }));
+  return [...ingresos, ...gastos].sort((a,b)=>
+    a.date.localeCompare(b.date)
+    || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
+    || (a._ord - b._ord)
+  );
+}
+function saldoPorMovimientoDelMes(refDate){
+  const mk = monthKey(refDate);
+  if(SALDO_ROW_CACHE.mk === mk && SALDO_ROW_CACHE.map) return SALDO_ROW_CACHE.map;
+  const map = new Map();
+  let run = saldoAcumuladoHasta(refDate);   // saldo de meses anteriores (arrastre)
+  movimientosCronoAsc(refDate).forEach(m=>{
+    run += m.delta;
+    map.set(saldoRowKey(m.kind, m.id, m.date), run);
+  });
+  SALDO_ROW_CACHE = { mk, map };
+  return map;
 }
 
 /* ==================== APORTE AUTOMÁTICO DE METAS: recurrencia ==================== */
@@ -2581,12 +2640,19 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
     renderHistorial();
   });
 });
+// ¿El botón "Detalle" está activado? (por defecto sí; se persiste en state.config)
+function historialDetalleOn(){ return !state.config || state.config.historialDetalle !== false; }
 function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
   const tgBtn = document.getElementById('tgHistorial');
   document.getElementById('hSortSelect').value = hSortMode;
+  syncHistDetalleBtn();
+
+  const detalleOn = historialDetalleOn();
+  const expCls = detalleOn ? ' expanded' : '';
+  const agrupaPorDia = hSortMode.split('-')[0] === 'fecha';
 
   // Pestaña "Todo": lista mezclada de gastos + ingresos. El gráfico Barra/Torta no
   // aporta claridad sobre datos de signo mixto, así que aquí se oculta el toggle.
@@ -2621,10 +2687,10 @@ function renderHistorial(){
   if(hTab==='gastos'){
     const items = applySort(getExpensesForMonth(currentDate), 'description', 'amount', 'date');
     if(items.length===0){ box.innerHTML = emptyMsg('Sin gastos registrados este mes.'); return; }
-    box.innerHTML = items.map(e=>{
+    const rowHtml = (e)=>{
       const badge = e.debtId ? '<span class="li-badge">Cuota</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
       return `
-      <div class="list-item" data-editexpense="${e.id}">
+      <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span>${badge}</p>
@@ -2633,7 +2699,8 @@ function renderHistorial(){
         <span class="li-amount">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
-    }).join('');
+    };
+    box.innerHTML = agrupaPorDia ? groupByDayHtml(items, rowHtml) : items.map(rowHtml).join('');
     box.querySelectorAll('[data-editexpense]').forEach(el=>{
       el.addEventListener('click', ()=> openGastoForm(el.dataset.editexpense));
     });
@@ -2641,8 +2708,8 @@ function renderHistorial(){
   } else {
     const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date');
     if(items.length===0){ box.innerHTML = emptyMsg('Sin ingresos registrados este mes.'); return; }
-    box.innerHTML = items.map(i=>`
-      <div class="list-item income" data-editincome="${i.id}">
+    const rowHtml = (i)=>`
+      <div class="list-item income${expCls}" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${i.source}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
@@ -2650,7 +2717,8 @@ function renderHistorial(){
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
-      </div>`).join('');
+      </div>`;
+    box.innerHTML = agrupaPorDia ? groupByDayHtml(items, rowHtml) : items.map(rowHtml).join('');
     box.querySelectorAll('[data-editincome]').forEach(el=>{
       el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
     });
@@ -2659,10 +2727,16 @@ function renderHistorial(){
 }
 
 /* ==================== RENDER: HISTORIAL · pestaña "Todo" ==================== */
-// Gastos e ingresos del mes en una sola lista, ordenados con applySort. Indicador
-// visual de tipo por fila: ícono/color (verde = ingreso), signo +/− en el monto y
-// badge "Gasto"/"Ingreso". Cada fila abre su editor correspondiente.
+// Gastos e ingresos del mes en una sola lista. Indicador visual de tipo por fila
+// (ícono/color, signo +/−, badge "Gasto"/"Ingreso"), "Saldo: $X" acumulado en la
+// esquina (ver saldoPorMovimientoDelMes) y, si el orden es por fecha, agrupado por día
+// con cabecera de fecha, de más reciente a más antiguo. Cada fila abre su editor.
 function renderHistorialTodo(box){
+  const detalleOn = historialDetalleOn();
+  const expCls = detalleOn ? ' expanded' : '';
+  const [campo, dir] = hSortMode.split('-');
+  const saldoMap = saldoPorMovimientoDelMes(currentDate);
+
   const gastos = getExpensesForMonth(currentDate).map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
     name:e.description||'', category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
@@ -2671,33 +2745,59 @@ function renderHistorialTodo(box){
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
     name:i.source||'', source:i.source, description:i.description||'', tipo:i.tipo
   }));
-  const items = applySort([...gastos, ...ingresos], 'name', 'amount', 'date');
+
+  let items, agrupaPorDia;
+  if(campo === 'fecha'){
+    // Mismo orden canónico (asc) que usa el saldo acumulado; para "recientes primero"
+    // se invierte tal cual, así el "Saldo" de cada fila calza leyendo de arriba abajo.
+    const asc = [...ingresos, ...gastos].sort((a,b)=>
+      a.date.localeCompare(b.date)
+      || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
+    );
+    items = dir === 'asc' ? asc : asc.reverse();
+    agrupaPorDia = true;
+  } else {
+    items = applySort([...gastos, ...ingresos], 'name', 'amount', 'date');
+    agrupaPorDia = false;
+  }
   if(items.length===0){ box.innerHTML = emptyMsg('Sin movimientos registrados este mes.'); return; }
-  box.innerHTML = items.map(it=>{
+
+  const rowHtml = (it)=>{
+    const saldo = saldoMap.get(saldoRowKey(it.kind, it.id, it.date));
+    const saldoTxt = (saldo === undefined) ? ''
+      : `<span class="li-saldo${saldo < 0 ? ' neg' : ''}">Saldo: ${money(saldo)}</span>`;
     if(it.kind==='ingreso'){
       return `
-      <div class="list-item income" data-editincome="${it.id}">
+      <div class="list-item income${expCls}" data-editincome="${it.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.source}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
           <p class="li-sub">${fmtDate(it.date)}${it.description ? ' · '+it.description : ''}</p>
         </div>
-        <span class="li-amount income">+${money(it.amount)}</span>
+        <div class="li-amount-wrap">
+          <span class="li-amount income">+${money(it.amount)}</span>
+          ${saldoTxt}
+        </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
     }
     const badge = it.debtId ? '<span class="li-badge">Cuota</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
     return `
-      <div class="list-item" data-editexpense="${it.id}">
+      <div class="list-item${expCls}" data-editexpense="${it.id}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
           <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}</p>
         </div>
-        <span class="li-amount">−${money(it.amount)}</span>
+        <div class="li-amount-wrap">
+          <span class="li-amount">−${money(it.amount)}</span>
+          ${saldoTxt}
+        </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
-  }).join('');
+  };
+
+  box.innerHTML = agrupaPorDia ? groupByDayHtml(items, rowHtml) : items.map(rowHtml).join('');
   box.querySelectorAll('[data-editexpense]').forEach(el=>{
     el.addEventListener('click', ()=> openGastoForm(el.dataset.editexpense));
   });
@@ -2717,6 +2817,28 @@ function wireRowExpand(box){
 }
 function emptyMsg(txt){ return `<div class="empty-state">${icon('frown')}<p>${txt}</p></div>`; }
 function fmtDate(iso){ const [y,m,d]=iso.split('-'); return `${d}/${m}/${y.slice(2)}`; }
+
+/* ==================== HISTORIAL: agrupado por día ==================== */
+// Separador de fecha estilo app bancaria, ej. "Lunes 31 de agosto".
+const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+function fmtDayHeader(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return `${DIAS_SEMANA[dt.getDay()]} ${d} de ${MESES[m-1].toLowerCase()}`;
+}
+// items YA ordenados por fecha (en la dirección deseada). Inserta una cabecera de día
+// cada vez que cambia la fecha y arma cada fila con rowHtml(item).
+function groupByDayHtml(items, rowHtml){
+  let html = '', lastDay = null;
+  for(const it of items){
+    if(it.date !== lastDay){
+      lastDay = it.date;
+      html += `<div class="hist-day-sep">${fmtDayHeader(it.date)}</div>`;
+    }
+    html += rowHtml(it);
+  }
+  return html;
+}
 
 /* ==================== RENDER: CUOTAS ==================== */
 document.querySelectorAll('[data-ctab]').forEach(b=>{
@@ -3086,6 +3208,29 @@ function syncChartToggle(screen){
   });
 });
 
+/* ==================== BOTÓN "DETALLE" (Historial) ==================== */
+// Expande/colapsa TODAS las filas visibles de la lista de golpe. El estado se guarda
+// en state.config.historialDetalle (por defecto activado) para que persista entre
+// sesiones, igual que la paleta o el tamaño de letra.
+function syncHistDetalleBtn(){
+  const btn = document.getElementById('tgHistorialDetalle');
+  if(!btn) return;
+  const on = historialDetalleOn();
+  btn.classList.toggle('toggle-on', on);
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.innerHTML = `${icon('chevron-down')}<span>Detalle</span>`;
+}
+(function initHistDetalleBtn(){
+  const btn = document.getElementById('tgHistorialDetalle');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    if(!state.config) state.config = {};
+    state.config.historialDetalle = !historialDetalleOn();
+    saveState();
+    renderHistorial();
+  });
+})();
+
 // Torta (sectores) + leyenda. data: [{label, value}]. opts: {fmt, empty, note}
 function renderPieChart(container, data, opts){
   opts = opts || {};
@@ -3258,6 +3403,7 @@ aplicarFontScale((state.config && state.config.fontScale) || '1');
 /* ==================== RENDER GENERAL ==================== */
 function renderAll(){
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
+  resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
   if(currentScreen==='resumen') renderResumen();
   if(currentScreen==='historial') renderHistorial();
