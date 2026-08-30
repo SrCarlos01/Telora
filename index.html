@@ -566,6 +566,50 @@ button{font-family:inherit;}
 }
 .export-opt input{accent-color:var(--burgundy); width:18px; height:18px; font-size:16px;}  /* 16px: sin efecto visual en el radio, evita el auto-zoom de iOS */
 .export-opt span{font-size:15px; color:var(--cream);}
+
+/* ---------- ACCESIBILIDAD: reducir movimiento (prefers-reduced-motion) ---------- */
+/* Respeta la preferencia del sistema: neutraliza animaciones y transiciones (swipes,
+   expansión de tarjetas, pulsos, keyframes) dejándolas casi instantáneas. NO se quita
+   ninguna funcionalidad ni se rompe el layout: cada elemento llega igual a su estado
+   final (max-height / opacity / transform de destino), solo sin el recorrido visual. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:0.001ms !important;
+    animation-delay:0s !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.001ms !important;
+    transition-delay:0s !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+/* ---------- ACCESIBILIDAD: modo alto contraste ---------- */
+/* Modificador que se APILA sobre la paleta activa (no la reemplaza). El endurecimiento
+   de los colores se hace desde JS (stackAltoContraste) reescribiendo las custom
+   properties; aquí van solo los ajustes estructurales: bordes más marcados, sin
+   itálicas tenues y sin textos apagados por opacidad/transparencia. */
+:root.hc .cat-row, :root.hc .list-item, :root.hc .debt-card, :root.hc .segmented,
+:root.hc .chip, :root.hc .toggle-opt, :root.hc .field input, :root.hc .field select,
+:root.hc .field textarea, :root.hc .palette-opt, :root.hc .export-opt,
+:root.hc .add-inline input, :root.hc .config-item .cfg-icon-btn, :root.hc .btn-ghost,
+:root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button{ border-width:2px; }
+:root.hc .li-muted{ font-style:normal; color:var(--cream); }
+:root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note, :root.hc .li-cuota-note,
+:root.hc .ahorrado-nota, :root.hc .int-disclaimer, :root.hc .li-sub, :root.hc .debt-foot,
+:root.hc .debt-cat, :root.hc .li-badge, :root.hc .empty-state, :root.hc .check-row small,
+:root.hc .field label, :root.hc .section-title, :root.hc .li-title,
+:root.hc .aportar-disp{ color:var(--cream); }
+:root.hc .li-saldo.neg{ color:var(--danger); }
+:root.hc .progress-track{ border:1px solid var(--border); }
+:root.hc .progress-fill{ background:var(--gold); }
+:root.hc .balance-card{ background:var(--burgundy-dim); border:2px solid var(--border); }
+:root.hc .balance-card .label, :root.hc .balance-card .amount, :root.hc .balance-item .k,
+:root.hc .balance-item .v, :root.hc .balance-carry .bc-k, :root.hc .balance-carry .bc-v{ color:#fff; }
+:root.hc .balance-card .amount.neg, :root.hc .balance-carry .bc-v.neg{ color:#FFC9C0; }
+:root.hc .balance-carry{ border-bottom-color:rgba(255,255,255,0.5); }
+:root.hc .aportar-warn{ background:transparent; border-width:2px; color:var(--gold); }
+:root.hc .goal-card.paused{ background:var(--surface-2); }
+:root.hc .premium-badge{ background:var(--gold); color:#000; }
 </style>
 </head>
 <body>
@@ -612,10 +656,10 @@ button{font-family:inherit;}
 
   <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
-    <div class="segmented">
-      <button class="active" data-htab="gastos">Gastos</button>
-      <button data-htab="ingresos">Ingresos</button>
-      <button data-htab="todo">Todo</button>
+    <div class="segmented" role="tablist" aria-label="Filtrar historial">
+      <button class="active" data-htab="gastos" role="tab" aria-selected="true">Gastos</button>
+      <button data-htab="ingresos" role="tab" aria-selected="false">Ingresos</button>
+      <button data-htab="todo" role="tab" aria-selected="false">Todo</button>
     </div>
     <div class="hist-controls">
       <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
@@ -637,9 +681,9 @@ button{font-family:inherit;}
 
   <!-- CUOTAS -->
   <div class="screen" id="screen-cuotas">
-    <div class="segmented">
-      <button class="active" data-ctab="activas">Activas</button>
-      <button data-ctab="pagadas">Pagadas</button>
+    <div class="segmented" role="tablist" aria-label="Filtrar cuotas">
+      <button class="active" data-ctab="activas" role="tab" aria-selected="true">Activas</button>
+      <button data-ctab="pagadas" role="tab" aria-selected="false">Pagadas</button>
     </div>
     <div id="cList"></div>
   </div>
@@ -654,9 +698,9 @@ button{font-family:inherit;}
 
   <div class="bottom-zone">
     <div class="navbar">
-      <button class="nav-btn active" data-screen="resumen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg><span>Resumen</span></button>
+      <button class="nav-btn active" data-screen="resumen" aria-current="page"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg><span>Resumen</span></button>
       <button class="nav-btn" data-screen="historial"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>Historial</span></button>
-      <button class="nav-add" id="btnAdd" aria-label="Agregar"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button class="nav-add" id="btnAdd" aria-label="Agregar gasto o ingreso" aria-haspopup="dialog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
       <button class="nav-btn" data-screen="cuotas"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><span>Cuotas</span></button>
       <button class="nav-btn" data-screen="metas"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Metas</span></button>
     </div>
@@ -922,6 +966,14 @@ button{font-family:inherit;}
       <div class="toggle-opt" data-fontscale="1.3">Muy grande</div>
     </div>
 
+    <p class="section-title" style="margin-top:20px;">Accesibilidad</p>
+    <label class="check-row" style="margin-bottom:4px;">
+      <input type="checkbox" id="cfgAltoContraste">
+      <span>Alto contraste
+        <small>Endurece el contraste de textos y bordes sobre la paleta que tengas activa. Útil con luz intensa o baja visión.</small>
+      </span>
+    </label>
+
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
     <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 12px;">
       Descarga un archivo con todos tus datos (gastos, ingresos, cuotas y categorías). Sirve para no perder nada si cambias de link o de celular.
@@ -1110,6 +1162,19 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 const money = n => "$" + Math.round(n).toLocaleString('es-CL');
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ==================== VIBRACIÓN HÁPTICA (confirmaciones) ==================== */
+// Feedback táctil corto en acciones clave. Se verifica soporte antes de llamar:
+// en navegadores/dispositivos sin Vibration API (iOS Safari, escritorio) simplemente
+// no hace nada — nunca lanza error.
+const HAPTIC_OK = 20;                 // confirmación normal (guardar, aportar, activar)
+const HAPTIC_DELETE = [20, 30, 20];   // patrón de eliminación (distinto y algo más largo)
+const HAPTIC_GOAL = [15, 40, 15, 40, 30];  // meta completada (celebración breve)
+function haptic(pattern){
+  try{
+    if(navigator && typeof navigator.vibrate === 'function') navigator.vibrate(pattern);
+  }catch(_){ /* sin soporte: silencioso */ }
+}
 
 /* ==================== FORMATO DE MILES EN INPUTS DE MONTO ==================== */
 // Los inputs de dinero son type="text": se muestran con separador de miles
@@ -1522,7 +1587,11 @@ const SCREEN_ORDER = ['resumen','historial','cuotas','metas'];
 function switchScreen(id){
   if(!SCREEN_ORDER.includes(id)) return;
   currentScreen = id;
-  document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.screen===id));
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    const on = b.dataset.screen===id;
+    b.classList.toggle('active', on);
+    if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.screen').forEach(s=> s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
   renderAll();
@@ -1647,8 +1716,34 @@ document.getElementById('nextMonth').onclick = nextMonth;
 })();
 
 /* ==================== SHEETS (modales) ==================== */
-function openSheet(id){ document.getElementById(id).classList.add('open'); }
+function openSheet(id){
+  document.getElementById(id).classList.add('open');
+  if(window.__syncTogglePressed) window.__syncTogglePressed();   // aria-pressed de los toggles del sheet
+}
 function closeSheet(id){ document.getElementById(id).classList.remove('open'); }
+
+/* ==================== A11Y: toggles y tarjetas de opción ==================== */
+// Los .toggle-opt y .choice-card son <div>: se les da semántica de botón, foco por
+// teclado y activación con Enter/Espacio. aria-pressed sigue a la clase .active (los
+// grupos ya la conmutan por su cuenta).
+(function initOptionA11y(){
+  document.querySelectorAll('.toggle-opt, .choice-card').forEach(el=>{
+    el.setAttribute('role', 'button');
+    if(!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    el.addEventListener('keydown', ev=>{
+      if(ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar'){ ev.preventDefault(); el.click(); }
+    });
+  });
+  function syncPressed(){
+    document.querySelectorAll('.toggle-opt').forEach(el=>
+      el.setAttribute('aria-pressed', el.classList.contains('active') ? 'true' : 'false'));
+  }
+  syncPressed();
+  document.addEventListener('click', e=>{
+    if(e.target.closest && e.target.closest('.toggle-opt')) requestAnimationFrame(syncPressed);
+  });
+  window.__syncTogglePressed = syncPressed;
+})();
 document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=> b.closest('.sheet-overlay').classList.remove('open'));
 });
@@ -1854,6 +1949,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     }
     state.expenses.push(expense);
   }
+  haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetGasto'); renderAll();
 };
 
@@ -1878,10 +1974,12 @@ document.getElementById('btnDeleteGasto').onclick = ()=>{
     openSheet('sheetConfirmDebt');
   } else {
     state.expenses = state.expenses.filter(x=>x.id!==editingExpenseId);
+    haptic(HAPTIC_DELETE);
     saveState(); closeSheet('sheetGasto'); renderAll();
   }
 };
 document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
+  haptic(HAPTIC_DELETE);
   if(pendingDeleteType === 'fijoIngreso'){
     // Ingreso fijo recurrente: corta la recurrencia desde el mes visto en adelante;
     // los meses anteriores quedan intactos (mismo criterio que los gastos fijos).
@@ -1951,6 +2049,7 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   } else {
     state.incomes.push({id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion, tipo:itipo});
   }
+  haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetIngreso'); renderAll();
 };
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
@@ -1966,6 +2065,7 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
     openSheet('sheetConfirmDebt');
   } else {
     state.incomes = state.incomes.filter(x=>x.id!==editingIncomeId);
+    haptic(HAPTIC_DELETE);
     saveState(); closeSheet('sheetIngreso'); renderAll();
   }
 };
@@ -2105,6 +2205,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     g.montoObjetivo = indefinida ? 0 : montoObjetivo;
     g.fechaLimite = indefinida ? "" : (fechaLimite || "");
     g.aporteAutomatico = construirAA(g.aporteAutomatico);
+    haptic(HAPTIC_OK);
     saveState(); closeSheet('sheetMeta'); renderAll();
     return;
   }
@@ -2123,6 +2224,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     aportes: [],
     aporteAutomatico: construirAA(null)
   });
+  haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetMeta'); renderAll();
 };
 
@@ -2140,6 +2242,7 @@ document.getElementById('btnDeleteMeta').onclick = ()=>{
   const tieneHistorial = (g.aportes && g.aportes.length > 0) || (g.aporteAutomatico && g.aporteAutomatico.activo);
   if(!tieneHistorial){
     state.goals = state.goals.filter(x=>x.id!==g.id);
+    haptic(HAPTIC_DELETE);
     saveState(); closeSheet('sheetMeta'); renderAll();
     return;
   }
@@ -2152,7 +2255,7 @@ document.getElementById('btnDeleteMeta').onclick = ()=>{
 };
 document.getElementById('btnConfirmDeleteGoal').onclick = ()=>{
   const g = state.goals.find(x=>x.id===pendingDeleteGoalId);
-  if(g){ g.goalEndMonthKey = monthKey(currentDate); saveState(); }
+  if(g){ g.goalEndMonthKey = monthKey(currentDate); haptic(HAPTIC_DELETE); saveState(); }
   pendingDeleteGoalId = null;
   closeSheet('sheetConfirmGoal'); renderAll();
 };
@@ -2330,6 +2433,7 @@ function renderMetas(){
       if(!a) return;
       if(!confirm(`¿Eliminar el aporte de ${money(a.monto)} del ${fmtDate(a.fecha)}? Se recalculará lo ahorrado y el disponible de ese mes.`)) return;
       g.aportes = g.aportes.filter(x=> x.id!==aid);
+      haptic(HAPTIC_DELETE);
       saveState(); renderAll();
     });
   });
@@ -2405,7 +2509,12 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
     state.config.avisosAporteExceso = false;   // preferencia: no volver a advertir excesos
   }
   if(!Array.isArray(g.aportes)) g.aportes = [];
+  // ¿Este aporte completa la meta por primera vez? -> vibración de celebración.
+  const objetivo = g.montoObjetivo || 0;
+  const ahorradoAntes = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
+  if(!g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo) haptic(HAPTIC_GOAL);
+  else haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetAportar'); renderAll();
 };
 
@@ -2465,6 +2574,7 @@ document.getElementById('btnSaveAutoMeta').onclick = ()=>{
     // (las del mes siguiente en adelante). Si ya estaba activo, se conserva.
     fechaActivacion: prev.fechaActivacion || new Date().toISOString().slice(0,10)
   };
+  haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetAutoMeta'); renderAll();
 };
 document.getElementById('btnDisableAutoMeta').onclick = ()=>{
@@ -2477,6 +2587,7 @@ document.getElementById('btnDisableAutoMeta').onclick = ()=>{
     monto: prev.monto || 0, valor: prev.valor || 0,
     diaDelMes: prev.diaDelMes || 1, pausado:false, razonPausa:null
   };
+  haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetAutoMeta'); renderAll();
 };
 
@@ -2711,7 +2822,11 @@ function applySort(items, nameKey, amountKey, dateKey){
 document.querySelectorAll('[data-htab]').forEach(b=>{
   b.addEventListener('click', ()=>{
     hTab = b.dataset.htab;
-    document.querySelectorAll('[data-htab]').forEach(x=>x.classList.toggle('active', x===b));
+    document.querySelectorAll('[data-htab]').forEach(x=>{
+      const on = x===b;
+      x.classList.toggle('active', on);
+      x.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     renderHistorial();
   });
 });
@@ -2898,9 +3013,12 @@ function renderHistorialTodo(box){
 // Chevron "aparte" que expande/colapsa el sub-detalle de una fila, sin disparar el tap de edición.
 function wireRowExpand(box){
   box.querySelectorAll('.li-expand').forEach(btn=>{
+    const item = btn.closest('.list-item');
+    btn.setAttribute('aria-expanded', item && item.classList.contains('expanded') ? 'true' : 'false');
     btn.addEventListener('click', (ev)=>{
       ev.stopPropagation();
-      btn.closest('.list-item').classList.toggle('expanded');
+      const on = btn.closest('.list-item').classList.toggle('expanded');
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
     });
   });
 }
@@ -2933,7 +3051,11 @@ function groupByDayHtml(items, rowHtml){
 document.querySelectorAll('[data-ctab]').forEach(b=>{
   b.addEventListener('click', ()=>{
     cTab = b.dataset.ctab;
-    document.querySelectorAll('[data-ctab]').forEach(x=>x.classList.toggle('active', x===b));
+    document.querySelectorAll('[data-ctab]').forEach(x=>{
+      const on = x===b;
+      x.classList.toggle('active', on);
+      x.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     renderCuotas();
   });
 });
@@ -3005,7 +3127,12 @@ function renderCuotas(){
     card.addEventListener('click', ()=> card.classList.toggle('expanded'));
   });
   box.querySelectorAll('.row-expand').forEach(btn=>{
-    btn.addEventListener('click', (ev)=>{ ev.stopPropagation(); btn.closest('.debt-card').classList.toggle('expanded'); });
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      const on = btn.closest('.debt-card').classList.toggle('expanded');
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
   });
   box.querySelectorAll('[data-markpaid]').forEach(el=>{
     el.addEventListener('click', (ev)=>{ ev.stopPropagation(); toggleManualPaid(el.dataset.markpaid, refDate); });
@@ -3022,6 +3149,7 @@ function renderConfig(){
   renderConfigList('fuentes','cfgFuentes');
   renderPaletteRow();
   renderFontScaleRow();
+  renderAltoContrasteRow();
 }
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -3042,6 +3170,7 @@ function renderConfigList(key, boxId){
       state.config[k].splice(parseInt(idx),1);
       // Al eliminar una categoría, limpia también su ícono personalizado.
       if(k === 'categorias' && state.config.categoriaIconos) delete state.config.categoriaIconos[removed];
+      haptic(HAPTIC_DELETE);
       saveState(); renderConfig();
     });
   });
@@ -3467,7 +3596,52 @@ function aplicarPaleta(key){
   const p = PALETAS[key] || PALETAS.cafe;
   Object.entries(p.vars).forEach(([k,v])=> document.documentElement.style.setProperty(k, v));
   state.config.paleta = PALETAS[key] ? key : 'cafe';
+  stackAltoContraste();   // el modo alto contraste se re-apila sobre la paleta recién aplicada
 }
+
+/* ==================== ALTO CONTRASTE (accesibilidad) ==================== */
+// Modificador que se APILA sobre CUALQUIER paleta activa (no la reemplaza). Guarda la
+// elección en state.config.altoContraste y, al activarse, reescribe las custom
+// properties de texto/borde con valores casi puros (WCAG AAA donde se puede) derivados
+// de la luminancia del fondo de la paleta. Al desactivarse, aplicarPaleta() ya dejó las
+// variables base intactas, así que solo hay que quitar la clase.
+function luminancia(hex){
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex||'').trim());
+  if(!m) return 0;
+  const c = [1,2,3].map(i=> parseInt(m[i],16)/255)
+    .map(v=> v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4));
+  return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+}
+function stackAltoContraste(){
+  const root = document.documentElement;
+  const active = !!(state.config && state.config.altoContraste);
+  root.classList.toggle('hc', active);
+  if(!active) return;
+  const pal = PALETAS[(state.config && state.config.paleta)] || PALETAS.cafe;
+  const claro = luminancia(pal.vars['--bg']) > 0.45;   // fondo claro -> texto casi negro
+  const set = (k,v)=> root.style.setProperty(k, v);
+  if(claro){
+    set('--cream','#000000');  set('--cream-dim','#141414');
+    set('--gold','#3A2600');   set('--gold-dim','#1C1C1C');
+    set('--border','#000000'); set('--success','#064E24'); set('--danger','#7A0F00');
+  } else {                                              // fondo oscuro -> texto casi blanco
+    set('--cream','#FFFFFF');  set('--cream-dim','#F1F1F1');
+    set('--gold','#FFDF9E');   set('--gold-dim','#E9E4D6');
+    set('--border','#FFFFFF'); set('--success','#9CEBB1'); set('--danger','#FFB3A5');
+  }
+}
+function aplicarAltoContraste(on){
+  if(state.config) state.config.altoContraste = !!on;
+  aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // reconstruye toda la pila de variables
+}
+function renderAltoContrasteRow(){
+  const el = document.getElementById('cfgAltoContraste');
+  if(el) el.checked = !!(state.config && state.config.altoContraste);
+}
+document.getElementById('cfgAltoContraste').addEventListener('change', e=>{
+  aplicarAltoContraste(e.target.checked);
+  saveState(); renderAll();
+});
 function renderPaletteRow(){
   const box = document.getElementById('paletteRow');
   if(!box) return;
