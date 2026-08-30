@@ -366,7 +366,7 @@ button{font-family:inherit;}
 .sheet{
   background:var(--surface); width:100%; max-width:480px; margin:0 auto;
   border-radius:22px 22px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom));
-  max-height:88vh; overflow-y:auto; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+  max-height:88vh; overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
   touch-action:pan-y;
 }
 .sheet-overlay.open .sheet{transform:translateY(0);}
@@ -445,13 +445,18 @@ button{font-family:inherit;}
 .chip:active{transform:scale(0.96); background:var(--surface-3); border-color:var(--gold-dim);}
 .chip small{color:var(--gold-dim); font-size:11.5px;}
 
-/* ---------- CARRUSEL DE MONTOS RÁPIDOS (deslizable horizontal, junto al campo Monto) ---------- */
+/* ---------- CARRUSEL DE MONTOS RÁPIDOS (deslizable horizontal, contenido en el ancho del formulario) ---------- */
 .chip-row.chips-monto{
-  flex-wrap:nowrap; margin-top:2px; padding-bottom:2px;
-  overflow-x:auto; -webkit-overflow-scrolling:touch;
+  display:flex; flex-wrap:nowrap; gap:8px; margin-top:2px; padding-bottom:2px;
+  width:100%; max-width:100%; min-width:0;              /* nunca más ancho que el campo */
+  overflow-x:auto; overscroll-behavior-x:contain;       /* el scroll vive puertas adentro */
   scroll-snap-type:x proximity; scrollbar-width:none;
+  /* el borde derecho se desvanece: deja ver que el carrusel termina DENTRO del formulario */
+  -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 20px), transparent);
+          mask-image:linear-gradient(to right, #000 calc(100% - 20px), transparent);
 }
 .chip-row.chips-monto::-webkit-scrollbar{display:none;}
+.chip-row.chips-monto::after{content:""; flex:0 0 12px;}   /* respiro final: el último chip no queda bajo el degradado */
 .chip-row.chips-monto .chip{
   flex:0 0 auto; scroll-snap-align:start;
   border-color:var(--gold-dim); color:var(--gold); font-weight:600;
