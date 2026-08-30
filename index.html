@@ -298,6 +298,8 @@ button{font-family:inherit;}
 .li-amount-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;}
 .li-saldo{font-size:10px; color:var(--cream-dim); white-space:nowrap; letter-spacing:.01em;}
 .li-saldo.neg{color:var(--danger);}
+/* nota secundaria en filas de compra a crédito: aclara que al saldo solo le pesa la cuota */
+.li-cuota-note{font-size:10px; color:var(--gold-dim); text-align:right; max-width:160px; line-height:1.3;}
 
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
@@ -1307,17 +1309,27 @@ function disponibleDelMes(refDate){
 // en el orden en que los devuelve getIncomesForMonth/getExpensesForMonth. El resultado
 // se memoiza por mes visible (una sola pasada), no se recalcula por fila; la caché se
 // limpia en cada renderAll() junto con la de la cuenta corriente.
-// Nota: participa CADA fila de la lista (incl. la compra a crédito, que se muestra por
-// su monto total). Por eso el saldo de la última fila calza con el Disponible del
-// Resumen solo cuando el mes no tiene cuotas ni aportes a metas (que el Resumen
-// descuenta aparte y no son filas de esta lista).
+// Nota: una compra a crédito se muestra por su monto TOTAL en el número grande de la
+// fila (referencia de la compra), pero al saldo acumulado solo le impacta la CUOTA de
+// ese mes — el mismo número que descuenta el Disponible del Resumen (cuotaInfoForMonth).
+// En el mes de la compra las cuotas aún no arrancan (parten al mes siguiente): impacto 0.
 let SALDO_ROW_CACHE = { mk:null, map:null };
 function resetSaldoRowCache(){ SALDO_ROW_CACHE = { mk:null, map:null }; }
 function saldoRowKey(kind, id, date){ return (kind === 'ingreso' ? 'i:' : 'g:') + id + ':' + date; }
+// Impacto de un gasto en el saldo acumulado del mes: su monto, salvo que sea una compra
+// a crédito (tiene deuda asociada), en cuyo caso solo pesa la cuota de ESE mes.
+function impactoGastoEnSaldo(e, refDate){
+  if(e && e.debtId){
+    const debt = state.debts.find(d=> d.id === e.debtId);
+    const info = debt ? cuotaInfoForMonth(debt, refDate) : null;
+    return info ? info.monto : 0;
+  }
+  return e.amount;
+}
 // Movimientos del mes (gastos + ingresos) en orden cronológico ascendente canónico.
 function movimientosCronoAsc(refDate){
   const ingresos = getIncomesForMonth(refDate).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
-  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-e.amount, _ord:idx }));
+  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e, refDate), _ord:idx }));
   return [...ingresos, ...gastos].sort((a,b)=>
     a.date.localeCompare(b.date)
     || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
@@ -2782,6 +2794,19 @@ function renderHistorialTodo(box){
       </div>`;
     }
     const badge = it.debtId ? '<span class="li-badge">Cuota</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+    // Compra a crédito: el número grande es la compra total, pero al saldo del mes solo
+    // le pesa la cuota de ese mes (0 en el mes de la compra: las cuotas parten al mes
+    // siguiente). Se aclara con una nota chica bajo el "Saldo".
+    let cuotaNote = '';
+    if(it.debtId){
+      const debt = state.debts.find(d=> d.id === it.debtId);
+      if(debt){
+        const info = cuotaInfoForMonth(debt, currentDate);
+        cuotaNote = info
+          ? `<span class="li-cuota-note">Cuota este mes: ${money(info.monto)}</span>`
+          : `<span class="li-cuota-note">Cuota este mes: ${money(0)} (empieza el próximo mes)</span>`;
+      }
+    }
     return `
       <div class="list-item${expCls}" data-editexpense="${it.id}">
         <div class="li-icon">${catIcon(it.category)}</div>
@@ -2792,6 +2817,7 @@ function renderHistorialTodo(box){
         <div class="li-amount-wrap">
           <span class="li-amount">−${money(it.amount)}</span>
           ${saldoTxt}
+          ${cuotaNote}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
