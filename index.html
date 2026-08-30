@@ -165,7 +165,7 @@ button{font-family:inherit;}
 }
 .list-item.income .li-icon{color:var(--success);}
 .li-body{flex:1; min-width:0;}
-.li-title{font-size:15px; color:var(--cream); margin:0 0 2px; display:flex; align-items:center; gap:6px; min-width:0;}
+.li-title{font-size:15px; color:var(--cream); margin:0 0 2px; display:flex; align-items:center; column-gap:6px; row-gap:4px; min-width:0;}
 .li-title .li-title-text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
 .li-sub{font-size:13px; color:var(--cream-dim); margin:0;}
 .li-muted{color:var(--cream-dim); font-style:italic;}
@@ -274,8 +274,11 @@ button{font-family:inherit;}
 /* colapsable SOLO en la lista de Historial (no en el detalle de categoría) */
 #hList .list-item .li-sub{max-height:0; overflow:hidden; opacity:0; transition:max-height .22s ease, opacity .15s ease;}
 #hList .list-item.expanded .li-sub{max-height:220px; opacity:1; margin-top:3px; white-space:normal; overflow-wrap:anywhere;}
-/* al expandir, mostrar la descripción completa (sin ellipsis) */
-#hList .list-item.expanded .li-title-text{white-space:normal; overflow:visible;}
+/* al expandir, mostrar la descripción completa (sin ellipsis). El texto toma su propia
+   línea completa y los badges bajan debajo, así una descripción larga nunca se derrama
+   por encima de GASTO/CUOTA/FIJO (overflow-wrap parte también una palabra kilométrica). */
+#hList .list-item.expanded .li-title{flex-wrap:wrap;}
+#hList .list-item.expanded .li-title-text{white-space:normal; overflow:visible; overflow-wrap:anywhere; flex:1 1 auto;}
 .li-expand{
   background:none; border:none; color:var(--gold-dim); padding:4px; cursor:pointer; flex-shrink:0; line-height:0;
 }
@@ -295,11 +298,15 @@ button{font-family:inherit;}
 .hist-day-sep:first-child{margin-top:2px;}
 
 /* ---------- HISTORIAL "Todo": saldo acumulado por fila ---------- */
-.li-amount-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;}
+/* columna derecha (monto + saldo). Ancho acotado para no ahogar el texto de la izquierda. */
+.li-amount-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; max-width:42%;}
 .li-saldo{font-size:10px; color:var(--cream-dim); white-space:nowrap; letter-spacing:.01em;}
 .li-saldo.neg{color:var(--danger);}
-/* nota secundaria en filas de compra a crédito: aclara que al saldo solo le pesa la cuota */
-.li-cuota-note{font-size:10px; color:var(--gold-dim); text-align:right; max-width:160px; line-height:1.3;}
+/* nota secundaria en filas de compra a crédito (dentro de .li-body, bajo el detalle):
+   aclara que al saldo solo le pesa la cuota, no el monto total de la compra. Acompaña al
+   detalle: visible solo cuando la fila está expandida (igual que la fecha/categoría). */
+.li-cuota-note{font-size:10px; color:var(--gold-dim); line-height:1.3; margin:3px 0 0;}
+#hList .list-item:not(.expanded) .li-cuota-note{display:none;}
 
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
@@ -1309,27 +1316,27 @@ function disponibleDelMes(refDate){
 // en el orden en que los devuelve getIncomesForMonth/getExpensesForMonth. El resultado
 // se memoiza por mes visible (una sola pasada), no se recalcula por fila; la caché se
 // limpia en cada renderAll() junto con la de la cuenta corriente.
-// Nota: una compra a crédito se muestra por su monto TOTAL en el número grande de la
-// fila (referencia de la compra), pero al saldo acumulado solo le impacta la CUOTA de
-// ese mes — el mismo número que descuenta el Disponible del Resumen (cuotaInfoForMonth).
-// En el mes de la compra las cuotas aún no arrancan (parten al mes siguiente): impacto 0.
+// El Disponible del Resumen resta, además de los gastos/ingresos del mes: (a) las cuotas
+// activas de TODAS las deudas y (b) los aportes a metas (manuales + automáticos). Nada de
+// eso es una fila de esta lista (una compra a crédito solo tiene fila en su mes de compra,
+// y ahí su cuota vale 0). Para que el saldo de la ÚLTIMA fila cronológica cierre igual que
+// disponibleDelMes(), esas dos salidas se descuentan por adelantado del saldo de apertura
+// (con los mismos números que flujoBrutoDelMes / totalAportesMetasDelMes). Efecto: los
+// saldos intermedios ya vienen con las cuotas/metas del mes "apartadas".
 let SALDO_ROW_CACHE = { mk:null, map:null };
 function resetSaldoRowCache(){ SALDO_ROW_CACHE = { mk:null, map:null }; }
 function saldoRowKey(kind, id, date){ return (kind === 'ingreso' ? 'i:' : 'g:') + id + ':' + date; }
-// Impacto de un gasto en el saldo acumulado del mes: su monto, salvo que sea una compra
-// a crédito (tiene deuda asociada), en cuyo caso solo pesa la cuota de ESE mes.
-function impactoGastoEnSaldo(e, refDate){
-  if(e && e.debtId){
-    const debt = state.debts.find(d=> d.id === e.debtId);
-    const info = debt ? cuotaInfoForMonth(debt, refDate) : null;
-    return info ? info.monto : 0;
-  }
-  return e.amount;
+// Impacto de un gasto en el saldo acumulado del mes = su monto. Una compra a crédito no
+// mueve el saldo en el momento de la compra: su costo se reparte en cuotas, y TODAS las
+// cuotas activas del mes ya se descuentan al arrancar saldoPorMovimientoDelMes(); su fila
+// aporta 0 para no descontarlo dos veces.
+function impactoGastoEnSaldo(e){
+  return (e && e.debtId) ? 0 : e.amount;
 }
 // Movimientos del mes (gastos + ingresos) en orden cronológico ascendente canónico.
 function movimientosCronoAsc(refDate){
   const ingresos = getIncomesForMonth(refDate).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
-  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e, refDate), _ord:idx }));
+  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e), _ord:idx }));
   return [...ingresos, ...gastos].sort((a,b)=>
     a.date.localeCompare(b.date)
     || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
@@ -1340,7 +1347,11 @@ function saldoPorMovimientoDelMes(refDate){
   const mk = monthKey(refDate);
   if(SALDO_ROW_CACHE.mk === mk && SALDO_ROW_CACHE.map) return SALDO_ROW_CACHE.map;
   const map = new Map();
-  let run = saldoAcumuladoHasta(refDate);   // saldo de meses anteriores (arrastre)
+  // saldo de meses anteriores (arrastre) − cuotas activas del mes − aportes a metas del
+  // mes: las salidas del mes que el Resumen descuenta pero que no son filas de esta lista.
+  let run = saldoAcumuladoHasta(refDate);
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) run -= info.monto; });
+  run -= totalAportesMetasDelMes(refDate);
   movimientosCronoAsc(refDate).forEach(m=>{
     run += m.delta;
     map.set(saldoRowKey(m.kind, m.id, m.date), run);
@@ -2796,15 +2807,15 @@ function renderHistorialTodo(box){
     const badge = it.debtId ? '<span class="li-badge">Cuota</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
     // Compra a crédito: el número grande es la compra total, pero al saldo del mes solo
     // le pesa la cuota de ese mes (0 en el mes de la compra: las cuotas parten al mes
-    // siguiente). Se aclara con una nota chica bajo el "Saldo".
+    // siguiente). Se aclara con una nota chica bajo el detalle de la fila.
     let cuotaNote = '';
     if(it.debtId){
       const debt = state.debts.find(d=> d.id === it.debtId);
       if(debt){
         const info = cuotaInfoForMonth(debt, currentDate);
         cuotaNote = info
-          ? `<span class="li-cuota-note">Cuota este mes: ${money(info.monto)}</span>`
-          : `<span class="li-cuota-note">Cuota este mes: ${money(0)} (empieza el próximo mes)</span>`;
+          ? `<p class="li-cuota-note">Cuota este mes: ${money(info.monto)}</p>`
+          : `<p class="li-cuota-note">Cuota este mes: ${money(0)} (empieza el próximo mes)</p>`;
       }
     }
     return `
@@ -2813,11 +2824,11 @@ function renderHistorialTodo(box){
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
           <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}</p>
+          ${cuotaNote}
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount">−${money(it.amount)}</span>
           ${saldoTxt}
-          ${cuotaNote}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
