@@ -290,6 +290,60 @@ button{font-family:inherit;}
 .hist-controls .chart-toggle{margin:0;}
 .chart-toggle.toggle-on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
 
+/* ---------- HISTORIAL: búsqueda + filtros ---------- */
+.hist-search{margin:0 0 14px;}
+.hist-search-bar{display:flex; align-items:center; gap:8px;}
+.hist-search-input{
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:8px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0 12px;
+}
+.hist-search-input .icon{width:16px; height:16px; color:var(--gold-dim); flex-shrink:0;}
+.hist-search-input input{
+  flex:1; min-width:0; background:none; border:none; color:var(--cream);
+  font-size:16px; font-family:inherit; padding:11px 0;   /* 16px: evita el auto-zoom de iOS al enfocar */
+}
+.hist-search-input input::placeholder{color:var(--cream-dim);}
+.hist-search-input input:focus{outline:none;}
+.hist-search-input:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-search-count{font-size:11.5px; color:var(--gold-dim); white-space:nowrap; flex-shrink:0;}
+.hist-filter-btn{
+  flex-shrink:0; width:40px; height:40px; border-radius:var(--radius-sm);
+  background:var(--surface-2); border:1px solid var(--border); color:var(--gold);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s ease;
+}
+.hist-filter-btn:active{transform:scale(0.94);}
+.hist-filter-btn.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.hist-filter-btn .icon{width:17px; height:17px;}
+.hist-cat-carousel{
+  display:flex; flex-wrap:nowrap; gap:8px; margin-top:10px; padding-bottom:2px;
+  overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none;
+  -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 20px), transparent);
+          mask-image:linear-gradient(to right, #000 calc(100% - 20px), transparent);
+}
+.hist-cat-carousel::-webkit-scrollbar{display:none;}
+.hist-cat-carousel::after{content:""; flex:0 0 12px;}
+.hist-cat-chip{
+  flex:0 0 auto; display:flex; align-items:center; gap:6px; white-space:nowrap;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--cream);
+  border-radius:20px; padding:8px 13px; font-size:13px; cursor:pointer; font-family:inherit;
+  transition:background .15s ease, border-color .15s ease, transform .12s ease, color .15s ease;
+}
+.hist-cat-chip .icon, .hist-cat-chip .cat-emoji{width:15px; height:15px; font-size:14px; color:var(--gold); flex-shrink:0;}
+.hist-cat-chip:active{transform:scale(0.96);}
+.hist-cat-chip.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.hist-cat-chip.on .icon, .hist-cat-chip.on .cat-emoji{color:#FBEFE9;}
+.hist-filter-panel{
+  margin-top:10px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:12px 14px;
+}
+.hist-filter-panel > div + div{margin-top:12px;}
+.hist-filter-label{
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold-dim); margin:0 0 8px;
+}
+.hist-filter-checks{display:flex; flex-wrap:wrap; gap:8px 16px;}
+.hist-check{display:flex; align-items:center; gap:7px; font-size:14px; color:var(--cream); cursor:pointer;}
+.hist-check input{width:18px; height:18px; flex-shrink:0; accent-color:var(--burgundy); font-size:16px;}
+
 /* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
 .hist-day-sep{
   font-size:12px; font-weight:600; color:var(--gold-dim); letter-spacing:.02em;
@@ -447,7 +501,9 @@ button{font-family:inherit;}
 
 /* ---------- CARRUSEL DE MONTOS RÁPIDOS (deslizable horizontal, contenido en el ancho del formulario) ---------- */
 .chip-row.chips-monto{
-  display:flex; flex-wrap:nowrap; gap:8px; margin-top:2px; padding-bottom:2px;
+  /* Espaciado simétrico: Monto ↔ carrusel (margin-top) = carrusel ↔ campo siguiente
+     (padding-bottom 2px + margin-bottom 14px de .field). */
+  display:flex; flex-wrap:nowrap; gap:8px; margin-top:16px; padding-bottom:2px;
   width:100%; max-width:100%; min-width:0;              /* nunca más ancho que el campo */
   overflow-x:auto; overscroll-behavior-x:contain;       /* el scroll vive puertas adentro */
   scroll-snap-type:x proximity; scrollbar-width:none;
@@ -592,12 +648,15 @@ button{font-family:inherit;}
 :root.hc .chip, :root.hc .toggle-opt, :root.hc .field input, :root.hc .field select,
 :root.hc .field textarea, :root.hc .palette-opt, :root.hc .export-opt,
 :root.hc .add-inline input, :root.hc .config-item .cfg-icon-btn, :root.hc .btn-ghost,
-:root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button{ border-width:2px; }
+:root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button,
+:root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
+:root.hc .hist-cat-chip, :root.hc .hist-check input{ border-width:2px; }
 :root.hc .li-muted{ font-style:normal; color:var(--cream); }
 :root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note, :root.hc .li-cuota-note,
 :root.hc .ahorrado-nota, :root.hc .int-disclaimer, :root.hc .li-sub, :root.hc .debt-foot,
 :root.hc .debt-cat, :root.hc .li-badge, :root.hc .empty-state, :root.hc .check-row small,
 :root.hc .field label, :root.hc .section-title, :root.hc .li-title,
+:root.hc .hist-search-count, :root.hc .hist-filter-label,
 :root.hc .aportar-disp{ color:var(--cream); }
 :root.hc .li-saldo.neg{ color:var(--danger); }
 :root.hc .progress-track{ border:1px solid var(--border); }
@@ -621,6 +680,7 @@ button{font-family:inherit;}
       <span class="name">MisFinanzas</span>
     </div>
     <div class="top-actions">
+      <button class="icon-btn" id="btnResumenImg" aria-label="Guardar resumen como imagen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
       <button class="icon-btn" id="btnExport" aria-label="Exportar a Excel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>
       <button class="icon-btn" id="btnConfig" aria-label="Configuración"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
@@ -665,15 +725,31 @@ button{font-family:inherit;}
       <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
       <button class="chart-toggle" id="tgHistorial"></button>
     </div>
-    <div class="field" style="margin-bottom:14px;">
-      <select id="hSortSelect">
-        <option value="fecha-desc">Fecha (recientes primero)</option>
-        <option value="fecha-asc">Fecha (antiguos primero)</option>
-        <option value="valor-desc">Monto (mayor primero)</option>
-        <option value="valor-asc">Monto (menor primero)</option>
-        <option value="nombre-asc">Nombre (A-Z)</option>
-        <option value="nombre-desc">Nombre (Z-A)</option>
-      </select>
+    <div class="hist-search" id="histSearchWrap">
+      <div class="hist-search-bar">
+        <div class="hist-search-input">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="hSearchInput" placeholder="Buscar por descripción..." inputmode="search" autocomplete="off" aria-label="Buscar por descripción">
+        </div>
+        <span class="hist-search-count" id="hSearchCount" style="display:none;"></span>
+        <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Más filtros" aria-expanded="false">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </button>
+      </div>
+      <div class="hist-cat-carousel" id="hCatCarousel"></div>
+      <div class="hist-filter-panel" id="hFilterPanel" style="display:none;">
+        <div id="hFilterMethodsWrap">
+          <p class="hist-filter-label">Método de pago</p>
+          <div class="hist-filter-checks" id="hFilterMethodsList"></div>
+        </div>
+        <div id="hFilterTipoWrap" style="display:none;">
+          <p class="hist-filter-label">Tipo</p>
+          <div class="hist-filter-checks">
+            <label class="hist-check"><input type="checkbox" id="hTipoGasto" value="gasto"><span>Gasto</span></label>
+            <label class="hist-check"><input type="checkbox" id="hTipoIngreso" value="ingreso"><span>Ingreso</span></label>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="hList"></div>
     <div class="chart-box" id="hChart" style="display:none;"></div>
@@ -1040,6 +1116,21 @@ button{font-family:inherit;}
   </div>
 </div>
 
+<!-- SHEET: resumen exportado como imagen -->
+<div class="sheet-overlay" id="sheetResumenImg">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Resumen como imagen</h2>
+    <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 14px;">
+      Imagen del resumen de <span id="resumenImgMes"></span> lista para guardar o compartir.
+    </p>
+    <div id="resumenImgPreview" style="margin-bottom:16px;"></div>
+    <button class="btn-primary" id="btnResumenImgDownload">Descargar</button>
+    <button class="btn-ghost" id="btnResumenImgCopy">Copiar al portapapeles</button>
+    <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
 <!-- SHEET: detalle de categoría -->
 <div class="sheet-overlay" id="sheetCategoriaDetalle">
   <div class="sheet">
@@ -1093,7 +1184,10 @@ const ICONS = {
   "plane": '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3.5S18 3 16.5 4.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.6c-.2.4-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 4.3 5.2c.3.4.9.5 1.3.3l.6-.3c.4-.2.6-.7.5-1.2z"/>',
   "health": '<path d="M12 21C12 21 4 13.6 4 8.5A4.5 4.5 0 0 1 12 5a4.5 4.5 0 0 1 8 3.5C20 13.6 12 21 12 21z"/><path d="M8.5 12H11l1-2 2 4 1-2h2.5"/>',
   "paw": '<circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><path d="M12 12c-2.4 0-4.5 1.9-4.5 4.2S9.6 20 12 20s4.5-1.5 4.5-3.8S14.4 12 12 12z"/>',
-  "music": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
+  "music": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  "search": '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  "filter": '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+  "image": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'
 };
 function icon(name, extraClass){
   const path = ICONS[name] || ICONS['tag'];
@@ -2804,11 +2898,169 @@ function openCategoriaDetalle(categoria, normalExpenses){
 }
 
 /* ==================== RENDER: HISTORIAL ==================== */
+// El orden del historial es siempre por fecha (recientes primero): mantiene la
+// agrupación por día y el saldo acumulado. El antiguo selector de orden se
+// reemplazó por el bloque de búsqueda + filtros (ver más abajo).
 let hSortMode = 'fecha-desc';
-document.getElementById('hSortSelect').addEventListener('change', (e)=>{
-  hSortMode = e.target.value;
-  renderHistorial();
-});
+
+/* ---- Búsqueda y filtros del Historial ---- */
+let hSearchText = '';               // texto normalizado (minúsculas, sin espacios en extremos)
+let hFilterCat = null;              // null = "Todas"; si no, nombre de categoría
+let hFilterMethods = new Set();     // métodos de pago seleccionados en el panel
+let hFilterTipos = new Set();       // 'gasto' | 'ingreso' (solo pestaña "Todo")
+let hFilterPanelOpen = false;       // panel del embudo desplegado
+
+// ¿Hay algún filtro/búsqueda activo? (define si se muestra el contador)
+function histFiltrosActivos(){
+  return !!hSearchText || hFilterCat !== null || hFilterMethods.size > 0 || hFilterTipos.size === 1;
+}
+function histMatchTexto(txt){
+  return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
+}
+// Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría AND método.
+function histPasaGasto(e){
+  if(!histMatchTexto(e.description)) return false;
+  if(hFilterCat !== null && e.category !== hFilterCat) return false;
+  if(hFilterMethods.size > 0 && !hFilterMethods.has(e.method)) return false;
+  return true;
+}
+// Filtro para un ingreso: busca en descripción + fuente. Categoría/método no aplican
+// a ingresos, así que si alguno de esos filtros está activo, el ingreso queda fuera.
+function histPasaIngreso(i){
+  if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
+  if(hFilterCat !== null || hFilterMethods.size > 0) return false;
+  return true;
+}
+function updateHistCount(n){
+  const el = document.getElementById('hSearchCount');
+  if(!el) return;
+  if(!histFiltrosActivos()){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = n === 0 ? 'Sin resultados' : (n === 1 ? '1 resultado' : n + ' resultados');
+}
+
+// Construye/actualiza el carrusel de categorías y el panel de filtros según el mes
+// y la pestaña activa. Reconcilia la selección con lo que existe este mes.
+function renderHistSearchControls(){
+  const wrap = document.getElementById('histSearchWrap');
+  if(!wrap) return;
+
+  const monthExpenses = getExpensesForMonth(currentDate);
+  const cats = [...new Set(monthExpenses.map(e=> e.category).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
+  const methods = [...new Set(monthExpenses.map(e=> e.method).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
+
+  const catAplica = hTab !== 'ingresos';
+  const methodAplica = hTab !== 'ingresos';
+
+  // Reconciliación: descarta selecciones que ya no existen este mes / en esta pestaña.
+  if(!catAplica || (hFilterCat !== null && !cats.includes(hFilterCat))) hFilterCat = null;
+  if(!methodAplica) hFilterMethods.clear();
+  else [...hFilterMethods].forEach(m=>{ if(!methods.includes(m)) hFilterMethods.delete(m); });
+  if(hTab !== 'todo') hFilterTipos.clear();
+
+  // Sincroniza el input sin pisar lo que el usuario está escribiendo.
+  const inp = document.getElementById('hSearchInput');
+  if(inp && document.activeElement !== inp && inp.value.trim().toLowerCase() !== hSearchText){
+    inp.value = hSearchText;
+  }
+
+  // --- Carrusel de categorías ---
+  const car = document.getElementById('hCatCarousel');
+  if(catAplica && cats.length){
+    const key = hFilterCat + '||' + cats.join('|');
+    if(car.dataset.key !== key){
+      car.dataset.key = key;
+      car.style.display = '';
+      car.innerHTML =
+        `<button type="button" class="hist-cat-chip${hFilterCat===null ? ' on' : ''}" data-hcat="__all">Todas</button>` +
+        cats.map(c=> `<button type="button" class="hist-cat-chip${hFilterCat===c ? ' on' : ''}" data-hcat="${encodeURIComponent(c)}">${catIcon(c)}<span>${c}</span></button>`).join('');
+      car.querySelectorAll('[data-hcat]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const raw = btn.dataset.hcat;
+          const val = raw === '__all' ? null : decodeURIComponent(raw);
+          // Selección única: tocar la activa vuelve a "Todas".
+          hFilterCat = (val !== null && hFilterCat === val) ? null : val;
+          renderHistorial();
+        });
+      });
+    }
+  } else {
+    car.style.display = 'none';
+    car.innerHTML = '';
+    car.dataset.key = '';
+  }
+
+  // --- Botón embudo + panel ---
+  const panelTieneAlgo = (methodAplica && methods.length > 0) || hTab === 'todo';
+  const fbtn = document.getElementById('hFilterBtn');
+  fbtn.style.display = panelTieneAlgo ? '' : 'none';
+  if(!panelTieneAlgo) hFilterPanelOpen = false;
+  fbtn.classList.toggle('on', hFilterPanelOpen || hFilterMethods.size > 0 || hFilterTipos.size === 1);
+  fbtn.setAttribute('aria-expanded', hFilterPanelOpen ? 'true' : 'false');
+
+  const panel = document.getElementById('hFilterPanel');
+  panel.style.display = hFilterPanelOpen ? '' : 'none';
+
+  const mWrap = document.getElementById('hFilterMethodsWrap');
+  if(methodAplica && methods.length){
+    mWrap.style.display = '';
+    const list = document.getElementById('hFilterMethodsList');
+    const mKey = methods.join('|') + '::' + [...hFilterMethods].sort().join(',');
+    if(list.dataset.key !== mKey){
+      list.dataset.key = mKey;
+      list.innerHTML = methods.map(m=>
+        `<label class="hist-check"><input type="checkbox" data-hmethod="${encodeURIComponent(m)}" ${hFilterMethods.has(m) ? 'checked' : ''}><span>${m}</span></label>`
+      ).join('');
+      list.querySelectorAll('[data-hmethod]').forEach(cb=>{
+        cb.addEventListener('change', ()=>{
+          const m = decodeURIComponent(cb.dataset.hmethod);
+          if(cb.checked) hFilterMethods.add(m); else hFilterMethods.delete(m);
+          renderHistorial();
+        });
+      });
+    }
+  } else {
+    mWrap.style.display = 'none';
+    const list = document.getElementById('hFilterMethodsList');
+    list.innerHTML = ''; list.dataset.key = '';
+  }
+
+  const tWrap = document.getElementById('hFilterTipoWrap');
+  if(hTab === 'todo'){
+    tWrap.style.display = '';
+    const g = document.getElementById('hTipoGasto'), ing = document.getElementById('hTipoIngreso');
+    if(g) g.checked = hFilterTipos.has('gasto');
+    if(ing) ing.checked = hFilterTipos.has('ingreso');
+  } else {
+    tWrap.style.display = 'none';
+  }
+}
+
+// Eventos fijos del bloque de búsqueda (los dinámicos se enganchan en renderHistSearchControls).
+(function initHistSearch(){
+  const inp = document.getElementById('hSearchInput');
+  if(inp){
+    inp.addEventListener('input', ()=>{
+      hSearchText = inp.value.trim().toLowerCase();
+      renderHistorial();
+    });
+  }
+  const fbtn = document.getElementById('hFilterBtn');
+  if(fbtn){
+    fbtn.addEventListener('click', ()=>{
+      hFilterPanelOpen = !hFilterPanelOpen;
+      renderHistorial();
+    });
+  }
+  ['hTipoGasto','hTipoIngreso'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', ()=>{
+      if(el.checked) hFilterTipos.add(el.value); else hFilterTipos.delete(el.value);
+      renderHistorial();
+    });
+  });
+})();
+
 function applySort(items, nameKey, amountKey, dateKey){
   const [campo, dir] = hSortMode.split('-');
   const sign = dir==='asc' ? 1 : -1;
@@ -2827,6 +3079,9 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
       x.classList.toggle('active', on);
       x.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    // Al cambiar de pestaña, las categorías/métodos disponibles cambian: se reinician
+    // esos filtros y se cierra el panel (la búsqueda por texto se conserva).
+    hFilterCat = null; hFilterMethods.clear(); hFilterTipos.clear(); hFilterPanelOpen = false;
     renderHistorial();
   });
 });
@@ -2837,8 +3092,8 @@ function renderHistorial(){
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
   const tgBtn = document.getElementById('tgHistorial');
-  document.getElementById('hSortSelect').value = hSortMode;
   syncHistDetalleBtn();
+  renderHistSearchControls();
 
   const detalleOn = historialDetalleOn();
   const expCls = detalleOn ? ' expanded' : '';
@@ -2856,6 +3111,8 @@ function renderHistorial(){
 
   syncChartToggle('historial');
   if(chartView.historial !== 'lista'){
+    // En vista de gráfico (barra/torta) la búsqueda no filtra la lista: oculta el contador.
+    const cEl = document.getElementById('hSearchCount'); if(cEl) cEl.style.display = 'none';
     box.style.display = 'none'; chartBox.style.display = '';
     if(chartView.historial === 'torta'){
       if(hTab === 'gastos'){
@@ -2875,8 +3132,12 @@ function renderHistorial(){
   }
   box.style.display = ''; chartBox.style.display = 'none';
   if(hTab==='gastos'){
-    const items = applySort(getExpensesForMonth(currentDate), 'description', 'amount', 'date');
-    if(items.length===0){ box.innerHTML = emptyMsg('Sin gastos registrados este mes.'); return; }
+    const items = applySort(getExpensesForMonth(currentDate), 'description', 'amount', 'date').filter(histPasaGasto);
+    updateHistCount(items.length);
+    if(items.length===0){
+      box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
+      return;
+    }
     const rowHtml = (e)=>{
       const badge = e.debtId ? '<span class="li-badge">Cuota</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
       return `
@@ -2896,8 +3157,12 @@ function renderHistorial(){
     });
     wireRowExpand(box);
   } else {
-    const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date');
-    if(items.length===0){ box.innerHTML = emptyMsg('Sin ingresos registrados este mes.'); return; }
+    const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date').filter(histPasaIngreso);
+    updateHistCount(items.length);
+    if(items.length===0){
+      box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún ingreso coincide con la búsqueda.' : 'Sin ingresos registrados este mes.');
+      return;
+    }
     const rowHtml = (i)=>`
       <div class="list-item income${expCls}" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
@@ -2930,11 +3195,24 @@ function renderHistorialTodo(box){
   const gastos = getExpensesForMonth(currentDate).map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
     name:e.description||'', category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
-  }));
+  })).filter(g=>{
+    if(hFilterTipos.size === 1 && !hFilterTipos.has('gasto')) return false;
+    if(!histMatchTexto(g.name)) return false;
+    if(hFilterCat !== null && g.category !== hFilterCat) return false;
+    if(hFilterMethods.size > 0 && !hFilterMethods.has(g.method)) return false;
+    return true;
+  });
   const ingresos = getIncomesForMonth(currentDate).map(i=>({
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
     name:i.source||'', source:i.source, description:i.description||'', tipo:i.tipo
-  }));
+  })).filter(i=>{
+    if(hFilterTipos.size === 1 && !hFilterTipos.has('ingreso')) return false;
+    if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
+    if(hFilterCat !== null || hFilterMethods.size > 0) return false;
+    return true;
+  });
+
+  updateHistCount(gastos.length + ingresos.length);
 
   let items, agrupaPorDia;
   if(campo === 'fecha'){
@@ -2950,7 +3228,10 @@ function renderHistorialTodo(box){
     items = applySort([...gastos, ...ingresos], 'name', 'amount', 'date');
     agrupaPorDia = false;
   }
-  if(items.length===0){ box.innerHTML = emptyMsg('Sin movimientos registrados este mes.'); return; }
+  if(items.length===0){
+    box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún movimiento coincide con la búsqueda.' : 'Sin movimientos registrados este mes.');
+    return;
+  }
 
   const rowHtml = (it)=>{
     const saldo = saldoMap.get(saldoRowKey(it.kind, it.id, it.date));
@@ -3402,6 +3683,301 @@ function exportExcel(fromDate, toDate){
   XLSX.writeFile(wb, filename);
 }
 
+/* ==================== EXPORTAR RESUMEN COMO IMAGEN (Canvas API nativa) ==================== */
+// Genera un PNG de 1080px de ancho con el resumen del mes visible: encabezado, totales
+// (Ingresos / Gastos / Disponible con los colores positivo/negativo/acento de la paleta
+// activa), desglose por categoría en barras, gráfico de torta con leyenda (agrupando en
+// "Otros" si hay más de 6 categorías) y pie de página. Sin librerías externas.
+let resumenImgBlob = null;
+let resumenImgURL = null;
+let resumenImgBusy = false;   // evita encolar varios renders si se toca el botón repetido
+
+function roundRectPath(ctx, x, y, w, h, r){
+  r = Math.max(0, Math.min(r, w/2, h/2));
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+function fitText(ctx, str, maxW){
+  str = String(str == null ? '' : str);
+  if(ctx.measureText(str).width <= maxW) return str;
+  while(str.length > 1 && ctx.measureText(str + '…').width > maxW) str = str.slice(0, -1);
+  return str + '…';
+}
+
+function generarResumenImagen(){
+  if(resumenImgBusy) return;
+  resumenImgBusy = true;
+  const W = 1080, pad = 64, colW = W - pad*2;
+  const cv = name => (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim() || '#888888';
+  const COL = {
+    bg: cv('--bg'), surface: cv('--surface-2'), border: cv('--border'),
+    text: cv('--cream'), dim: cv('--cream-dim'),
+    gold: cv('--gold'), goldDim: cv('--gold-dim'),
+    pos: cv('--success'), neg: cv('--danger')
+  };
+  const CATC = ['--gold','--burgundy-light','--success','--gold-dim','--danger','--cream-dim','--burgundy'].map(cv);
+  const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
+  const SERIF = "Georgia, 'Times New Roman', serif";
+
+  // --- Datos del mes (mismo cálculo que renderResumen) ---
+  const monthExpenses = getExpensesForMonth(currentDate);
+  const monthIncomes = getIncomesForMonth(currentDate);
+  const normalExpenses = monthExpenses.filter(e=> !e.debtId);
+  const totalIngresos = monthIncomes.reduce((s,i)=> s + i.amount, 0);
+  const totalGastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
+  let totalCuotas = 0; const cuotasPorCat = {};
+  state.debts.forEach(d=>{
+    const info = cuotaInfoForMonth(d, currentDate);
+    if(info){ totalCuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
+  });
+  const totalMetas = totalAportesMetasDelMes(currentDate);
+  const saldoAnterior = saldoAcumuladoHasta(currentDate);
+  const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalMetas;
+
+  const catTotals = {};
+  normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
+  Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
+  const cats = Object.entries(catTotals).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]).map(([label,value])=> ({label, value}));
+  const totalCat = cats.reduce((s,c)=> s + c.value, 0) || 1;
+  const hayCats = cats.length > 0;
+
+  // Torta / leyenda: si hay más de 6 categorías, las menores se agrupan en "Otros".
+  let grouped = cats;
+  if(cats.length > 6){
+    const rest = cats.slice(5).reduce((s,c)=> s + c.value, 0);
+    grouped = [...cats.slice(0,5), { label:'Otros', value:rest }];
+  }
+  const mesLabel = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
+
+  // --- Altura total ---
+  let H = pad;
+  H += 40;                       // marca
+  H += 80;                       // mes
+  H += 30 + 2 + 30;              // divisor
+  H += 150;                      // totales
+  H += 34;
+  if(hayCats){
+    H += 44 + cats.length * 84;                       // título + barras
+    H += 30;
+    H += 44 + Math.max(400, grouped.length * 54);     // título + zona torta
+  } else {
+    H += 90;
+  }
+  H += 30 + 2 + 28;              // divisor
+  H += 34;                       // pie
+  H += pad;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = Math.round(H);
+  const ctx = canvas.getContext('2d');
+  ctx.textBaseline = 'alphabetic';
+  const spacing = v => { if('letterSpacing' in ctx) ctx.letterSpacing = v; };
+
+  ctx.fillStyle = COL.bg;
+  ctx.fillRect(0, 0, W, canvas.height);
+
+  let y = pad;
+
+  // Marca
+  y += 30;
+  ctx.fillStyle = COL.goldDim;
+  ctx.font = '700 30px ' + SANS;
+  spacing('3px');
+  ctx.textAlign = 'left';
+  ctx.fillText('MISFINANZAS', pad, y);
+  spacing('0px');
+
+  // Mes destacado
+  y += 74;
+  ctx.fillStyle = COL.text;
+  ctx.font = '700 62px ' + SERIF;
+  ctx.fillText(mesLabel, pad, y);
+
+  // Divisor
+  y += 30;
+  ctx.strokeStyle = COL.border; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+  y += 30;
+
+  // Totales grandes
+  const tw = colW / 3;
+  [
+    { k:'Ingresos', v:totalIngresos, c:COL.pos },
+    { k:'Gastos', v:totalGastos, c:COL.neg },
+    { k:'Disponible', v:disponible, c:COL.gold }
+  ].forEach((t,i)=>{
+    const x = pad + i*tw;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = COL.dim;
+    ctx.font = '600 26px ' + SANS;
+    spacing('1px');
+    ctx.fillText(t.k.toUpperCase(), x, y + 30);
+    spacing('0px');
+    ctx.fillStyle = t.c;
+    ctx.font = '700 50px ' + SANS;
+    ctx.fillText(fitText(ctx, money(t.v), tw - 16), x, y + 92);
+  });
+  y += 150 + 34;
+
+  if(hayCats){
+    // --- Desglose por categoría (barras) ---
+    ctx.fillStyle = COL.goldDim;
+    ctx.font = '600 28px ' + SANS;
+    ctx.textAlign = 'left';
+    spacing('2px');
+    ctx.fillText('GASTO POR CATEGORÍA', pad, y + 28);
+    spacing('0px');
+    y += 44;
+
+    const maxVal = Math.max(...cats.map(c=> c.value));
+    cats.forEach((c,i)=>{
+      const pct = Math.round(c.value / totalCat * 100);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = COL.text;
+      ctx.font = '600 30px ' + SANS;
+      ctx.fillText(fitText(ctx, c.label, colW - 360), pad, y + 28);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COL.dim;
+      ctx.font = '500 26px ' + SANS;
+      ctx.fillText(money(c.value) + '   ·   ' + pct + '%', pad + colW, y + 28);
+
+      const trackY = y + 46, trackH = 22;
+      roundRectPath(ctx, pad, trackY, colW, trackH, 11);
+      ctx.fillStyle = COL.surface; ctx.fill();
+      roundRectPath(ctx, pad, trackY, Math.max(6, (c.value / maxVal) * colW), trackH, 11);
+      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      y += 84;
+    });
+    y += 30;
+
+    // --- Torta + leyenda ---
+    ctx.fillStyle = COL.goldDim;
+    ctx.font = '600 28px ' + SANS;
+    ctx.textAlign = 'left';
+    spacing('2px');
+    ctx.fillText('DISTRIBUCIÓN', pad, y + 28);
+    spacing('0px');
+    y += 44;
+
+    const zoneH = Math.max(400, grouped.length * 54);
+    const r = 180;
+    const cx = pad + r, cy = y + zoneH/2;
+    const gTotal = grouped.reduce((s,c)=> s + c.value, 0) || 1;
+    let a0 = -Math.PI/2;
+    grouped.forEach((c,i)=>{
+      const a1 = a0 + (c.value / gTotal) * Math.PI * 2;
+      ctx.beginPath();
+      if(grouped.length === 1){ ctx.arc(cx, cy, r, 0, Math.PI*2); }
+      else { ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath(); }
+      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      a0 = a1;
+    });
+
+    const lx = pad + r*2 + 60;
+    const lTop = cy - (grouped.length * 54)/2;
+    grouped.forEach((c,i)=>{
+      const ly = lTop + i*54;
+      roundRectPath(ctx, lx, ly + 2, 28, 28, 7);
+      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = COL.text;
+      ctx.font = '600 28px ' + SANS;
+      ctx.fillText(fitText(ctx, c.label, (W - pad) - (lx + 44) - 210), lx + 44, ly + 24);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COL.dim;
+      ctx.font = '500 24px ' + SANS;
+      ctx.fillText(money(c.value) + ' · ' + Math.round(c.value / gTotal * 100) + '%', W - pad, ly + 24);
+    });
+    y += zoneH;
+  } else {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = COL.dim;
+    ctx.font = '500 30px ' + SANS;
+    ctx.fillText('Sin gastos registrados este mes.', pad, y + 40);
+    y += 90;
+  }
+
+  // Divisor + pie de página
+  y += 30;
+  ctx.strokeStyle = COL.border; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+  y += 28;
+
+  const now = new Date();
+  const p2 = n => String(n).padStart(2, '0');
+  const fechaGen = `${p2(now.getDate())}/${p2(now.getMonth()+1)}/${now.getFullYear()} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+  ctx.fillStyle = COL.goldDim;
+  ctx.font = '500 24px ' + SANS;
+  ctx.textAlign = 'left';
+  ctx.fillText('Generado el ' + fechaGen, pad, y + 24);
+  ctx.textAlign = 'right';
+  ctx.fillText('MisFinanzas App', W - pad, y + 24);
+  ctx.textAlign = 'left';
+
+  // --- Exportar ---
+  canvas.toBlob(blob=>{
+    resumenImgBusy = false;
+    if(!blob){ alert('No se pudo generar la imagen del resumen.'); return; }
+    resumenImgBlob = blob;
+    if(resumenImgURL) URL.revokeObjectURL(resumenImgURL);
+    resumenImgURL = URL.createObjectURL(blob);
+
+    const mesEl = document.getElementById('resumenImgMes');
+    if(mesEl) mesEl.textContent = mesLabel;
+    const prev = document.getElementById('resumenImgPreview');
+    prev.innerHTML = '';
+    const img = new Image();
+    img.src = resumenImgURL;
+    img.alt = 'Resumen ' + mesLabel;
+    img.style.cssText = 'width:100%; display:block; border:1px solid var(--border); border-radius:12px;';
+    prev.appendChild(img);
+
+    const cpy = document.getElementById('btnResumenImgCopy');
+    if(cpy){
+      cpy.textContent = 'Copiar al portapapeles';
+      cpy.disabled = !(navigator.clipboard && window.ClipboardItem);
+      cpy.style.opacity = cpy.disabled ? '0.5' : '';
+    }
+    openSheet('sheetResumenImg');
+    haptic(HAPTIC_OK);
+  }, 'image/png');
+}
+
+document.getElementById('btnResumenImg').onclick = ()=>{
+  try{ generarResumenImagen(); }
+  catch(err){ resumenImgBusy = false; console.error('generarResumenImagen', err); alert('No se pudo generar la imagen del resumen.'); }
+};
+document.getElementById('btnResumenImgDownload').onclick = ()=>{
+  if(!resumenImgURL) return;
+  const a = document.createElement('a');
+  a.href = resumenImgURL;
+  a.download = `MisFinanzas_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  haptic(HAPTIC_OK);
+};
+document.getElementById('btnResumenImgCopy').onclick = async ()=>{
+  const btn = document.getElementById('btnResumenImgCopy');
+  if(!resumenImgBlob) return;
+  if(!(navigator.clipboard && window.ClipboardItem)){
+    alert('Tu navegador no permite copiar imágenes. Usa "Descargar".');
+    return;
+  }
+  try{
+    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': resumenImgBlob }) ]);
+    btn.textContent = '¡Copiado!';
+    haptic(HAPTIC_OK);
+    setTimeout(()=>{ btn.textContent = 'Copiar al portapapeles'; }, 1600);
+  }catch(err){
+    console.warn('copiar imagen', err);
+    alert('No se pudo copiar la imagen. Usa "Descargar".');
+  }
+};
+
 /* ==================== GRÁFICOS SVG (JS puro, sin librerías) — Día 14 ==================== */
 // Estado por pantalla: 'lista' -> 'barra' -> 'torta' -> 'lista' (el toggle cicla).
 const chartView = { resumen:'lista', historial:'lista', metas:'lista' };
@@ -3693,6 +4269,9 @@ function renderAll(){
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
+  // El botón "guardar resumen como imagen" solo tiene sentido en la pantalla Resumen.
+  const briBtn = document.getElementById('btnResumenImg');
+  if(briBtn) briBtn.style.display = currentScreen === 'resumen' ? '' : 'none';
   if(currentScreen==='resumen') renderResumen();
   if(currentScreen==='historial') renderHistorial();
   if(currentScreen==='cuotas') renderCuotas();
