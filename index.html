@@ -445,6 +445,44 @@ button{font-family:inherit;}
 .chip:active{transform:scale(0.96); background:var(--surface-3); border-color:var(--gold-dim);}
 .chip small{color:var(--gold-dim); font-size:11.5px;}
 
+/* ---------- CHIPS DE MONTOS REDONDOS (fila propia, junto al campo Monto) ---------- */
+.chip-row.chips-monto{margin-top:2px;}
+.chip.chip-monto{
+  border-color:var(--gold-dim); color:var(--gold); font-weight:600;
+  font-variant-numeric:tabular-nums; letter-spacing:0.01em;
+}
+.chip.chip-monto:active{background:var(--surface-3); border-color:var(--gold);}
+
+/* ---------- CHIP "REPETIR ÚLTIMO GASTO DE LA CATEGORÍA" ---------- */
+.chip.chip-repeat{
+  background:var(--burgundy-dim); border-color:var(--burgundy-light); color:#FBEFE9; max-width:100%;
+}
+.chip.chip-repeat .icon{width:14px; height:14px; flex-shrink:0; color:var(--gold);}
+.chip.chip-repeat .rl-desc{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;}
+.chip.chip-repeat .rl-amt{color:var(--gold); font-weight:700; flex-shrink:0;}
+.chip.chip-repeat:active{background:var(--burgundy);}
+
+/* ---------- MICRÓFONO PARA DICTAR EL MONTO (Web Speech API) ---------- */
+.monto-row{display:flex; gap:8px; align-items:stretch;}
+.monto-row input{flex:1; min-width:0;}
+.mic-btn{
+  flex-shrink:0; width:46px; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--gold-dim);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; font-family:inherit;
+  transition:transform .12s ease, background .15s ease, color .15s ease, border-color .15s ease;
+}
+.mic-btn .icon{width:20px; height:20px;}
+.mic-btn:active{transform:scale(0.94);}
+.mic-btn[hidden]{display:none;}
+.mic-btn.listening{
+  color:#FBEFE9; background:var(--burgundy); border-color:var(--burgundy-light);
+  animation:micPulse 1.1s ease-in-out infinite;
+}
+@keyframes micPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(122,42,61,0.55);}
+  50%{box-shadow:0 0 0 7px rgba(122,42,61,0);}
+}
+
 /* ---------- TOGGLE LISTA/GRÁFICO + GRÁFICOS SVG ---------- */
 .chart-toggle{
   display:flex; align-items:center; gap:6px; width:fit-content; margin:0 0 14px auto;
@@ -663,7 +701,17 @@ button{font-family:inherit;}
     <div class="sheet-handle"></div>
     <h2 id="gastoTitle">Nuevo gasto</h2>
     <div class="field"><label>Fecha</label><input type="date" id="gFecha"></div>
-    <div class="field"><label>Monto</label><input type="text" id="gMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+    <div class="field">
+      <label>Monto</label>
+      <div class="monto-row">
+        <input type="text" id="gMonto" placeholder="0" inputmode="numeric" autocomplete="off">
+        <button type="button" class="mic-btn" id="gMicBtn" aria-label="Dictar el monto por voz" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Montos rápidos</label>
+      <div class="chip-row chips-monto" id="montoChipsG"></div>
+    </div>
     <div class="field">
       <label>Categoría</label>
       <select id="gCategoria"></select>
@@ -675,6 +723,10 @@ button{font-family:inherit;}
     <div class="field" id="favChipsField" style="display:none;">
       <label>Gastos frecuentes</label>
       <div class="chip-row" id="favChips"></div>
+    </div>
+    <div class="field" id="repeatLastField" style="display:none;">
+      <label>Repetir de esta categoría</label>
+      <div class="chip-row" id="repeatLastBox"></div>
     </div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="gDescripcion" placeholder="¿En qué fue? — opcional"></div>
     <div class="field">
@@ -705,7 +757,17 @@ button{font-family:inherit;}
       <label>Fuente</label>
       <select id="iFuente"></select>
     </div>
-    <div class="field"><label>Monto</label><input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+    <div class="field">
+      <label>Monto</label>
+      <div class="monto-row">
+        <input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off">
+        <button type="button" class="mic-btn" id="iMicBtn" aria-label="Dictar el monto por voz" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Montos rápidos</label>
+      <div class="chip-row chips-monto" id="montoChipsI"></div>
+    </div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="iDescripcion" placeholder="Opcional"></div>
     <div class="field">
       <label>Tipo</label>
@@ -1126,6 +1188,141 @@ function initMoneyInputs(){
   });
 }
 initMoneyInputs();
+
+/* ==================== CHIPS DE MONTOS REDONDOS RÁPIDOS ==================== */
+// Fila propia junto al campo Monto (gasto e ingreso). Al tocar un chip se
+// REEMPLAZA lo que hubiera en el campo, nunca se suma. Los chips quedan
+// siempre disponibles, aunque el usuario ya haya escrito algo a mano.
+const MONTOS_RAPIDOS = [1000, 2000, 5000, 10000, 20000, 50000];
+function initMontoChips(boxId, targetId){
+  try{
+    const box = document.getElementById(boxId);
+    if(!box) return;
+    box.innerHTML = MONTOS_RAPIDOS.map(v=>
+      `<button type="button" class="chip chip-monto" data-monto="${v}">${money(v)}</button>`
+    ).join('');
+    box.querySelectorAll('[data-monto]').forEach(btn=>{
+      btn.addEventListener('click', ()=> setMonto(targetId, parseInt(btn.dataset.monto, 10)));
+    });
+  }catch(err){
+    console.warn('No se pudieron crear los chips de montos rápidos:', err);
+  }
+}
+initMontoChips('montoChipsG', 'gMonto');
+initMontoChips('montoChipsI', 'iMonto');
+
+/* ==================== ENTRADA POR VOZ PARA EL CAMPO MONTO ==================== */
+// Convierte texto en español chileno a un número. Cubre los casos comunes:
+// dígitos ("5000", "$5.000", "5,000"), palabras ("cinco mil", "veinte mil")
+// y mezclas ("5 mil", "cinco mil quinientos"). No pretende ser un NLP.
+function parseMontoHablado(texto){
+  if(!texto) return NaN;
+  let s = String(texto).toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')   // quita acentos
+    .replace(/\$/g, ' ');
+  // quita separadores de miles: 5.000 / 5,000 / 5.000.000 -> 5000 / 5000000
+  s = s.replace(/(\d)[.,](\d{3})(?!\d)/g, '$1$2');
+  s = s.replace(/(\d)[.,](\d{3})(?!\d)/g, '$1$2');
+  const unidades = {cero:0,un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12,trece:13,catorce:14,quince:15,dieciseis:16,diecisiete:17,dieciocho:18,diecinueve:19,veinte:20,veintiun:21,veintiuno:21,veintidos:22,veintitres:23,veinticuatro:24,veinticinco:25,veintiseis:26,veintisiete:27,veintiocho:28,veintinueve:29};
+  const decenas = {treinta:30,cuarenta:40,cincuenta:50,sesenta:60,setenta:70,ochenta:80,noventa:90};
+  const centenas = {cien:100,ciento:100,doscientos:200,doscientas:200,trescientos:300,trescientas:300,cuatrocientos:400,cuatrocientas:400,quinientos:500,quinientas:500,seiscientos:600,seiscientas:600,setecientos:700,setecientas:700,ochocientos:800,ochocientas:800,novecientos:900,novecientas:900};
+  let total = 0, actual = 0, hubo = false;
+  s.split(/[\s-]+/).filter(Boolean).forEach(tok=>{
+    if(tok === 'y') return;
+    if(/^\d+$/.test(tok)){ actual += parseInt(tok, 10); hubo = true; return; }
+    if(unidades[tok] != null){ actual += unidades[tok]; hubo = true; return; }
+    if(decenas[tok] != null){ actual += decenas[tok]; hubo = true; return; }
+    if(centenas[tok] != null){ actual += centenas[tok]; hubo = true; return; }
+    if(tok === 'mil' || tok === 'luca' || tok === 'lucas'){ actual = (actual === 0 ? 1 : actual) * 1000; total += actual; actual = 0; hubo = true; return; }
+    if(tok === 'millon' || tok === 'millones'){ actual = (actual === 0 ? 1 : actual) * 1000000; total += actual; actual = 0; hubo = true; return; }
+    // tokens desconocidos ("pesos", "con", "lucas"...) se ignoran
+  });
+  if(!hubo) return NaN;
+  return total + actual;
+}
+
+// Detección de soporte ANTES de mostrar el ícono. Sin soporte, se quita el botón
+// y el formulario sigue funcionando igual.
+function setupMicMonto(btnId, targetId){
+  try{
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ btn.remove(); return; }
+    btn.hidden = false;
+    let rec = null, escuchando = false;
+    const parar = ()=>{ escuchando = false; btn.classList.remove('listening'); };
+    btn.addEventListener('click', ()=>{
+      if(escuchando){ try{ rec && rec.stop(); }catch(e){} return; }
+      try{
+        rec = new SR();
+        rec.lang = 'es-CL';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        rec.onstart = ()=>{ escuchando = true; btn.classList.add('listening'); };  // indicador visual: pulso
+        rec.onerror = parar;
+        rec.onend = parar;
+        rec.onresult = (ev)=>{
+          let txt = '';
+          try{ txt = ev.results[0][0].transcript || ''; }catch(e){}
+          const n = parseMontoHablado(txt);
+          if(!isNaN(n) && n > 0) setMonto(targetId, n);   // reemplaza, igual que los chips
+        };
+        rec.start();
+      }catch(err){
+        parar();
+        console.warn('No se pudo iniciar el reconocimiento de voz:', err);
+      }
+    });
+  }catch(err){
+    console.warn('No se pudo inicializar el micrófono de monto:', err);
+  }
+}
+setupMicMonto('gMicBtn', 'gMonto');
+setupMicMonto('iMicBtn', 'iMonto');
+
+/* ==================== REPETIR ÚLTIMO GASTO DE LA CATEGORÍA ==================== */
+// Al elegir una Categoría en el formulario de gasto, si hay al menos un gasto
+// previo en esa categoría, se muestra un chip "Repetir: [descripción] $[monto]"
+// con el gasto más reciente. Al tocarlo pre-llena Monto, Descripción y Método
+// (editables después). Solo gastos, solo al crear uno nuevo.
+let repeatLastExpense = null;
+function updateRepeatLast(){
+  const field = document.getElementById('repeatLastField');
+  const box = document.getElementById('repeatLastBox');
+  repeatLastExpense = null;
+  try{
+    if(!field || !box) return;
+    if(editingExpenseId){ field.style.display = 'none'; box.innerHTML = ''; return; }
+    const cat = document.getElementById('gCategoria').value;
+    const prev = state.expenses
+      .filter(e=> e && e.category === cat && e.amount > 0)
+      .sort((a,b)=> String(b.date||'').localeCompare(String(a.date||'')))[0];
+    if(!prev){ field.style.display = 'none'; box.innerHTML = ''; return; }
+    repeatLastExpense = prev;
+    const desc = (prev.description || '').trim() || 'sin descripción';
+    box.innerHTML = '<button type="button" class="chip chip-repeat" id="repeatLastChip">'
+      + '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+      + '<span class="rl-desc"></span><span class="rl-amt"></span></button>';
+    box.querySelector('.rl-desc').textContent = desc;
+    box.querySelector('.rl-amt').textContent = money(prev.amount);
+    field.style.display = 'block';
+    document.getElementById('repeatLastChip').addEventListener('click', ()=>{
+      if(!repeatLastExpense) return;
+      setMonto('gMonto', repeatLastExpense.amount);
+      document.getElementById('gDescripcion').value = repeatLastExpense.description || '';
+      if(repeatLastExpense.method && state.config.metodos.includes(repeatLastExpense.method)){
+        fillSelect('gMetodo', state.config.metodos, repeatLastExpense.method);
+        syncCuotaFields();
+      }
+    });
+  }catch(err){
+    console.warn('No se pudo preparar "Repetir último gasto":', err);
+    if(field) field.style.display = 'none';
+    if(box) box.innerHTML = '';
+  }
+}
+document.getElementById('gCategoria').addEventListener('change', updateRepeatLast);
 
 /* ==================== INPUT DUAL "MONTO / %" (aporte automático) ==================== */
 // El mismo input sirve para un monto fijo (formateo de miles) o un porcentaje
@@ -1749,6 +1946,7 @@ function openGastoForm(expenseId){
             fillSelect('gMetodo', state.config.metodos, f.method);
           }
           syncCuotaFields();
+          updateRepeatLast();   // el chip cambió la categoría por script (no dispara 'change')
         });
       });
     } else {
@@ -1760,6 +1958,7 @@ function openGastoForm(expenseId){
     document.getElementById('favChipsField').style.display = 'none';
   }
 
+  updateRepeatLast();   // "Repetir último gasto de esta categoría" para la categoría inicial
   syncCuotaFields();
   openSheet('sheetGasto');
 }
