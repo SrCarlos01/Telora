@@ -881,8 +881,12 @@ button{font-family:inherit;}
       </div>
     </details>
 
-    <p class="section-title" style="margin-top:20px;">Paleta de colores</p>
-    <div class="palette-row" id="paletteRow"></div>
+    <details class="cfg-group">
+      <summary>Paleta de colores <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <div class="palette-row" id="paletteRow"></div>
+      </div>
+    </details>
 
     <p class="section-title" style="margin-top:20px;">Tamaño de letra</p>
     <div class="toggle-row" id="fontScaleRow">
@@ -3384,7 +3388,32 @@ const PALETAS = {
     '--bg':'#1A1410','--surface':'#251C15','--surface-2':'#31251B','--surface-3':'#3E3024','--border':'#4A3A2C',
     '--burgundy':'#8A4A2E','--burgundy-light':'#A85F3D','--burgundy-dim':'#6F3A22',
     '--gold':'#D9B57C','--gold-dim':'#9A7E5A','--cream':'#F6ECDD','--cream-dim':'#C4AC91',
-    '--danger':'#C25A4A','--success':'#9AA867' } }
+    '--danger':'#C25A4A','--success':'#9AA867' } },
+  atardecer: { nombre:"Atardecer", vars:{
+    '--bg':'#1B1216','--surface':'#271A20','--surface-2':'#33232B','--surface-3':'#402C36','--border':'#4D3642',
+    '--burgundy':'#A34D6E','--burgundy-light':'#BD6285','--burgundy-dim':'#863F5A',
+    '--gold':'#E8B4C8','--gold-dim':'#B78E9F','--cream':'#F7E9EE','--cream-dim':'#D3B3BF',
+    '--danger':'#D26A6A','--success':'#7FB08A' } },
+  lavanda: { nombre:"Lavanda", vars:{
+    '--bg':'#15131C','--surface':'#1F1C2A','--surface-2':'#292536','--surface-3':'#352F45','--border':'#423B54',
+    '--burgundy':'#6D5AA8','--burgundy-light':'#8571C2','--burgundy-dim':'#574787',
+    '--gold':'#C9B8E8','--gold-dim':'#9C8FB8','--cream':'#ECE8F5','--cream-dim':'#B7AECB',
+    '--danger':'#CE6E8E','--success':'#74B39C' } },
+  acero: { nombre:"Acero", vars:{
+    '--bg':'#0F131A','--surface':'#171C25','--surface-2':'#1F2530','--surface-3':'#2A313F','--border':'#38414F',
+    '--burgundy':'#235486','--burgundy-light':'#2F6BA6','--burgundy-dim':'#1C4269',
+    '--gold':'#8FB4D9','--gold-dim':'#7590A8','--cream':'#E8EEF4','--cream-dim':'#A4B2C0',
+    '--danger':'#CE6A5E','--success':'#6FA88A' } },
+  petroleo: { nombre:"Verde petróleo", vars:{
+    '--bg':'#0E1413','--surface':'#16201E','--surface-2':'#1D2A28','--surface-3':'#273734','--border':'#354744',
+    '--burgundy':'#1F6A61','--burgundy-light':'#2B857B','--burgundy-dim':'#18524B',
+    '--gold':'#86BEB4','--gold-dim':'#729189','--cream':'#E7F0EE','--cream-dim':'#A2B5B1',
+    '--danger':'#CE6E5C','--success':'#86B36E' } },
+  medianoche: { nombre:"Medianoche (OLED)", vars:{
+    '--bg':'#000000','--surface':'#0A0A0B','--surface-2':'#121213','--surface-3':'#1A1A1C','--border':'#262628',
+    '--burgundy':'#33303D','--burgundy-light':'#423E4F','--burgundy-dim':'#26242E',
+    '--gold':'#9A93A8','--gold-dim':'#767181','--cream':'#D6D3DA','--cream-dim':'#8F8B98',
+    '--danger':'#B5645E','--success':'#6F9B78' } }
 };
 function aplicarPaleta(key){
   const p = PALETAS[key] || PALETAS.cafe;
