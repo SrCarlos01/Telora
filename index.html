@@ -2949,6 +2949,14 @@ function renderHistSearchControls(){
   const wrap = document.getElementById('histSearchWrap');
   if(!wrap) return;
 
+  // Búsqueda / filtro por categoría / embudo solo tienen sentido sobre la LISTA de
+  // movimientos. En "Barra" y "Torta" (datos agregados) se oculta el bloque completo.
+  // La pestaña "Todo" siempre es lista. El estado de filtros se conserva en memoria y
+  // reaparece igual al volver a la vista de lista.
+  const enLista = hTab === 'todo' || chartView.historial === 'lista';
+  wrap.style.display = enLista ? '' : 'none';
+  if(!enLista) return;
+
   const monthExpenses = getExpensesForMonth(currentDate);
   const cats = [...new Set(monthExpenses.map(e=> e.category).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
 
