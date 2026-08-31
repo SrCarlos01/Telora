@@ -343,6 +343,8 @@ button{font-family:inherit;}
 .hist-filter-checks{display:flex; flex-wrap:wrap; gap:8px 16px;}
 .hist-check{display:flex; align-items:center; gap:7px; font-size:14px; color:var(--cream); cursor:pointer;}
 .hist-check input{width:18px; height:18px; flex-shrink:0; accent-color:var(--burgundy); font-size:16px;}
+/* panel del embudo = ordenamiento (Fecha / Monto / Nombre, ambas direcciones) */
+.hist-sort-opts{display:flex; flex-direction:column; gap:10px;}
 
 /* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
 .hist-day-sep{
@@ -359,8 +361,12 @@ button{font-family:inherit;}
 /* nota secundaria en filas de compra a crédito (dentro de .li-body, bajo el detalle):
    aclara que al saldo solo le pesa la cuota, no el monto total de la compra. Acompaña al
    detalle: visible solo cuando la fila está expandida (igual que la fecha/categoría). */
-.li-cuota-note{font-size:10px; color:var(--gold-dim); line-height:1.3; margin:3px 0 0;}
+/* rojo: esta es la cifra que realmente impacta el Disponible del mes (no el monto total) */
+.li-cuota-note{font-size:10px; color:var(--danger); line-height:1.3; margin:3px 0 0;}
 #hList .list-item:not(.expanded) .li-cuota-note{display:none;}
+/* compra a cuotas en su mes de origen: el número grande es la compra total, que NO es
+   lo que afecta el Disponible de este mes -> se muestra en tono neutro, no de gasto */
+.li-amount.li-amount-cuota-origen{color:var(--cream-dim); font-weight:500;}
 
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
@@ -652,7 +658,7 @@ button{font-family:inherit;}
 :root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
 :root.hc .hist-cat-chip, :root.hc .hist-check input{ border-width:2px; }
 :root.hc .li-muted{ font-style:normal; color:var(--cream); }
-:root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note, :root.hc .li-cuota-note,
+:root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note,
 :root.hc .ahorrado-nota, :root.hc .int-disclaimer, :root.hc .li-sub, :root.hc .debt-foot,
 :root.hc .debt-cat, :root.hc .li-badge, :root.hc .empty-state, :root.hc .check-row small,
 :root.hc .field label, :root.hc .section-title, :root.hc .li-title,
@@ -732,22 +738,20 @@ button{font-family:inherit;}
           <input type="text" id="hSearchInput" placeholder="Buscar por descripción..." inputmode="search" autocomplete="off" aria-label="Buscar por descripción">
         </div>
         <span class="hist-search-count" id="hSearchCount" style="display:none;"></span>
-        <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Más filtros" aria-expanded="false">
+        <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Ordenar" aria-expanded="false">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         </button>
       </div>
       <div class="hist-cat-carousel" id="hCatCarousel"></div>
       <div class="hist-filter-panel" id="hFilterPanel" style="display:none;">
-        <div id="hFilterMethodsWrap">
-          <p class="hist-filter-label">Método de pago</p>
-          <div class="hist-filter-checks" id="hFilterMethodsList"></div>
-        </div>
-        <div id="hFilterTipoWrap" style="display:none;">
-          <p class="hist-filter-label">Tipo</p>
-          <div class="hist-filter-checks">
-            <label class="hist-check"><input type="checkbox" id="hTipoGasto" value="gasto"><span>Gasto</span></label>
-            <label class="hist-check"><input type="checkbox" id="hTipoIngreso" value="ingreso"><span>Ingreso</span></label>
-          </div>
+        <p class="hist-filter-label">Ordenar por</p>
+        <div class="hist-sort-opts" id="hSortOptsList" role="radiogroup" aria-label="Ordenar historial">
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="fecha-desc"><span>Fecha (recientes primero)</span></label>
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="fecha-asc"><span>Fecha (antiguos primero)</span></label>
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="valor-desc"><span>Monto (mayor a menor)</span></label>
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="valor-asc"><span>Monto (menor a mayor)</span></label>
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="nombre-asc"><span>Nombre (A-Z)</span></label>
+          <label class="hist-check"><input type="radio" name="hSortOpt" value="nombre-desc"><span>Nombre (Z-A)</span></label>
         </div>
       </div>
     </div>
@@ -2898,37 +2902,36 @@ function openCategoriaDetalle(categoria, normalExpenses){
 }
 
 /* ==================== RENDER: HISTORIAL ==================== */
-// El orden del historial es siempre por fecha (recientes primero): mantiene la
-// agrupación por día y el saldo acumulado. El antiguo selector de orden se
-// reemplazó por el bloque de búsqueda + filtros (ver más abajo).
+// Orden del historial: lo controla el panel del embudo (Fecha / Monto / Nombre, ambas
+// direcciones). Por defecto 'fecha-desc' (recientes primero), que mantiene la
+// agrupación por día y el saldo acumulado.
 let hSortMode = 'fecha-desc';
 
-/* ---- Búsqueda y filtros del Historial ---- */
+/* ---- Búsqueda y filtro por categoría del Historial ---- */
 let hSearchText = '';               // texto normalizado (minúsculas, sin espacios en extremos)
-let hFilterCat = null;              // null = "Todas"; si no, nombre de categoría
-let hFilterMethods = new Set();     // métodos de pago seleccionados en el panel
-let hFilterTipos = new Set();       // 'gasto' | 'ingreso' (solo pestaña "Todo")
-let hFilterPanelOpen = false;       // panel del embudo desplegado
+let hFilterCats = new Set();        // categorías seleccionadas (selección múltiple); vacío = "Todas"
+let hFilterPanelOpen = false;       // panel del embudo (ordenar) desplegado
 
-// ¿Hay algún filtro/búsqueda activo? (define si se muestra el contador)
+// ¿Hay búsqueda o filtro de categoría activo? (define si se muestra el contador).
+// El orden NO cuenta como filtro.
 function histFiltrosActivos(){
-  return !!hSearchText || hFilterCat !== null || hFilterMethods.size > 0 || hFilterTipos.size === 1;
+  return !!hSearchText || hFilterCats.size > 0;
 }
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
 }
-// Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría AND método.
+// Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
+// Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
 function histPasaGasto(e){
   if(!histMatchTexto(e.description)) return false;
-  if(hFilterCat !== null && e.category !== hFilterCat) return false;
-  if(hFilterMethods.size > 0 && !hFilterMethods.has(e.method)) return false;
+  if(hFilterCats.size > 0 && !hFilterCats.has(e.category)) return false;
   return true;
 }
-// Filtro para un ingreso: busca en descripción + fuente. Categoría/método no aplican
-// a ingresos, así que si alguno de esos filtros está activo, el ingreso queda fuera.
+// Filtro para un ingreso: busca en descripción + fuente. La categoría no aplica a
+// ingresos, así que si hay categorías seleccionadas el ingreso queda fuera.
 function histPasaIngreso(i){
   if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
-  if(hFilterCat !== null || hFilterMethods.size > 0) return false;
+  if(hFilterCats.size > 0) return false;
   return true;
 }
 function updateHistCount(n){
@@ -2939,24 +2942,21 @@ function updateHistCount(n){
   el.textContent = n === 0 ? 'Sin resultados' : (n === 1 ? '1 resultado' : n + ' resultados');
 }
 
-// Construye/actualiza el carrusel de categorías y el panel de filtros según el mes
-// y la pestaña activa. Reconcilia la selección con lo que existe este mes.
+// Construye/actualiza el carrusel de categorías (selección múltiple) y el panel de
+// ordenamiento según el mes y la pestaña activa. Reconcilia la selección con lo que
+// existe este mes.
 function renderHistSearchControls(){
   const wrap = document.getElementById('histSearchWrap');
   if(!wrap) return;
 
   const monthExpenses = getExpensesForMonth(currentDate);
   const cats = [...new Set(monthExpenses.map(e=> e.category).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
-  const methods = [...new Set(monthExpenses.map(e=> e.method).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
 
   const catAplica = hTab !== 'ingresos';
-  const methodAplica = hTab !== 'ingresos';
 
-  // Reconciliación: descarta selecciones que ya no existen este mes / en esta pestaña.
-  if(!catAplica || (hFilterCat !== null && !cats.includes(hFilterCat))) hFilterCat = null;
-  if(!methodAplica) hFilterMethods.clear();
-  else [...hFilterMethods].forEach(m=>{ if(!methods.includes(m)) hFilterMethods.delete(m); });
-  if(hTab !== 'todo') hFilterTipos.clear();
+  // Reconciliación: descarta categorías seleccionadas que ya no existen este mes / pestaña.
+  if(!catAplica) hFilterCats.clear();
+  else [...hFilterCats].forEach(c=>{ if(!cats.includes(c)) hFilterCats.delete(c); });
 
   // Sincroniza el input sin pisar lo que el usuario está escribiendo.
   const inp = document.getElementById('hSearchInput');
@@ -2964,76 +2964,60 @@ function renderHistSearchControls(){
     inp.value = hSearchText;
   }
 
-  // --- Carrusel de categorías ---
+  // --- Carrusel de categorías (selección múltiple) ---
+  // "Todas" es un reset: activo cuando no hay ninguna categoría seleccionada. Tocar una
+  // categoría la activa/desactiva de forma independiente (chip toggled, no radio). Si el
+  // usuario deselecciona todas a mano, "Todas" vuelve a quedar activo solo (size 0).
   const car = document.getElementById('hCatCarousel');
   if(catAplica && cats.length){
-    const key = hFilterCat + '||' + cats.join('|');
-    if(car.dataset.key !== key){
-      car.dataset.key = key;
-      car.style.display = '';
+    car.style.display = '';
+    // La estructura se reconstruye solo si cambió el set de categorías del mes; así el
+    // scroll horizontal se conserva al togglear un chip.
+    if(car.dataset.key !== cats.join('|')){
+      car.dataset.key = cats.join('|');
       car.innerHTML =
-        `<button type="button" class="hist-cat-chip${hFilterCat===null ? ' on' : ''}" data-hcat="__all">Todas</button>` +
-        cats.map(c=> `<button type="button" class="hist-cat-chip${hFilterCat===c ? ' on' : ''}" data-hcat="${encodeURIComponent(c)}">${catIcon(c)}<span>${c}</span></button>`).join('');
+        `<button type="button" class="hist-cat-chip" data-hcat="__all">Todas</button>` +
+        cats.map(c=> `<button type="button" class="hist-cat-chip" data-hcat="${encodeURIComponent(c)}">${catIcon(c)}<span>${c}</span></button>`).join('');
       car.querySelectorAll('[data-hcat]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
           const raw = btn.dataset.hcat;
-          const val = raw === '__all' ? null : decodeURIComponent(raw);
-          // Selección única: tocar la activa vuelve a "Todas".
-          hFilterCat = (val !== null && hFilterCat === val) ? null : val;
+          if(raw === '__all'){
+            hFilterCats.clear();                                   // "Todas" = reset
+          } else {
+            const c = decodeURIComponent(raw);
+            if(hFilterCats.has(c)) hFilterCats.delete(c); else hFilterCats.add(c);
+          }
           renderHistorial();
         });
       });
     }
+    // Estado visual, sin reconstruir (así no se pierde el scroll del carrusel).
+    car.querySelectorAll('[data-hcat]').forEach(btn=>{
+      const raw = btn.dataset.hcat;
+      const on = raw === '__all' ? hFilterCats.size === 0 : hFilterCats.has(decodeURIComponent(raw));
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
   } else {
     car.style.display = 'none';
     car.innerHTML = '';
     car.dataset.key = '';
   }
 
-  // --- Botón embudo + panel ---
-  const panelTieneAlgo = (methodAplica && methods.length > 0) || hTab === 'todo';
+  // --- Botón embudo (ordenar) + panel ---
+  // El ordenamiento siempre está disponible, así que el botón se muestra siempre.
   const fbtn = document.getElementById('hFilterBtn');
-  fbtn.style.display = panelTieneAlgo ? '' : 'none';
-  if(!panelTieneAlgo) hFilterPanelOpen = false;
-  fbtn.classList.toggle('on', hFilterPanelOpen || hFilterMethods.size > 0 || hFilterTipos.size === 1);
+  fbtn.style.display = '';
+  fbtn.classList.toggle('on', hFilterPanelOpen || hSortMode !== 'fecha-desc');
   fbtn.setAttribute('aria-expanded', hFilterPanelOpen ? 'true' : 'false');
 
   const panel = document.getElementById('hFilterPanel');
   panel.style.display = hFilterPanelOpen ? '' : 'none';
 
-  const mWrap = document.getElementById('hFilterMethodsWrap');
-  if(methodAplica && methods.length){
-    mWrap.style.display = '';
-    const list = document.getElementById('hFilterMethodsList');
-    const mKey = methods.join('|') + '::' + [...hFilterMethods].sort().join(',');
-    if(list.dataset.key !== mKey){
-      list.dataset.key = mKey;
-      list.innerHTML = methods.map(m=>
-        `<label class="hist-check"><input type="checkbox" data-hmethod="${encodeURIComponent(m)}" ${hFilterMethods.has(m) ? 'checked' : ''}><span>${m}</span></label>`
-      ).join('');
-      list.querySelectorAll('[data-hmethod]').forEach(cb=>{
-        cb.addEventListener('change', ()=>{
-          const m = decodeURIComponent(cb.dataset.hmethod);
-          if(cb.checked) hFilterMethods.add(m); else hFilterMethods.delete(m);
-          renderHistorial();
-        });
-      });
-    }
-  } else {
-    mWrap.style.display = 'none';
-    const list = document.getElementById('hFilterMethodsList');
-    list.innerHTML = ''; list.dataset.key = '';
-  }
-
-  const tWrap = document.getElementById('hFilterTipoWrap');
-  if(hTab === 'todo'){
-    tWrap.style.display = '';
-    const g = document.getElementById('hTipoGasto'), ing = document.getElementById('hTipoIngreso');
-    if(g) g.checked = hFilterTipos.has('gasto');
-    if(ing) ing.checked = hFilterTipos.has('ingreso');
-  } else {
-    tWrap.style.display = 'none';
-  }
+  // Marca el radio del criterio de orden activo.
+  document.querySelectorAll('#hSortOptsList input[name="hSortOpt"]').forEach(r=>{
+    r.checked = (r.value === hSortMode);
+  });
 }
 
 // Eventos fijos del bloque de búsqueda (los dinámicos se enganchan en renderHistSearchControls).
@@ -3052,11 +3036,9 @@ function renderHistSearchControls(){
       renderHistorial();
     });
   }
-  ['hTipoGasto','hTipoIngreso'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('change', ()=>{
-      if(el.checked) hFilterTipos.add(el.value); else hFilterTipos.delete(el.value);
-      renderHistorial();
+  document.querySelectorAll('#hSortOptsList input[name="hSortOpt"]').forEach(r=>{
+    r.addEventListener('change', ()=>{
+      if(r.checked){ hSortMode = r.value; renderHistorial(); }
     });
   });
 })();
@@ -3079,9 +3061,9 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
       x.classList.toggle('active', on);
       x.setAttribute('aria-selected', on ? 'true' : 'false');
     });
-    // Al cambiar de pestaña, las categorías/métodos disponibles cambian: se reinician
-    // esos filtros y se cierra el panel (la búsqueda por texto se conserva).
-    hFilterCat = null; hFilterMethods.clear(); hFilterTipos.clear(); hFilterPanelOpen = false;
+    // Al cambiar de pestaña, las categorías disponibles cambian: se reinicia el filtro
+    // por categoría y se cierra el panel (la búsqueda por texto y el orden se conservan).
+    hFilterCats.clear(); hFilterPanelOpen = false;
     renderHistorial();
   });
 });
@@ -3140,6 +3122,9 @@ function renderHistorial(){
     }
     const rowHtml = (e)=>{
       const badge = e.debtId ? '<span class="li-badge">Cuota</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+      // Compra a cuotas (siempre se lista en su mes de origen): el monto grande es la
+      // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro.
+      const amtCls = e.debtId ? 'li-amount li-amount-cuota-origen' : 'li-amount';
       return `
       <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
@@ -3147,7 +3132,7 @@ function renderHistorial(){
           <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span>${badge}</p>
           <p class="li-sub">${fmtDate(e.date)} · ${e.category} · ${e.method}</p>
         </div>
-        <span class="li-amount">${money(e.amount)}</span>
+        <span class="${amtCls}">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
     };
@@ -3196,19 +3181,16 @@ function renderHistorialTodo(box){
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
     name:e.description||'', category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
   })).filter(g=>{
-    if(hFilterTipos.size === 1 && !hFilterTipos.has('gasto')) return false;
     if(!histMatchTexto(g.name)) return false;
-    if(hFilterCat !== null && g.category !== hFilterCat) return false;
-    if(hFilterMethods.size > 0 && !hFilterMethods.has(g.method)) return false;
+    if(hFilterCats.size > 0 && !hFilterCats.has(g.category)) return false;
     return true;
   });
   const ingresos = getIncomesForMonth(currentDate).map(i=>({
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
     name:i.source||'', source:i.source, description:i.description||'', tipo:i.tipo
   })).filter(i=>{
-    if(hFilterTipos.size === 1 && !hFilterTipos.has('ingreso')) return false;
     if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
-    if(hFilterCat !== null || hFilterMethods.size > 0) return false;
+    if(hFilterCats.size > 0) return false;
     return true;
   });
 
@@ -3275,7 +3257,7 @@ function renderHistorialTodo(box){
           ${cuotaNote}
         </div>
         <div class="li-amount-wrap">
-          <span class="li-amount">−${money(it.amount)}</span>
+          <span class="li-amount${it.debtId ? ' li-amount-cuota-origen' : ''}">−${money(it.amount)}</span>
           ${saldoTxt}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
