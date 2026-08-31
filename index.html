@@ -367,6 +367,31 @@ button{font-family:inherit;}
 /* compra a cuotas en su mes de origen: el número grande es la compra total, que NO es
    lo que afecta el Disponible de este mes -> se muestra en tono neutro, no de gasto */
 .li-amount.li-amount-cuota-origen{color:var(--cream-dim); font-weight:500;}
+/* fila VIRTUAL de cuota (meses posteriores al de origen): a diferencia de la fila de
+   origen, este monto SÍ es el impacto real en el Disponible de ese mes -> rojo. */
+.li-amount.li-amount-cuota-real{color:var(--danger); font-weight:600;}
+/* cuota de un mes ya marcada como pagada a mano (pestaña Cuotas): la fila virtual sigue
+   visible pero atenuada y con un check. */
+#hList .list-item.cuota-paid{opacity:0.5;}
+.li-cuota-check{display:inline-flex; align-items:center; color:var(--success); flex-shrink:0;}
+.li-cuota-check .icon{width:14px; height:14px; stroke-width:3;}
+:root.hc #hList .list-item.cuota-paid{opacity:1; border-style:dashed;}
+/* detalle de proyección de cuota (fila virtual, no editable) */
+.cuota-proy-mes{font-size:13px; color:var(--gold-dim); margin:-12px 0 16px;}
+.cuota-proy-origen{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:12px 14px; margin:12px 0;
+}
+.cuota-proy-origen-title{
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold-dim); margin:0 0 8px;
+}
+.cuota-proy-line{
+  display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  font-size:13.5px; color:var(--cream-dim); padding:5px 0;
+}
+.cuota-proy-line + .cuota-proy-line{border-top:1px solid var(--border);}
+.cuota-proy-line b{color:var(--cream); font-weight:600; text-align:right; overflow-wrap:anywhere;}
+.cuota-proy-note{font-size:12px; color:var(--gold-dim); line-height:1.5; margin:12px 0 14px;}
 
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
@@ -1146,6 +1171,36 @@ button{font-family:inherit;}
   </div>
 </div>
 
+<!-- SHEET: proyección de cuota (fila virtual del Historial, no editable) -->
+<div class="sheet-overlay" id="sheetCuotaProyeccion">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Proyección de cuota</h2>
+    <p class="cuota-proy-mes" id="cuotaProyMes"></p>
+    <div class="int-result">
+      <p class="big" id="cuotaProyMonto">$0</p>
+      <p class="sub" id="cuotaProySub"></p>
+    </div>
+    <p class="debt-manual-note" id="cuotaProyPagada" style="display:none;">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+      Esta cuota ya fue marcada como pagada este mes.
+    </p>
+    <div class="cuota-proy-origen">
+      <p class="cuota-proy-origen-title">Compra original</p>
+      <div class="cuota-proy-line"><span>Descripción</span><b id="cuotaProyDesc"></b></div>
+      <div class="cuota-proy-line"><span>Fecha de origen</span><b id="cuotaProyOrigenFecha"></b></div>
+      <div class="cuota-proy-line"><span>Monto total</span><b id="cuotaProyTotal"></b></div>
+      <div class="cuota-proy-line"><span>Cuotas en total</span><b id="cuotaProyCuotas"></b></div>
+    </div>
+    <p class="cuota-proy-note">
+      Esta fila es una proyección automática de la compra a cuotas. No se puede editar ni
+      eliminar desde aquí: para modificarla o borrarla, ve a la compra en su mes de origen.
+    </p>
+    <button class="btn-primary" id="btnCuotaProyOrigen">Ir a la compra original</button>
+    <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
 <script>
 /* ==================== ÍCONOS (SVG inline, sin dependencias externas) ==================== */
 const ICONS = {
@@ -1191,7 +1246,8 @@ const ICONS = {
   "music": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   "search": '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   "filter": '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
-  "image": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'
+  "image": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  "check": '<polyline points="20 6 9 17 4 12"/>'
 };
 function icon(name, extraClass){
   const path = ICONS[name] || ICONS['tag'];
@@ -1527,20 +1583,24 @@ function disponibleDelMes(refDate){
 // cuenta corriente, pero a nivel de movimiento individual dentro del mes: se parte del
 // saldo acumulado de meses anteriores (saldoAcumuladoHasta) y se van sumando los
 // ingresos y restando los gastos del mes en orden cronológico ascendente. En un mismo
-// día no hay hora, así que se ordena: ingresos antes que gastos, y dentro de cada grupo
-// en el orden en que los devuelve getIncomesForMonth/getExpensesForMonth. El resultado
-// se memoiza por mes visible (una sola pasada), no se recalcula por fila; la caché se
-// limpia en cada renderAll() junto con la de la cuenta corriente.
-// El Disponible del Resumen resta, además de los gastos/ingresos del mes: (a) las cuotas
-// activas de TODAS las deudas y (b) los aportes a metas (manuales + automáticos). Nada de
-// eso es una fila de esta lista (una compra a crédito solo tiene fila en su mes de compra,
-// y ahí su cuota vale 0). Para que el saldo de la ÚLTIMA fila cronológica cierre igual que
-// disponibleDelMes(), esas dos salidas se descuentan por adelantado del saldo de apertura
-// (con los mismos números que flujoBrutoDelMes / totalAportesMetasDelMes). Efecto: los
-// saldos intermedios ya vienen con las cuotas/metas del mes "apartadas".
+// día no hay hora, así que se ordena: ingresos, luego gastos, luego cuotas virtuales, y
+// dentro de cada grupo en el orden en que los devuelven getIncomes/getExpenses/
+// cuotasVirtualesHistorial. El resultado se memoiza por mes visible (una sola pasada),
+// no se recalcula por fila; la caché se limpia en cada renderAll() junto con la de la
+// cuenta corriente.
+// El Disponible del Resumen resta, además de los gastos/ingresos del mes: (a) la cuota
+// vigente de cada deuda y (b) los aportes a metas (manuales + automáticos). Las cuotas
+// de meses POSTERIORES al de la compra ahora son filas de esta lista
+// (cuotasVirtualesHistorial): entran en la pasada cronológica y descuentan su monto en
+// su fecha. Los aportes a metas no son fila, así que esa única salida sí se descuenta
+// por adelantado del saldo de apertura (con el mismo número que totalAportesMetasDelMes).
+// Efecto: el saldo de la ÚLTIMA fila del mes vuelve a cerrar igual que disponibleDelMes().
 let SALDO_ROW_CACHE = { mk:null, map:null };
 function resetSaldoRowCache(){ SALDO_ROW_CACHE = { mk:null, map:null }; }
-function saldoRowKey(kind, id, date){ return (kind === 'ingreso' ? 'i:' : 'g:') + id + ':' + date; }
+function saldoRowKey(kind, id, date){
+  const p = kind === 'ingreso' ? 'i:' : (kind === 'cuota' ? 'c:' : 'g:');
+  return p + id + ':' + date;
+}
 // Impacto de un gasto en el saldo acumulado del mes = su monto. Una compra a crédito no
 // mueve el saldo en el momento de la compra: su costo se reparte en cuotas, y TODAS las
 // cuotas activas del mes ya se descuentan al arrancar saldoPorMovimientoDelMes(); su fila
@@ -1548,13 +1608,20 @@ function saldoRowKey(kind, id, date){ return (kind === 'ingreso' ? 'i:' : 'g:') 
 function impactoGastoEnSaldo(e){
   return (e && e.debtId) ? 0 : e.amount;
 }
-// Movimientos del mes (gastos + ingresos) en orden cronológico ascendente canónico.
+// Prioridad dentro de un mismo día: ingresos, luego gastos, luego cuotas virtuales.
+const CRONO_RANK = k => k === 'ingreso' ? 0 : (k === 'cuota' ? 2 : 1);
+// Movimientos del mes (gastos + ingresos + cuotas virtuales) en orden cronológico
+// ascendente canónico. Las cuotas de meses posteriores al de la compra ya no se
+// descuentan "en bloque" del saldo de apertura: entran aquí como una fila más, en su
+// fecha (mismo día del mes que la compra), leyendo el monto de cuotaInfoForMonth — el
+// mismo número que usa el Resumen. La suma total no cambia; sí su lugar cronológico.
 function movimientosCronoAsc(refDate){
   const ingresos = getIncomesForMonth(refDate).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
   const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e), _ord:idx }));
-  return [...ingresos, ...gastos].sort((a,b)=>
+  const cuotas   = cuotasVirtualesHistorial(refDate).map((c,idx)=>({ kind:'cuota', id:c.id, date:c.date, delta:-c.amount, _ord:idx }));
+  return [...ingresos, ...gastos, ...cuotas].sort((a,b)=>
     a.date.localeCompare(b.date)
-    || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
+    || (CRONO_RANK(a.kind) - CRONO_RANK(b.kind))
     || (a._ord - b._ord)
   );
 }
@@ -1562,10 +1629,11 @@ function saldoPorMovimientoDelMes(refDate){
   const mk = monthKey(refDate);
   if(SALDO_ROW_CACHE.mk === mk && SALDO_ROW_CACHE.map) return SALDO_ROW_CACHE.map;
   const map = new Map();
-  // saldo de meses anteriores (arrastre) − cuotas activas del mes − aportes a metas del
-  // mes: las salidas del mes que el Resumen descuenta pero que no son filas de esta lista.
+  // saldo de meses anteriores (arrastre) − aportes a metas del mes: la única salida del
+  // mes que el Resumen descuenta y que NO es fila de esta lista. Las cuotas de meses
+  // posteriores al de origen ahora SÍ son filas (cuotasVirtualesHistorial) y se
+  // descuentan en su lugar cronológico dentro de la pasada de abajo.
   let run = saldoAcumuladoHasta(refDate);
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) run -= info.monto; });
   run -= totalAportesMetasDelMes(refDate);
   movimientosCronoAsc(refDate).forEach(m=>{
     run += m.delta;
@@ -2794,6 +2862,84 @@ function toggleManualPaid(debtId, refDate){
   saveState(); renderCuotas();
 }
 
+/* ==================== CUOTAS: filas VIRTUALES en el Historial ==================== */
+// Salvedad del Día 4: una compra a cuotas solo tiene UNA fila real, en su mes de origen
+// (con el monto de la compra completa y saldo 0). Las cuotas de los meses siguientes
+// descuentan del Disponible del Resumen (vía cuotaInfoForMonth) pero no tenían fila
+// propia: quedaban fuera de la búsqueda y del filtro por categoría, y descuadraban el
+// saldo acumulado de la última fila del mes.
+// Esta función genera, para el mes `refDate`, una fila VIRTUAL por cada deuda cuya cuota
+// siga vigente ese mes — mismo criterio que el Resumen: cuotaInfoForMonth() != null, que
+// solo ocurre en meses POSTERIORES al de la compra. Es 100% de visualización/búsqueda:
+// el monto se LEE de cuotaInfoForMonth (no hay cálculo paralelo) y su fecha es el mismo
+// día del mes que la compra original (recortado al último día si el mes fuera más corto).
+function cuotasVirtualesHistorial(refDate){
+  const mk = monthKey(refDate);
+  const out = [];
+  state.debts.forEach(d=>{
+    const info = cuotaInfoForMonth(d, refDate);
+    if(!info) return;
+    const pd = new Date(d.purchaseDate+"T00:00:00");
+    const lastDay = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
+    const useDay = Math.min(pd.getDate(), lastDay);
+    const dd = String(useDay).padStart(2,'0');
+    const mm = String(refDate.getMonth()+1).padStart(2,'0');
+    out.push({
+      id: 'cuota-'+d.id+'-'+mk,
+      debtId: d.id,
+      date: `${refDate.getFullYear()}-${mm}-${dd}`,
+      amount: info.monto,                 // cuota de ESTE mes (no el total de la compra)
+      category: d.category,
+      method: 'Crédito',
+      description: d.description || '',
+      tipo: 'Casual',
+      isVirtualCuota: true,
+      cuotaNum: info.cuotaNum,
+      totalCuotas: info.total,
+      paid: isManuallyPaid(d, refDate)
+    });
+  });
+  return out;
+}
+// Detalle de una fila virtual: es una proyección de la compra original, no se edita ni
+// se elimina aquí. Muestra los datos de origen y ofrece saltar a la compra en su mes.
+function openCuotaProyeccion(debtId){
+  const d = state.debts.find(x=> x.id === debtId);
+  if(!d) return;
+  const info = cuotaInfoForMonth(d, currentDate);
+  const montoCuota = info ? info.monto : (d.totalAmount / d.numCuotas);
+  const [py, pm] = d.purchaseDate.split('-').map(Number);
+  const mesOrigen = MESES[pm-1] + ' ' + py;
+  const cuotasTxt = d.numCuotas === 1 ? '1 cuota' : d.numCuotas + ' cuotas';
+
+  document.getElementById('cuotaProyMes').textContent = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
+  document.getElementById('cuotaProyMonto').textContent = money(montoCuota);
+  document.getElementById('cuotaProySub').textContent =
+    (info ? `Cuota ${info.cuotaNum} de ${info.total}` : `Cuota de ${cuotasTxt}`) +
+    (d.description ? ' · ' + d.description : '');
+  document.getElementById('cuotaProyDesc').textContent = d.description || 'Sin descripción';
+  document.getElementById('cuotaProyOrigenFecha').textContent = fmtDate(d.purchaseDate) + ' · ' + mesOrigen;
+  document.getElementById('cuotaProyTotal').textContent = money(d.totalAmount);
+  document.getElementById('cuotaProyCuotas').textContent = cuotasTxt;
+  document.getElementById('cuotaProyPagada').style.display = isManuallyPaid(d, currentDate) ? '' : 'none';
+
+  const btn = document.getElementById('btnCuotaProyOrigen');
+  const originExp = state.expenses.find(e=> e.debtId === debtId);
+  if(originExp){
+    btn.style.display = '';
+    btn.onclick = ()=>{
+      closeSheet('sheetCuotaProyeccion');
+      currentDate.setFullYear(py, pm-1, 1);
+      renderAll();
+      openGastoForm(originExp.id);
+    };
+  } else {
+    btn.style.display = 'none';
+    btn.onclick = null;
+  }
+  openSheet('sheetCuotaProyeccion');
+}
+
 /* ==================== RENDER: RESUMEN ==================== */
 function renderResumen(){
   const monthExpenses = getExpensesForMonth(currentDate);
@@ -2958,7 +3104,13 @@ function renderHistSearchControls(){
   if(!enLista) return;
 
   const monthExpenses = getExpensesForMonth(currentDate);
-  const cats = [...new Set(monthExpenses.map(e=> e.category).filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
+  // Incluye también las categorías de las cuotas virtuales del mes: así, en un mes
+  // posterior al de la compra, el chip de esa categoría existe y el filtro la alcanza.
+  const catsRaw = [
+    ...monthExpenses.map(e=> e.category),
+    ...cuotasVirtualesHistorial(currentDate).map(c=> c.category)
+  ];
+  const cats = [...new Set(catsRaw.filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
 
   const catAplica = hTab !== 'ingresos';
 
@@ -3122,13 +3274,29 @@ function renderHistorial(){
   }
   box.style.display = ''; chartBox.style.display = 'none';
   if(hTab==='gastos'){
-    const items = applySort(getExpensesForMonth(currentDate), 'description', 'amount', 'date').filter(histPasaGasto);
+    // Gastos reales/fijos + filas virtuales de cuota (meses posteriores al de la compra).
+    const base = [...getExpensesForMonth(currentDate), ...cuotasVirtualesHistorial(currentDate)];
+    const items = applySort(base, 'description', 'amount', 'date').filter(histPasaGasto);
     updateHistCount(items.length);
     if(items.length===0){
       box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
       return;
     }
     const rowHtml = (e)=>{
+      if(e.isVirtualCuota){
+        // Fila virtual: el monto SÍ es lo que impacta el Disponible de este mes -> rojo.
+        const check = e.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
+        return `
+      <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}">
+        <div class="li-icon">${catIcon(e.category)}</div>
+        <div class="li-body">
+          <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${check}</p>
+          <p class="li-sub">${fmtDate(e.date)} · ${e.category} · cuota ${e.cuotaNum} de ${e.totalCuotas}</p>
+        </div>
+        <span class="li-amount li-amount-cuota-real">${money(e.amount)}</span>
+        <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
+      </div>`;
+      }
       const badge = e.debtId ? '<span class="li-badge">Cuota</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
       // Compra a cuotas (siempre se lista en su mes de origen): el monto grande es la
       // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro.
@@ -3147,6 +3315,9 @@ function renderHistorial(){
     box.innerHTML = agrupaPorDia ? groupByDayHtml(items, rowHtml) : items.map(rowHtml).join('');
     box.querySelectorAll('[data-editexpense]').forEach(el=>{
       el.addEventListener('click', ()=> openGastoForm(el.dataset.editexpense));
+    });
+    box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
+      el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
     });
     wireRowExpand(box);
   } else {
@@ -3201,21 +3372,32 @@ function renderHistorialTodo(box){
     if(hFilterCats.size > 0) return false;
     return true;
   });
+  // Filas virtuales de cuota (meses posteriores al de la compra): participan igual que
+  // cualquier fila en búsqueda, filtro por categoría, orden y saldo acumulado.
+  const cuotasV = cuotasVirtualesHistorial(currentDate).map(c=>({
+    kind:'cuota', id:c.id, date:c.date, amount:c.amount,
+    name:c.description||'', category:c.category, method:c.method, tipo:c.tipo,
+    debtId:c.debtId, isVirtualCuota:true, cuotaNum:c.cuotaNum, totalCuotas:c.totalCuotas, paid:c.paid
+  })).filter(c=>{
+    if(!histMatchTexto(c.name)) return false;
+    if(hFilterCats.size > 0 && !hFilterCats.has(c.category)) return false;
+    return true;
+  });
 
-  updateHistCount(gastos.length + ingresos.length);
+  updateHistCount(gastos.length + ingresos.length + cuotasV.length);
 
   let items, agrupaPorDia;
   if(campo === 'fecha'){
     // Mismo orden canónico (asc) que usa el saldo acumulado; para "recientes primero"
     // se invierte tal cual, así el "Saldo" de cada fila calza leyendo de arriba abajo.
-    const asc = [...ingresos, ...gastos].sort((a,b)=>
+    const asc = [...ingresos, ...gastos, ...cuotasV].sort((a,b)=>
       a.date.localeCompare(b.date)
-      || ((a.kind === 'ingreso' ? 0 : 1) - (b.kind === 'ingreso' ? 0 : 1))
+      || (CRONO_RANK(a.kind) - CRONO_RANK(b.kind))
     );
     items = dir === 'asc' ? asc : asc.reverse();
     agrupaPorDia = true;
   } else {
-    items = applySort([...gastos, ...ingresos], 'name', 'amount', 'date');
+    items = applySort([...gastos, ...ingresos, ...cuotasV], 'name', 'amount', 'date');
     agrupaPorDia = false;
   }
   if(items.length===0){
@@ -3237,6 +3419,24 @@ function renderHistorialTodo(box){
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount income">+${money(it.amount)}</span>
+          ${saldoTxt}
+        </div>
+        <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
+      </div>`;
+    }
+    if(it.isVirtualCuota){
+      // Fila virtual de cuota: el −monto SÍ pesa en el saldo de este mes -> rojo. Si la
+      // cuota ya se marcó como pagada a mano, la fila se atenúa y muestra un check.
+      const check = it.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
+      return `
+      <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}">
+        <div class="li-icon">${catIcon(it.category)}</div>
+        <div class="li-body">
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${check}</p>
+          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · cuota ${it.cuotaNum} de ${it.totalCuotas}</p>
+        </div>
+        <div class="li-amount-wrap">
+          <span class="li-amount li-amount-cuota-real">−${money(it.amount)}</span>
           ${saldoTxt}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -3278,6 +3478,9 @@ function renderHistorialTodo(box){
   });
   box.querySelectorAll('[data-editincome]').forEach(el=>{
     el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
+  });
+  box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
+    el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
   });
   wireRowExpand(box);
 }
