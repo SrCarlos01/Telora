@@ -98,6 +98,23 @@ button{font-family:inherit;}
 }
 .icon-btn:active{transform:scale(0.9); color:var(--gold);}
 
+/* ---------- MODO SOLO LECTURA (Tanda H.3): indicador discreto ---------- */
+.readonly-banner{
+  align-items:center; justify-content:center; gap:8px;
+  margin:0 20px 8px; padding:9px 14px; border-radius:var(--radius-sm);
+  background:rgba(201,166,107,0.12); border:1px solid var(--gold-dim);
+  color:var(--gold); font-size:12.5px; font-weight:500;
+}
+.readonly-banner .icon{width:14px; height:14px; flex-shrink:0;}
+:root.hc .readonly-banner{border-width:2px; color:var(--cream);}
+/* nota dentro de un formulario bloqueado (gasto/ingreso en modo solo lectura) */
+.readonly-note{
+  display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--gold);
+  background:rgba(201,166,107,0.12); border:1px solid var(--gold-dim);
+  border-radius:var(--radius-sm); padding:9px 12px; margin:-6px 0 16px;
+}
+.readonly-note .icon{width:14px; height:14px; flex-shrink:0;}
+
 /* ---------- MONTH SELECTOR ---------- */
 .month-select{
   display:flex; align-items:center; justify-content:center; gap:18px;
@@ -531,6 +548,7 @@ button{font-family:inherit;}
   border:1px solid var(--border); color:var(--cream-dim); font-size:15px; cursor:pointer; transition:all .15s ease;
 }
 .toggle-opt.active{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.toggle-opt.ro-disabled{opacity:0.5; pointer-events:none;}
 .add-inline{
   display:flex; gap:8px; margin-top:10px; padding:8px; border-radius:var(--radius-sm);
   background:var(--surface-3); border:1px solid var(--border);
@@ -984,6 +1002,11 @@ button:active{ transform:scale(0.97); }
     </div>
   </div>
 
+  <div class="readonly-banner" id="readonlyBanner" style="display:none;">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <span>Modo solo lectura activo</span>
+  </div>
+
   <div class="month-select">
     <button id="prevMonth" aria-label="Mes anterior"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
     <span class="month-label" id="monthLabel">Agosto 2026</span>
@@ -1358,6 +1381,14 @@ button:active{ transform:scale(0.97); }
       Tu navegador no soporta esta función (necesita una conexión segura, https).
     </p>
 
+    <p class="section-title" style="margin-top:20px;">Modo solo lectura</p>
+    <label class="check-row" style="margin-bottom:4px;">
+      <input type="checkbox" id="cfgReadOnly">
+      <span>Activar modo solo lectura
+        <small>Bloquea agregar, editar o eliminar gastos, ingresos y metas, y los cambios de categorías/métodos/fuentes. Cambiar de mes, ver Historial, Insights y Metas sigue funcionando igual. Descargar o compartir el respaldo también sigue disponible; restaurar uno queda bloqueado mientras esté activo.</small>
+      </span>
+    </label>
+
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
     <p class="sheet-note" style="margin:0 0 12px;">
       Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
@@ -1593,7 +1624,8 @@ const ICONS = {
   "search": '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   "filter": '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
   "image": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
-  "check": '<polyline points="20 6 9 17 4 12"/>'
+  "check": '<polyline points="20 6 9 17 4 12"/>',
+  "lock": '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
 };
 function icon(name, extraClass){
   const path = ICONS[name] || ICONS['tag'];
@@ -2472,7 +2504,10 @@ document.querySelectorAll('.sheet-overlay').forEach(ov=>{
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
 });
 
-document.getElementById('btnAdd').onclick = ()=> openSheet('sheetChoice');
+document.getElementById('btnAdd').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  openSheet('sheetChoice');
+};
 document.getElementById('choiceGasto').onclick = ()=>{ closeSheet('sheetChoice'); openGastoForm(null); };
 document.getElementById('choiceIngreso').onclick = ()=>{ closeSheet('sheetChoice'); openIngresoForm(null); };
 document.getElementById('btnConfig').onclick = ()=>{
@@ -2561,6 +2596,10 @@ function gastosFavoritos(){
 
 /* ==================== FORM: GASTO ==================== */
 function openGastoForm(expenseId){
+  // Crear un gasto nuevo es edición pura: se bloquea antes de abrir nada. Ver/editar
+  // uno existente sí abre el sheet (es la forma de ver el detalle), pero queda
+  // bloqueado por applyReadOnlyLock() más abajo.
+  if(!expenseId && isReadOnly()){ blockReadOnly(); return; }
   editingExpenseId = expenseId;
   fillSelect('gCategoria', state.config.categorias);
   fillSelect('gMetodo', state.config.metodos);
@@ -2625,10 +2664,12 @@ function openGastoForm(expenseId){
   }
 
   syncCuotaFields();
+  applyReadOnlyLock('sheetGasto');
   openSheet('sheetGasto');
 }
 
 document.getElementById('btnSaveGasto').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
   const fecha = document.getElementById('gFecha').value || new Date().toISOString().slice(0,10);
   const monto = parseMonto('gMonto');
@@ -2681,6 +2722,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
 let pendingDeleteType = null; // 'cuota' | 'fijo'
 
 document.getElementById('btnDeleteGasto').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const e = state.expenses.find(x=>x.id===editingExpenseId);
   if(e && e.debtId){
     pendingDeleteExpenseId = editingExpenseId;
@@ -2706,6 +2748,7 @@ document.getElementById('btnDeleteGasto').onclick = ()=>{
   }
 };
 document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   haptic(HAPTIC_DELETE);
   if(pendingDeleteType === 'fijoIngreso'){
     // Ingreso fijo recurrente: corta la recurrencia desde el mes visto en adelante;
@@ -2735,6 +2778,7 @@ document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
 
 /* ==================== FORM: INGRESO ==================== */
 function openIngresoForm(incomeId){
+  if(!incomeId && isReadOnly()){ blockReadOnly(); return; }
   editingIncomeId = incomeId;
   fillSelect('iFuente', state.config.fuentes);
   // Sin fuente preseleccionada al crear: opción vacía al inicio (obliga a elegir).
@@ -2759,9 +2803,11 @@ function openIngresoForm(incomeId){
     document.getElementById('iFijoNote').style.display = itipo==='Fijo' ? 'block' : 'none';
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
+  applyReadOnlyLock('sheetIngreso');
   openSheet('sheetIngreso');
 }
 document.getElementById('btnSaveIngreso').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const fecha = document.getElementById('iFecha').value || new Date().toISOString().slice(0,10);
   const fuente = document.getElementById('iFuente').value;
   const monto = parseMonto('iMonto');
@@ -2785,6 +2831,7 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   flashSaveButton(document.getElementById('btnSaveIngreso'), ()=>{ closeSheet('sheetIngreso'); renderAll(); });
 };
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const i = state.incomes.find(x=>x.id===editingIncomeId);
   if(i && i.tipo==='Fijo'){
     // Ingreso fijo recurrente: confirmación + corte hacia adelante (no se borra el objeto).
@@ -2836,6 +2883,10 @@ let editingGoalId = null;
 function activeGoalsCount(){ return state.goals.filter(g=> g.goalEndMonthKey == null).length; }
 
 function openMetaForm(goalId){
+  // A diferencia de gasto/ingreso, la tarjeta de la meta ya muestra su detalle
+  // completo (expandible) sin necesitar este sheet, así que se bloquea siempre
+  // (crear o editar) en modo solo lectura, antes de abrir nada.
+  if(isReadOnly()){ blockReadOnly(); return; }
   editingGoalId = goalId || null;
 
   if(!editingGoalId && activeGoalsCount() >= GOALS_FREE_LIMIT){
@@ -2885,6 +2936,7 @@ function openMetaForm(goalId){
 document.getElementById('btnNuevaMeta').onclick = ()=> openMetaForm();
 
 document.getElementById('btnSaveMeta').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const nombre = document.getElementById('mNombre').value.trim();
   const montoObjetivo = parseMonto('mMonto');
   const fechaLimite = document.getElementById('mFecha').value;
@@ -2971,6 +3023,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
 // nada que proteger.
 let pendingDeleteGoalId = null;
 document.getElementById('btnDeleteMeta').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===editingGoalId);
   if(!g){ closeSheet('sheetMeta'); return; }
   const tieneHistorial = (g.aportes && g.aportes.length > 0) || (g.aporteAutomatico && g.aporteAutomatico.activo);
@@ -2987,6 +3040,7 @@ document.getElementById('btnDeleteMeta').onclick = ()=>{
   openSheet('sheetConfirmGoal');
 };
 document.getElementById('btnConfirmDeleteGoal').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===pendingDeleteGoalId);
   if(g){ g.goalEndMonthKey = monthKey(mesActualReal()); haptic(HAPTIC_DELETE); saveState(); }
   pendingDeleteGoalId = null;
@@ -3259,6 +3313,7 @@ function renderMetas(){
   box.querySelectorAll('[data-delaporte]').forEach(el=>{
     el.addEventListener('click', (ev)=>{
       ev.stopPropagation();
+      if(isReadOnly()){ blockReadOnly(); return; }
       const [gid, aid] = el.dataset.delaporte.split(':');
       const g = state.goals.find(x=>x.id===gid);
       if(!g || !Array.isArray(g.aportes)) return;
@@ -3289,6 +3344,7 @@ function aportePactadoDeMeta(g){
   return aa.monto ? aa.monto : null;
 }
 function openAportar(goalId){
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===goalId);
   if(!g) return;
   aportarGoalId = goalId;
@@ -3336,6 +3392,7 @@ document.getElementById('btnAportarVolver').onclick = ()=>{
   document.getElementById('aportarPaso1').style.display = 'block';
 };
 document.getElementById('btnAportarConfirmar').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===aportarGoalId);
   const monto = parseMonto('apMonto');
   if(!g || !monto || monto <= 0){ closeSheet('sheetAportar'); return; }
@@ -3371,6 +3428,7 @@ document.querySelectorAll('#sheetAutoMeta [data-autotipo]').forEach(el=>{
   });
 });
 function openAutoMeta(goalId){
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===goalId);
   if(!g) return;
   autoMetaGoalId = goalId;
@@ -3388,6 +3446,7 @@ function openAutoMeta(goalId){
   openSheet('sheetAutoMeta');
 }
 document.getElementById('btnSaveAutoMeta').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===autoMetaGoalId);
   if(!g){ closeSheet('sheetAutoMeta'); return; }
   const tipo = document.querySelector('#sheetAutoMeta [data-autotipo].active').dataset.autotipo;
@@ -3416,6 +3475,7 @@ document.getElementById('btnSaveAutoMeta').onclick = ()=>{
   saveState(); closeSheet('sheetAutoMeta'); renderAll();
 };
 document.getElementById('btnDisableAutoMeta').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   const g = state.goals.find(x=>x.id===autoMetaGoalId);
   if(!g){ closeSheet('sheetAutoMeta'); return; }
   const prev = g.aporteAutomatico || {};
@@ -3525,6 +3585,7 @@ function isManuallyPaid(debt, refDate){
   return (debt.manualPaidMonthKeys||[]).includes(monthKey(refDate));
 }
 function toggleManualPaid(debtId, refDate){
+  if(isReadOnly()){ blockReadOnly(); return; }
   const d = state.debts.find(x=>x.id===debtId);
   if(!d) return;
   if(!d.manualPaidMonthKeys) d.manualPaidMonthKeys = [];
@@ -4560,6 +4621,7 @@ function renderConfig(){
   renderFontScaleRow();
   renderAltoContrasteRow();
   renderPinRow();
+  renderReadOnlyRow();
 }
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -4575,6 +4637,7 @@ function renderConfigList(key, boxId){
   `).join('');
   box.querySelectorAll('[data-remove]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
       const [k,idx] = btn.dataset.remove.split(':');
       const removed = state.config[k][parseInt(idx)];
       state.config[k].splice(parseInt(idx),1);
@@ -4590,6 +4653,7 @@ function renderConfigList(key, boxId){
 }
 document.querySelectorAll('[data-addlist]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    if(isReadOnly()){ blockReadOnly(); return; }
     const key = btn.dataset.addlist;
     const inputId = key==='categorias'?'newCategoria':key==='metodos'?'newMetodo':'newFuente';
     const input = document.getElementById(inputId);
@@ -4604,6 +4668,7 @@ document.querySelectorAll('[data-addlist]').forEach(btn=>{
 /* ==================== ÍCONO PERSONALIZADO POR CATEGORÍA ==================== */
 let catIconTarget = null;
 function openCatIcon(catName){
+  if(isReadOnly()){ blockReadOnly(); return; }
   if(!catName) return;
   catIconTarget = catName;
   document.getElementById('catIconTitle').textContent = 'Ícono de "' + catName + '"';
@@ -4624,6 +4689,7 @@ function openCatIcon(catName){
   openSheet('sheetCatIcon');
 }
 function setCatIcon(catName, cfg){
+  if(isReadOnly()){ blockReadOnly(); return; }
   if(!state.config.categoriaIconos) state.config.categoriaIconos = {};
   state.config.categoriaIconos[catName] = cfg;
   saveState();
@@ -4646,6 +4712,7 @@ document.getElementById('btnSaveCatEmoji').onclick = ()=>{
   setCatIcon(catIconTarget, { tipo:'emoji', valor:v });
 };
 document.getElementById('btnCatIconDefault').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   // Borra la entrada -> catIcon() vuelve a CAT_ICONS[cat] || 'tag'.
   if(catIconTarget && state.config.categoriaIconos) delete state.config.categoriaIconos[catIconTarget];
   saveState();
@@ -4884,6 +4951,11 @@ function renderPinRow(){
   if(note) note.style.display = supported ? 'none' : 'block';
 }
 document.getElementById('cfgPinEnabled').addEventListener('change', e=>{
+  if(isReadOnly()){
+    e.target.checked = !e.target.checked;   // revierte el toggle visual: no se tocó nada
+    blockReadOnly();
+    return;
+  }
   if(e.target.checked){
     // No se activa todavía: recién queda activo si crear+confirmar el PIN sale bien.
     e.target.checked = false;
@@ -4911,6 +4983,62 @@ try{
     }
   });
 }catch(_){ /* sin soporte de visibilitychange: la app queda usable, solo sin el re-bloqueo automático */ }
+
+/* ==================== MODO SOLO LECTURA (Tanda H.3) ====================
+   Guardia central: cualquier acción que agregue/edite/elimine un gasto, ingreso,
+   meta o cambie categorías/métodos/fuentes pasa primero por isReadOnly(). Exportar
+   o compartir el respaldo NO se bloquea (no edita nada); restaurar uno SÍ, porque
+   sobrescribe todos los datos. La navegación y visualización (mes, Historial,
+   Insights, Metas, gráficos) no pasa por esta guardia: sigue igual siempre.
+   El propio toggle de "Modo solo lectura" nunca pasa por esta guardia: si lo
+   hiciera, no habría forma de salir del modo una vez activado. */
+function isReadOnly(){ return !!(state.config && state.config.readOnly); }
+function blockReadOnly(){
+  showToast('Modo solo lectura activo: desactívalo en Configuración para editar.', 'error');
+  haptic(HAPTIC_DELETE);
+  return true;
+}
+function renderReadOnlyBanner(){
+  const banner = document.getElementById('readonlyBanner');
+  if(banner) banner.style.display = isReadOnly() ? 'flex' : 'none';
+}
+function renderReadOnlyRow(){
+  const chk = document.getElementById('cfgReadOnly');
+  if(chk) chk.checked = isReadOnly();
+}
+// Bloqueo visual de un sheet de edición cuando se abre para VER un registro existente
+// (gasto/ingreso: la fila del Historial es también su única forma de ver el detalle,
+// así que el sheet se deja abrir, pero sin edición posible). Crear uno nuevo ya se
+// bloquea antes de llegar aquí, con un toast, sin abrir nada.
+function applyReadOnlyLock(sheetId){
+  const sheet = document.querySelector('#' + sheetId + ' .sheet');
+  if(!sheet) return;
+  const locked = isReadOnly();
+  sheet.querySelectorAll('input, select, textarea').forEach(el=> el.disabled = locked);
+  sheet.querySelectorAll('.toggle-opt').forEach(el=> el.classList.toggle('ro-disabled', locked));
+  // Guardar: se oculta al bloquear y se restaura al desbloquear.
+  sheet.querySelectorAll('.btn-primary').forEach(el=> el.style.display = locked ? 'none' : '');
+  // Eliminar: solo se oculta al bloquear; su visibilidad normal la fija openGastoForm /
+  // openIngresoForm en cada apertura (según sea alta o edición), así que aquí no se toca al desbloquear.
+  if(locked) sheet.querySelectorAll('.btn-danger').forEach(el=> el.style.display = 'none');
+  let note = sheet.querySelector('.readonly-note');
+  if(locked && !note){
+    note = document.createElement('p');
+    note.className = 'readonly-note';
+    note.innerHTML = icon('lock') + '<span>Modo solo lectura: solo puedes ver este registro.</span>';
+    const h2 = sheet.querySelector('h2');
+    if(h2) h2.insertAdjacentElement('afterend', note);
+  } else if(!locked && note){
+    note.remove();
+  }
+}
+document.getElementById('cfgReadOnly').addEventListener('change', e=>{
+  if(!state.config) state.config = {};
+  state.config.readOnly = e.target.checked;
+  saveState();
+  renderReadOnlyBanner();
+  showToast(e.target.checked ? 'Modo solo lectura activado.' : 'Modo solo lectura desactivado.', 'success');
+});
 
 /* ==================== RESPALDO / RESTAURAR DATOS (JSON) ==================== */
 // El respaldo es `state` completo tal cual: gastos, ingresos, deudas/cuotas, metas
@@ -5029,6 +5157,9 @@ function fillRestoreCompare(backup){
 
 let pendingRestoreData = null;
 document.getElementById('btnRestoreData').onclick = ()=>{
+  // Restaurar sobrescribe todos los datos: se bloquea antes de siquiera elegir un
+  // archivo (exportar/compartir el respaldo, en cambio, no se toca — no edita nada).
+  if(isReadOnly()){ blockReadOnly(); return; }
   document.getElementById('restoreFileInput').click();
 };
 document.getElementById('restoreFileInput').onchange = (e)=>{
@@ -5055,6 +5186,7 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
   e.target.value = '';
 };
 document.getElementById('btnConfirmRestore').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
   if(pendingRestoreData){
     state = pendingRestoreData;
     if(state.config && !state.config.categoriaIconos) state.config.categoriaIconos = {};
@@ -5765,6 +5897,7 @@ aplicarFontScale((state.config && state.config.fontScale) || '1');
 function renderAll(){
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
+  renderReadOnlyBanner();
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
   // Metas es independiente del mes: sin selector de mes en esa pantalla.
   const monthSel = document.querySelector('.month-select');
