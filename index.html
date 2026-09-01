@@ -370,6 +370,9 @@ button{font-family:inherit;}
 /* fila VIRTUAL de cuota (meses posteriores al de origen): a diferencia de la fila de
    origen, este monto SÍ es el impacto real en el Disponible de ese mes -> rojo. */
 .li-amount.li-amount-cuota-real{color:var(--danger); font-weight:600;}
+/* gasto que SÍ impacta el Disponible del mes (normal o fijo): en rojo, igual que la
+   cuota real. El blanco/neutro queda solo para la fila de origen de una compra a crédito. */
+.li-amount.li-amount-gasto{color:var(--danger); font-weight:600;}
 /* cuota de un mes ya marcada como pagada a mano (pestaña Cuotas): la fila virtual
    conserva su aspecto normal — el check ya es señal suficiente de que está pagada. */
 .li-cuota-check{display:inline-flex; align-items:center; color:var(--success); flex-shrink:0;}
@@ -705,17 +708,22 @@ button{font-family:inherit;}
 /* ---------- RESUMEN: sección INSIGHTS FINANCIEROS ---------- */
 .insights-wrap{margin-top:22px;}
 .insights-wrap .section-title{margin-bottom:12px;}
-/* a) Semáforo — indicador chico y discreto, no interrumpe la lectura */
+/* a) Semáforo — 3 círculos en línea (verde, amarillo, rojo). Solo el del estado
+   actual queda encendido (color sólido y saturado); los otros dos, apagados. */
 .insight-semaforo{
-  display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--cream-dim);
-  margin:0 0 10px;
+  display:flex; align-items:center; gap:7px;
+  margin:0 0 10px; min-height:16px;
 }
-.insight-semaforo .sem-dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
-.insight-semaforo.sem-verde .sem-dot{background:var(--success);}
-.insight-semaforo.sem-ambar .sem-dot{background:var(--gold);}
-.insight-semaforo.sem-rojo  .sem-dot{background:var(--danger);}
-:root.hc .insight-semaforo{color:var(--cream);}
-:root.hc .insight-semaforo .sem-dot{width:11px; height:11px; border:1px solid var(--cream);}
+.insight-semaforo .sem-dot{
+  width:11px; height:11px; border-radius:50%; flex-shrink:0;
+  background:var(--cream-dim); opacity:0.22; transition:opacity .2s ease;
+}
+.insight-semaforo .sem-dot.on{opacity:1;}
+.insight-semaforo .sem-dot.sem-verde.on{background:#2fbf5f;}
+.insight-semaforo .sem-dot.sem-ambar.on{background:#f5b301;}
+.insight-semaforo .sem-dot.sem-rojo.on{background:#ec3b3b;}
+:root.hc .insight-semaforo .sem-dot{opacity:0.5; border:1px solid var(--cream-dim);}
+:root.hc .insight-semaforo .sem-dot.on{opacity:1; border-color:var(--cream);}
 /* b) Frase resumen — una sola línea */
 .insight-frase{
   font-size:14px; color:var(--cream); line-height:1.5; margin:0 0 14px;
@@ -1400,6 +1408,10 @@ function saveState(){ localStorage.setItem('misfinanzas_data', JSON.stringify(st
 let state = loadState();
 let currentDate = new Date();
 currentDate.setDate(1);
+// Mes real de hoy (día 1). La pestaña Metas NO usa el selector de mes: todos sus
+// cálculos (racha, aportes automáticos, gráficos) razonan sobre este mes, no sobre
+// el mes navegado en el resto de la app.
+function mesActualReal(){ const d = new Date(); d.setDate(1); return d; }
 let currentScreen = 'resumen';
 let hTab = 'gastos';
 let cTab = 'activas';
@@ -1828,7 +1840,7 @@ function metasAlgunaVezPausadas(){
     }
   });
   if(startMk === null) return set;
-  const endMk = monthKey(currentDate);
+  const endMk = monthKey(mesActualReal());   // Metas es independiente del selector de mes
   // acotado a los últimos 48 meses por si hay fechas de activación muy viejas
   for(let mk = Math.max(startMk + 1, endMk - 48); mk <= endMk; mk++){
     const d = new Date(Math.floor(mk / 12), mk % 12, 1);
@@ -2511,15 +2523,14 @@ document.getElementById('btnDeleteMeta').onclick = ()=>{
     return;
   }
   pendingDeleteGoalId = g.id;
-  const nombreMes = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
   document.getElementById('confirmGoalText').textContent =
-    `Esta meta dejará de aparecer desde ${nombreMes} en adelante. Los aportes ya realizados y el efecto que tuvieron en tu Disponible de meses anteriores se mantienen sin cambios. Esta acción no se puede deshacer.`;
+    `Esta meta dejará de aparecer. Los aportes ya realizados y el efecto que tuvieron en tu Disponible de meses anteriores se mantienen sin cambios. Esta acción no se puede deshacer.`;
   closeSheet('sheetMeta');
   openSheet('sheetConfirmGoal');
 };
 document.getElementById('btnConfirmDeleteGoal').onclick = ()=>{
   const g = state.goals.find(x=>x.id===pendingDeleteGoalId);
-  if(g){ g.goalEndMonthKey = monthKey(currentDate); haptic(HAPTIC_DELETE); saveState(); }
+  if(g){ g.goalEndMonthKey = monthKey(mesActualReal()); haptic(HAPTIC_DELETE); saveState(); }
   pendingDeleteGoalId = null;
   closeSheet('sheetConfirmGoal'); renderAll();
 };
@@ -2560,8 +2571,8 @@ function rachaMeta(g){
   if(!aa || !aa.activo || !aa.fechaActivacion) return null;
   const activMk = monthKey(new Date(aa.fechaActivacion+"T00:00:00"));
   const realMk = monthKey(new Date());
-  // Se cuenta hacia atrás desde el mes visto (acotado al mes real si se está viendo el futuro).
-  let mk = Math.min(monthKey(currentDate), realMk);
+  // Metas no navega por mes: la racha se cuenta hacia atrás desde el mes real de hoy.
+  let mk = realMk;
   let streak = 0, parcial = null, rota = null;
   while(mk > activMk){   // el aporte automático recurre desde el mes siguiente a la activación
     const d = new Date(Math.floor(mk / 12), mk % 12, 1);
@@ -2607,12 +2618,13 @@ function renderMetas(){
     activeGoalsCount() >= GOALS_FREE_LIMIT ? 'none' : 'block';
   syncChartToggle('metas');
 
-  // Metas visibles este mes: las no eliminadas, o eliminadas en un mes futuro al visto
-  // (mismo criterio notCutOff que getExpensesForMonth con los gastos fijos).
-  const visibles = state.goals.filter(g=> goalNotCutOff(g, currentDate));
-  const pausadasAuto = calcularEstadoAportesDelMes(currentDate);   // Día 11
+  // La pestaña Metas es independiente del selector de mes: muestra SIEMPRE las metas
+  // activas (no eliminadas), y todos sus cálculos usan el mes real de hoy.
+  const hoy = mesActualReal();
+  const visibles = state.goals.filter(g=> g.goalEndMonthKey == null);
+  const pausadasAuto = calcularEstadoAportesDelMes(hoy);           // Día 11
   const everPaused = metasAlgunaVezPausadas();                     // pausa en cualquier mes pasado
-  const topGasto = topGastoCategoria(currentDate);
+  const topGasto = topGastoCategoria(hoy);
 
   if(visibles.length === 0){
     box.style.display = ''; chartBox.style.display = 'none';
@@ -2625,7 +2637,7 @@ function renderMetas(){
     if(chartView.metas === 'barra'){
       const definidas = visibles.filter(g=> !g.indefinida);
       const data = definidas.map(g=>{
-        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
+        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
         const pct = g.montoObjetivo > 0 ? Math.min(100, Math.round(ahorrado / g.montoObjetivo * 100)) : 0;
         return { label: g.name, value: pct };
       });
@@ -2639,7 +2651,7 @@ function renderMetas(){
     } else {
       // 'torta': proporción del ahorrado entre TODAS las metas activas (incluye indefinidas).
       const data = visibles.map(g=>{
-        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
+        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
         return { label: g.name, value: ahorrado };
       });
       renderPieChart(chartBox, data, { empty: 'Aún no hay ahorro registrado para graficar.' });
@@ -2656,7 +2668,7 @@ function renderMetas(){
     // "Ahorrado" = aportes manuales reales + lo ya devengado por el aporte automático
     // (mismo dinero que se descontó del Disponible mes a mes). Ver nota en el reporte.
     const ahorradoManual = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0);
-    const ahorrado = ahorradoManual + aporteAutomaticoAcumulado(g, currentDate);
+    const ahorrado = ahorradoManual + aporteAutomaticoAcumulado(g, mesActualReal());
     // Aporte mensual pactado, siempre visible (igual que el monto por cuota en debt-card).
     const aporteLine = `<span>Aporte mensual <b>${aporteMensualTxt}</b></span>`;
     const pausada = aa.activo && pausadasAuto.has(g.id);
@@ -2787,9 +2799,10 @@ function aportePactadoDeMeta(g){
   const aa = g && g.aporteAutomatico;
   if(!aa) return null;
   if(aa.activo && aa.tipo === 'porcentaje'){
-    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
+    const hoy = mesActualReal();   // Metas es independiente del selector de mes
+    const va = aporteAutomaticoVirtualParaMes(g, hoy);
     if(va) return va.monto;
-    return Math.max(0, Math.round(disponibleBaseDelMes(currentDate) * (aa.valor || 0) / 100));
+    return Math.max(0, Math.round(disponibleBaseDelMes(hoy) * (aa.valor || 0) / 100));
   }
   return aa.monto ? aa.monto : null;
 }
@@ -2813,8 +2826,8 @@ document.getElementById('btnAportarRevisar').onclick = ()=>{
   document.getElementById('aportarConfirmText').textContent =
     `Vas a aportar ${money(monto)} a "${g.name}" con fecha de hoy. Se descontará del disponible de este mes.`;
 
-  // Disponible actual del mes (con el saldo acumulado de meses anteriores).
-  const disp = disponibleDelMes(currentDate);
+  // Disponible del mes real de hoy (Metas no usa el selector de mes).
+  const disp = disponibleDelMes(mesActualReal());
   document.getElementById('aportarDisponibleLine').textContent =
     `Disponible de este mes (con saldo anterior): ${money(disp)}`;
 
@@ -2851,7 +2864,7 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
   if(!Array.isArray(g.aportes)) g.aportes = [];
   // ¿Este aporte completa la meta por primera vez? -> vibración de celebración.
   const objetivo = g.montoObjetivo || 0;
-  const ahorradoAntes = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
+  const ahorradoAntes = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
   if(!g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo) haptic(HAPTIC_GOAL);
   else haptic(HAPTIC_OK);
@@ -2937,7 +2950,7 @@ document.getElementById('btnDisableAutoMeta').onclick = ()=>{
 let interesGoalId = null;
 function mesesHastaFecha(fechaIso){
   if(!fechaIso) return null;
-  const diff = monthKey(new Date(fechaIso+"T00:00:00")) - monthKey(currentDate);
+  const diff = monthKey(new Date(fechaIso+"T00:00:00")) - monthKey(mesActualReal());
   return diff > 0 ? diff : null;
 }
 function openInteres(goalId){
@@ -2964,13 +2977,14 @@ function calcInteres(){
   }
   const aa = g.aporteAutomatico || {};
   const i = (tasaAnual / 100) / 12;                 // tasa mensual
-  const inicial = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, currentDate);
+  const inicial = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
   let aporteMensual, notaPct = '';
   if(aa.activo && aa.tipo === 'porcentaje'){
     // El % varía mes a mes según el Disponible: no se puede proyectar un monto fijo.
     // Se usa el estimado del mes actual como aproximación.
-    const va = aporteAutomaticoVirtualParaMes(g, currentDate);
-    const est = va ? va.monto : Math.max(0, Math.round(disponibleBaseDelMes(currentDate) * (aa.valor || 0) / 100));
+    const hoy = mesActualReal();
+    const va = aporteAutomaticoVirtualParaMes(g, hoy);
+    const est = va ? va.monto : Math.max(0, Math.round(disponibleBaseDelMes(hoy) * (aa.valor || 0) / 100));
     aporteMensual = est;
     notaPct = `<br>El aporte varía según tu Disponible; se usó ${money(est)} (estimado del mes actual).`;
   } else {
@@ -3323,11 +3337,12 @@ function renderInsights(){
   const signedMoney = n => (n < 0 ? '−' : '') + money(Math.abs(n));
 
   // ---- a) Semáforo de salud financiera ----
-  let sem, semTxt;
-  if(disp < 0){ sem = 'sem-rojo'; semTxt = 'en rojo'; }
-  else if(disp === 0 || disp < 0.10 * data.ingresos || hayAlerta){ sem = 'sem-ambar'; semTxt = 'en amarillo'; }
-  else { sem = 'sem-verde'; semTxt = 'en verde'; }
-  const semHtml = `<div class="insight-semaforo ${sem}"><span class="sem-dot"></span>Salud financiera: ${semTxt}</div>`;
+  let semEstado, semTxt;
+  if(disp < 0){ semEstado = 'sem-rojo'; semTxt = 'en rojo'; }
+  else if(disp === 0 || disp < 0.10 * data.ingresos || hayAlerta){ semEstado = 'sem-ambar'; semTxt = 'en amarillo'; }
+  else { semEstado = 'sem-verde'; semTxt = 'en verde'; }
+  const semDot = c => `<span class="sem-dot ${c}${c === semEstado ? ' on' : ''}"></span>`;
+  const semHtml = `<div class="insight-semaforo" role="img" aria-label="Salud financiera: ${semTxt}">${semDot('sem-verde')}${semDot('sem-ambar')}${semDot('sem-rojo')}</div>`;
 
   // ---- b) Frase resumen del mes (prioridad: sobregasto > mayor aumento > neutro) ----
   const varCats = variacionCategorias(data.catTotals, prevData.catTotals);
@@ -3710,10 +3725,13 @@ function renderHistorial(){
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
       }
-      const badge = e.debtId ? '<span class="li-badge">Cuota</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+      // Fila de origen de una compra a crédito: etiqueta "CRÉDITO" (las cuotas de meses
+      // posteriores son filas virtuales y llevan "CUOTA"). Gasto fijo -> "FIJO".
+      const badge = e.debtId ? '<span class="li-badge">Crédito</span>' : (e.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
       // Compra a cuotas (siempre se lista en su mes de origen): el monto grande es la
-      // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro.
-      const amtCls = e.debtId ? 'li-amount li-amount-cuota-origen' : 'li-amount';
+      // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro y
+      // más opaco. El resto de gastos (normal / fijo) SÍ impactan el Disponible -> rojo.
+      const amtCls = e.debtId ? 'li-amount li-amount-cuota-origen' : 'li-amount li-amount-gasto';
       return `
       <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
@@ -3856,7 +3874,8 @@ function renderHistorialTodo(box){
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
     }
-    const badge = it.debtId ? '<span class="li-badge">Cuota</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+    // Fila de origen de una compra a crédito -> "CRÉDITO"; gasto fijo -> "FIJO".
+    const badge = it.debtId ? '<span class="li-badge">Crédito</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
     // Compra a crédito: el número grande es la compra total, pero al saldo del mes solo
     // le pesa la cuota de ese mes (0 en el mes de la compra: las cuotas parten al mes
     // siguiente). Se aclara con una nota chica bajo el detalle de la fila.
@@ -3879,7 +3898,7 @@ function renderHistorialTodo(box){
           ${cuotaNote}
         </div>
         <div class="li-amount-wrap">
-          <span class="li-amount${it.debtId ? ' li-amount-cuota-origen' : ''}">−${money(it.amount)}</span>
+          <span class="li-amount${it.debtId ? ' li-amount-cuota-origen' : ' li-amount-gasto'}">−${money(it.amount)}</span>
           ${saldoTxt}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -4884,6 +4903,9 @@ function renderAll(){
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
+  // Metas es independiente del mes: sin selector de mes en esa pantalla.
+  const monthSel = document.querySelector('.month-select');
+  if(monthSel) monthSel.style.display = currentScreen === 'metas' ? 'none' : '';
   // El botón "guardar resumen como imagen" solo tiene sentido en la pantalla Resumen.
   const briBtn = document.getElementById('btnResumenImg');
   if(briBtn) briBtn.style.display = currentScreen === 'resumen' ? '' : 'none';
