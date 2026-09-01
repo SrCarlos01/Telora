@@ -959,6 +959,15 @@ button:active{ transform:scale(0.97); }
   position:fixed; inset:0; z-index:500; background:var(--bg);
   display:none; align-items:center; justify-content:center; flex-direction:column;
   padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); text-align:center;
+  /* Sin touch-action, iOS Safari deja activo el doble-tap-zoom (ignora user-scalable=no):
+     con toques rápidos y repetidos el viewport visual se desplaza respecto al layout, y
+     como este overlay es position:fixed el toque empieza a caer en la tecla equivocada
+     (el "5" registra el "2") hasta reabrir la app. `manipulation` desactiva ese
+     doble-tap-zoom sin impedir scroll ni pinch. */
+  touch-action:manipulation;
+  overflow-y:auto;
+  justify-content:center;
+  justify-content:safe center;   /* si el teclado no cabe en pantallas bajas, se scrollea desde arriba en vez de recortarse */
 }
 .pin-overlay.open{display:flex; animation:fadeIn2 .2s ease;}
 .pin-card{width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center;}
@@ -984,6 +993,7 @@ button:active{ transform:scale(0.97); }
   aspect-ratio:1; border-radius:50%; background:var(--surface-2); border:1px solid var(--border);
   color:var(--cream); font-size:22px; font-family:inherit; cursor:pointer;
   display:flex; align-items:center; justify-content:center; transition:all .15s ease;
+  touch-action:manipulation;   /* mismo motivo que .pin-overlay: nada de doble-tap-zoom sobre las teclas */
 }
 .pin-key:active{transform:scale(0.92); background:var(--surface-3);}
 .pin-key-del{color:var(--gold-dim); font-size:18px;}
