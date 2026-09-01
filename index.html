@@ -481,13 +481,23 @@ button{font-family:inherit;}
 .sheet-overlay{
   position:fixed; inset:0; background:rgba(10,6,5,0.6); display:none; align-items:flex-end;
   z-index:50; backdrop-filter:blur(2px);
+  /* Reserva la franja de la barra de estado / notch: aunque un sheet llegue a su
+     alto máximo, el layout flex-end nunca lo mete debajo de ella. */
+  padding-top:env(safe-area-inset-top);
 }
 .sheet-overlay.open{display:flex; animation:fadeIn2 .2s ease;}
 @keyframes fadeIn2{from{opacity:0;} to{opacity:1;}}
 .sheet{
   background:var(--surface); width:100%; max-width:480px; margin:0 auto;
   border-radius:22px 22px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom));
-  max-height:88vh; overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+  /* max-height contra el viewport REAL, no contra 88vh: en iOS Safari `vh` se mide
+     contra el viewport grande (barras ocultas), así que 88vh con las barras visibles
+     puede tapar la barra de estado y no dejar hueco arriba en sheets largos
+     (Configuración, Resumen como imagen, Nuevo gasto). `dvh` sí sigue al alto visible;
+     el 88vh queda de fallback para navegadores sin dvh/min(). */
+  max-height:88vh;
+  max-height:min(88vh, calc(100dvh - env(safe-area-inset-top) - 8px));
+  overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
   touch-action:pan-y;
 }
 .sheet-overlay.open .sheet{transform:translateY(0);}
