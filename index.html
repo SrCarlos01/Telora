@@ -923,6 +923,50 @@ button:active{ transform:scale(0.97); }
 .goal-racha-none{font-size:12px; color:var(--cream-dim); line-height:1.5; margin:2px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
 :root.hc .goal-racha-none{color:var(--cream);}
 :root.hc .goal-racha .gr-count{color:var(--cream);}
+
+/* ---------- PIN DE BLOQUEO LOCAL (Tanda H) ---------- */
+/* Pantalla completa, opaca (no backdrop-blur del sheet): tapa el contenido financiero
+   por completo mientras pide el PIN. z-index por encima de sheets/toast/confetti. */
+.pin-overlay{
+  position:fixed; inset:0; z-index:500; background:var(--bg);
+  display:none; align-items:center; justify-content:center; flex-direction:column;
+  padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); text-align:center;
+}
+.pin-overlay.open{display:flex; animation:fadeIn2 .2s ease;}
+.pin-card{width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center;}
+.pin-mark{
+  width:52px; height:52px; border-radius:16px; background:var(--gold);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--burgundy); font-weight:700; font-size:26px; font-family:ui-serif,Georgia,serif;
+  margin-bottom:18px;
+}
+.pin-card h2{font-size:20px; font-weight:500; color:var(--cream); margin:0 0 6px;}
+.pin-sub{font-size:13.5px; color:var(--cream-dim); margin:0 0 22px; line-height:1.5;}
+.pin-dots{display:flex; gap:16px; margin-bottom:6px;}
+.pin-dot{
+  width:14px; height:14px; border-radius:50%; border:1.5px solid var(--gold-dim);
+  background:transparent; transition:background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.pin-dot.filled{background:var(--gold); border-color:var(--gold);}
+.pin-lockmsg{font-size:12.5px; color:var(--danger); min-height:18px; margin:10px 0 0;}
+.pin-keypad{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; width:100%; max-width:280px; margin-top:30px;
+}
+.pin-key{
+  aspect-ratio:1; border-radius:50%; background:var(--surface-2); border:1px solid var(--border);
+  color:var(--cream); font-size:22px; font-family:inherit; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; transition:all .15s ease;
+}
+.pin-key:active{transform:scale(0.92); background:var(--surface-3);}
+.pin-key-del{color:var(--gold-dim); font-size:18px;}
+.pin-keypad-disabled .pin-key{opacity:0.4; pointer-events:none;}
+.pin-forgot{
+  background:none; border:none; color:var(--gold-dim); font-size:13.5px; margin-top:24px;
+  padding:8px; cursor:pointer; text-decoration:underline; font-family:inherit;
+}
+/* el sheet de "olvidé mi PIN" debe quedar por encima del propio bloqueo cuando se abre desde ahí */
+#sheetForgotPin{z-index:600;}
+:root.hc .pin-key, :root.hc .pin-dot{border-width:2px;}
 </style>
 </head>
 <body>
@@ -1303,6 +1347,17 @@ button:active{ transform:scale(0.97); }
       </span>
     </label>
 
+    <p class="section-title" style="margin-top:20px;">Seguridad</p>
+    <label class="check-row" style="margin-bottom:4px;">
+      <input type="checkbox" id="cfgPinEnabled">
+      <span>Bloqueo con PIN
+        <small>Pide un PIN de 4 dígitos al abrir la app y al volver de segundo plano. Es una traba local básica: no cifra tus datos ni protege frente a alguien con acceso al código o a las herramientas de desarrollador del navegador.</small>
+      </span>
+    </label>
+    <p class="sheet-note" id="pinUnsupportedNote" style="display:none; margin:2px 0 4px;">
+      Tu navegador no soporta esta función (necesita una conexión segura, https).
+    </p>
+
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
     <p class="sheet-note" style="margin:0 0 12px;">
       Descarga un archivo con todos tus datos (gastos, ingresos, cuotas y categorías). Sirve para no perder nada si cambias de link o de celular.
@@ -1422,6 +1477,49 @@ button:active{ transform:scale(0.97); }
     </p>
     <button class="btn-primary" id="btnCuotaProyOrigen">Ir a la compra original</button>
     <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<!-- SHEET: olvidé mi PIN (explica con precisión qué se pierde antes de resetear) -->
+<div class="sheet-overlay" id="sheetForgotPin">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Olvidaste tu PIN?</h2>
+    <p class="sheet-note">
+      Esto borrará el PIN configurado en este dispositivo — la app dejará de pedirlo al abrir.
+      Tus datos financieros (gastos, ingresos, deudas y metas) <b>no se tocan</b>: siguen exactamente
+      igual. Puedes activar un PIN nuevo cuando quieras desde Configuración.
+    </p>
+    <button class="btn-danger" id="btnResetPin">Sí, borrar el PIN</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- PANTALLA DE BLOQUEO POR PIN (Tanda H) — cubre toda la app; no es un sheet -->
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-card">
+    <div class="pin-mark">$</div>
+    <h2 id="pinTitle">Ingresa tu PIN</h2>
+    <p class="pin-sub" id="pinSub">Desbloquea MisFinanzas para continuar</p>
+    <div class="pin-dots" id="pinDots">
+      <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+    </div>
+    <p class="pin-lockmsg" id="pinLockMsg" style="display:none;"></p>
+    <div class="pin-keypad" id="pinKeypad">
+      <button type="button" class="pin-key" data-pinkey="1">1</button>
+      <button type="button" class="pin-key" data-pinkey="2">2</button>
+      <button type="button" class="pin-key" data-pinkey="3">3</button>
+      <button type="button" class="pin-key" data-pinkey="4">4</button>
+      <button type="button" class="pin-key" data-pinkey="5">5</button>
+      <button type="button" class="pin-key" data-pinkey="6">6</button>
+      <button type="button" class="pin-key" data-pinkey="7">7</button>
+      <button type="button" class="pin-key" data-pinkey="8">8</button>
+      <button type="button" class="pin-key" data-pinkey="9">9</button>
+      <span></span>
+      <button type="button" class="pin-key" data-pinkey="0">0</button>
+      <button type="button" class="pin-key pin-key-del" id="pinDeleteBtn" aria-label="Borrar dígito">⌫</button>
+    </div>
+    <button type="button" class="pin-forgot" id="pinForgotBtn">¿Olvidaste tu PIN?</button>
   </div>
 </div>
 
@@ -4437,6 +4535,7 @@ function renderConfig(){
   renderPaletteRow();
   renderFontScaleRow();
   renderAltoContrasteRow();
+  renderPinRow();
 }
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -4530,6 +4629,264 @@ document.getElementById('btnCatIconDefault').onclick = ()=>{
   renderConfig();
   renderAll();
 };
+
+/* ==================== PIN DE BLOQUEO LOCAL (Tanda H.1) ====================
+   Traba local básica, NO cifrado: solo evita que alguien que toma el celular vea la
+   app de un vistazo. No protege frente a alguien con acceso al código fuente o a las
+   herramientas de desarrollador del navegador (ahí el PIN y los datos son legibles
+   igual). El PIN se guarda en una clave de localStorage APARTE de `state`
+   (misfinanzas_pin), nunca dentro de `state`: así nunca queda incluido en un respaldo
+   exportado ni se pisa al restaurar uno. Solo se guarda el hash SHA-256 (con sal),
+   nunca el PIN en texto plano. */
+const PIN_STORAGE_KEY = 'misfinanzas_pin';
+const PIN_BG_THRESHOLD_MS = 60 * 1000;    // ~60s en segundo plano antes de re-pedir el PIN
+const PIN_MAX_ATTEMPTS = 5;               // intentos fallidos antes de la primera espera
+const PIN_LOCK_BASE_MS = 15 * 1000;       // primera espera: 15s (se duplica cada vez que se agota, tope 5 min)
+const PIN_LOCK_MAX_MS = 5 * 60 * 1000;
+
+function cryptoSubtleAvailable(){
+  return !!(window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === 'function');
+}
+function loadPinConfig(){
+  try{
+    const s = localStorage.getItem(PIN_STORAGE_KEY);
+    if(s){
+      const p = JSON.parse(s);
+      return { enabled:!!p.enabled, hash:p.hash||null, salt:p.salt||null,
+               failCount:p.failCount||0, lockUntil:p.lockUntil||0, lockMs:p.lockMs||0 };
+    }
+  }catch(_){ /* localStorage corrupto o inaccesible: se sigue sin PIN */ }
+  return { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
+}
+let pinConfig = loadPinConfig();
+function savePinConfig(){ try{ localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinConfig)); }catch(_){} }
+
+function bufToHex(buf){ return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function randomHex(byteLen){
+  const arr = new Uint8Array(byteLen);
+  crypto.getRandomValues(arr);
+  return bufToHex(arr.buffer);
+}
+async function hashPin(pin, salt){
+  const enc = new TextEncoder().encode(salt + ':' + pin);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return bufToHex(buf);
+}
+
+/* ---- Estado de la pantalla de bloqueo (unlock / crear / confirmar) ---- */
+let pinMode = 'unlock';       // 'unlock' | 'create' | 'confirm'
+let pinBuffer = '';
+let pinFirstEntry = null;     // dígitos del primer paso, mientras se confirma
+let pinLockTimer = null;
+
+function pinDotEls(){ return document.querySelectorAll('#pinDots .pin-dot'); }
+function renderPinDots(){
+  pinDotEls().forEach((d,i)=> d.classList.toggle('filled', i < pinBuffer.length));
+}
+function shakePinDots(){
+  const dots = document.getElementById('pinDots');
+  dots.classList.remove('field-shake'); void dots.offsetWidth; dots.classList.add('field-shake');
+}
+// Refleja si sigue en espera por intentos fallidos; devuelve true si está bloqueado.
+function updatePinLockUI(){
+  const now = Date.now();
+  const locked = pinConfig.lockUntil > now;
+  const msgEl = document.getElementById('pinLockMsg');
+  const keypad = document.getElementById('pinKeypad');
+  if(locked){
+    const secs = Math.ceil((pinConfig.lockUntil - now) / 1000);
+    msgEl.textContent = `Demasiados intentos. Espera ${secs}s.`;
+    msgEl.style.display = 'block';
+    keypad.classList.add('pin-keypad-disabled');
+  } else {
+    msgEl.style.display = 'none';
+    keypad.classList.remove('pin-keypad-disabled');
+  }
+  return locked;
+}
+function tickPinLock(){
+  if(!updatePinLockUI() && pinLockTimer){ clearInterval(pinLockTimer); pinLockTimer = null; }
+}
+function startPinLockTimerIfNeeded(){
+  if(pinConfig.lockUntil > Date.now() && !pinLockTimer) pinLockTimer = setInterval(tickPinLock, 1000);
+}
+
+function openPinOverlay(mode){
+  pinMode = mode;
+  pinBuffer = '';
+  pinFirstEntry = null;
+  renderPinDots();
+  const title = document.getElementById('pinTitle');
+  const sub = document.getElementById('pinSub');
+  const forgot = document.getElementById('pinForgotBtn');
+  if(mode === 'create'){
+    title.textContent = 'Crea tu PIN';
+    sub.textContent = 'Elige 4 dígitos para bloquear la app';
+    forgot.textContent = 'Cancelar';
+    forgot.onclick = cancelPinSetup;
+  } else if(mode === 'confirm'){
+    title.textContent = 'Confirma tu PIN';
+    sub.textContent = 'Ingresa los mismos 4 dígitos otra vez';
+    forgot.textContent = 'Cancelar';
+    forgot.onclick = cancelPinSetup;
+  } else {
+    title.textContent = 'Ingresa tu PIN';
+    sub.textContent = 'Desbloquea MisFinanzas para continuar';
+    forgot.textContent = '¿Olvidaste tu PIN?';
+    forgot.onclick = ()=> openSheet('sheetForgotPin');
+  }
+  document.getElementById('pinOverlay').classList.add('open');
+  updatePinLockUI();
+  startPinLockTimerIfNeeded();
+}
+function closePinOverlay(){
+  document.getElementById('pinOverlay').classList.remove('open');
+  if(pinLockTimer){ clearInterval(pinLockTimer); pinLockTimer = null; }
+}
+function cancelPinSetup(){
+  // Abandona crear/confirmar: el PIN queda tal como estaba (nada se guarda a medias).
+  closePinOverlay();
+  openSheet('sheetConfig');
+  renderConfig();
+}
+
+async function handlePinComplete(){
+  if(pinMode === 'unlock'){
+    try{
+      if(!cryptoSubtleAvailable()) throw new Error('sin soporte de crypto.subtle');
+      const hash = await hashPin(pinBuffer, pinConfig.salt);
+      if(hash === pinConfig.hash){
+        pinConfig.failCount = 0; pinConfig.lockUntil = 0; pinConfig.lockMs = 0;
+        savePinConfig();
+        haptic(HAPTIC_OK);
+        closePinOverlay();
+        return;
+      }
+    }catch(err){
+      console.warn('No se pudo verificar el PIN:', err);
+      showToast('No se pudo verificar el PIN en este navegador.', 'error');
+      pinBuffer = ''; renderPinDots();
+      return;
+    }
+    // PIN incorrecto: cuenta el intento y, si se agotan, aplica espera progresiva.
+    pinConfig.failCount = (pinConfig.failCount || 0) + 1;
+    if(pinConfig.failCount >= PIN_MAX_ATTEMPTS){
+      pinConfig.lockMs = pinConfig.lockMs ? Math.min(pinConfig.lockMs * 2, PIN_LOCK_MAX_MS) : PIN_LOCK_BASE_MS;
+      pinConfig.lockUntil = Date.now() + pinConfig.lockMs;
+      pinConfig.failCount = 0;
+    }
+    savePinConfig();
+    haptic(HAPTIC_DELETE);
+    shakePinDots();
+    pinBuffer = '';
+    renderPinDots();
+    startPinLockTimerIfNeeded();
+    updatePinLockUI();
+  } else if(pinMode === 'create'){
+    pinFirstEntry = pinBuffer;
+    pinBuffer = '';
+    pinMode = 'confirm';
+    document.getElementById('pinTitle').textContent = 'Confirma tu PIN';
+    document.getElementById('pinSub').textContent = 'Ingresa los mismos 4 dígitos otra vez';
+    renderPinDots();
+  } else if(pinMode === 'confirm'){
+    if(pinBuffer === pinFirstEntry){
+      try{
+        const salt = randomHex(16);
+        const hash = await hashPin(pinBuffer, salt);
+        pinConfig = { enabled:true, hash, salt, failCount:0, lockUntil:0, lockMs:0 };
+        savePinConfig();
+        haptic(HAPTIC_OK);
+        closePinOverlay();
+        openSheet('sheetConfig');
+        renderConfig();
+        showToast('PIN activado.', 'success');
+      }catch(err){
+        console.warn('No se pudo activar el PIN:', err);
+        showToast('No se pudo activar el PIN en este navegador.', 'error');
+        cancelPinSetup();
+      }
+    } else {
+      showToast('Los PIN no coinciden. Intenta de nuevo.', 'error');
+      haptic(HAPTIC_DELETE);
+      shakePinDots();
+      pinBuffer = ''; pinFirstEntry = null; pinMode = 'create';
+      document.getElementById('pinTitle').textContent = 'Crea tu PIN';
+      document.getElementById('pinSub').textContent = 'Elige 4 dígitos para bloquear la app';
+      renderPinDots();
+    }
+  }
+}
+function onPinKeyPress(digit){
+  if(updatePinLockUI()) return;   // en espera por intentos fallidos
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  renderPinDots();
+  if(pinBuffer.length === 4) handlePinComplete();
+}
+function onPinDelete(){
+  pinBuffer = pinBuffer.slice(0, -1);
+  renderPinDots();
+}
+document.querySelectorAll('#pinKeypad [data-pinkey]').forEach(btn=>{
+  btn.addEventListener('click', ()=> onPinKeyPress(btn.dataset.pinkey));
+});
+document.getElementById('pinDeleteBtn').addEventListener('click', onPinDelete);
+// Soporte de teclado físico (útil en escritorio / para probar el bloqueo).
+document.addEventListener('keydown', e=>{
+  if(!document.getElementById('pinOverlay').classList.contains('open')) return;
+  if(/^[0-9]$/.test(e.key)) onPinKeyPress(e.key);
+  else if(e.key === 'Backspace') onPinDelete();
+});
+
+/* ---- Olvidé mi PIN: explica qué se pierde (el PIN) y qué NO (los datos), y resetea ---- */
+document.getElementById('btnResetPin').onclick = ()=>{
+  pinConfig = { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
+  savePinConfig();
+  closeSheet('sheetForgotPin');
+  closePinOverlay();
+  renderConfig();
+  showToast('PIN desactivado. Tus datos financieros siguen intactos.', 'success');
+};
+
+/* ---- Toggle en Configuración ---- */
+function renderPinRow(){
+  const chk = document.getElementById('cfgPinEnabled');
+  if(!chk) return;
+  const supported = cryptoSubtleAvailable();
+  chk.checked = !!pinConfig.enabled;
+  chk.disabled = !supported;
+  const note = document.getElementById('pinUnsupportedNote');
+  if(note) note.style.display = supported ? 'none' : 'block';
+}
+document.getElementById('cfgPinEnabled').addEventListener('change', e=>{
+  if(e.target.checked){
+    // No se activa todavía: recién queda activo si crear+confirmar el PIN sale bien.
+    e.target.checked = false;
+    closeSheet('sheetConfig');
+    openPinOverlay('create');
+  } else {
+    pinConfig = { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
+    savePinConfig();
+    showToast('PIN desactivado.', 'success');
+  }
+});
+
+/* ---- Pide el PIN al abrir la app, y al volver de segundo plano tras un buen rato ---- */
+try{
+  if(pinConfig.enabled) openPinOverlay('unlock');
+  let pinHiddenAt = null;
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){
+      pinHiddenAt = Date.now();
+    } else {
+      if(pinConfig.enabled && pinHiddenAt && (Date.now() - pinHiddenAt) >= PIN_BG_THRESHOLD_MS){
+        openPinOverlay('unlock');
+      }
+      pinHiddenAt = null;
+    }
+  });
+}catch(_){ /* sin soporte de visibilitychange: la app queda usable, solo sin el re-bloqueo automático */ }
 
 /* ==================== RESPALDO / RESTAURAR DATOS (JSON) ==================== */
 document.getElementById('btnBackupData').onclick = ()=>{
