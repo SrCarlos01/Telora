@@ -36,6 +36,13 @@
   --cream-dim:#B79A82;
   --danger:#B4544A;
   --success:#7D9B69;
+  /* Color por tipo de movimiento (Corrección Tanda I) — Historial, Resumen, Insights.
+     Ingreso/gasto reusan success/danger (que sí siguen la paleta activa); cuota y
+     aporte son tonos cálidos fijos que funcionan sobre todas las paletas oscuras. */
+  --mv-ingreso:var(--success);
+  --mv-gasto:var(--danger);
+  --mv-cuota:#CE7C3A;
+  --mv-aporte:#D9B24C;
   --radius:16px;
   --radius-sm:10px;
   --font-scale:1;   /* Tamaño de letra (accesibilidad): 1 / 1.15 / 1.3 — ver Configuración */
@@ -140,7 +147,15 @@ button{font-family:inherit;}
 .balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
 .balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9;}
 .amount.neg{color:#F3D3CE;}
-/* Saldo de meses anteriores (cuenta corriente) — visible solo si != $0 */
+/* "Disponible con cuotas pendientes" (Corrección Tanda I): referencia secundaria bajo
+   la cifra principal. Visible solo si el mes tiene cuotas activas. */
+.balance-pend{display:flex; align-items:baseline; gap:8px; margin:-8px 0 14px;}
+.balance-pend .bp-k{font-size:12px; color:#E7C3CB;}
+.balance-pend .bp-v{font-size:13px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
+.balance-pend .bp-v.neg{color:#F3D3CE;}
+:root.hc .balance-pend .bp-k, :root.hc .balance-pend .bp-v{color:#fff;}
+:root.hc .balance-pend .bp-v.neg{color:#FFC9C0;}
+/* Saldo mes anterior (cuenta corriente) — visible solo si != $0 */
 .balance-carry{
   display:flex; align-items:baseline; justify-content:space-between; gap:10px;
   margin:0 0 14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14);
@@ -152,6 +167,13 @@ button{font-family:inherit;}
 .balance-item{flex:1; min-width:0;}
 .balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
 .balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
+/* Color por tipo de movimiento en los mini-totales del Resumen (Corrección Tanda I).
+   Tonos aclarados para que se lean sobre el burdeos de la tarjeta. */
+#rIngresos{color:#A7D18C;}   /* ingreso → verde  */
+#rGastos{color:#F0A79E;}     /* gasto   → rojo   */
+#rCuotas{color:#E6A56B;}     /* cuota   → naranjo*/
+#rMetas{color:#E8CE7E;}      /* aporte  → amarillo */
+:root.hc #rIngresos, :root.hc #rGastos, :root.hc #rCuotas, :root.hc #rMetas{color:#fff;}
 
 .section-title{
   font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
@@ -202,7 +224,7 @@ button{font-family:inherit;}
 .li-sub{font-size:13px; color:var(--cream-dim); margin:0;}
 .li-muted{color:var(--cream-dim); font-style:italic;}
 .li-amount{font-size:15.5px; font-weight:600; color:var(--cream); white-space:nowrap;}
-.li-amount.income{color:var(--success);}
+.li-amount.income{color:var(--mv-ingreso);}
 .li-badge{
   font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:20px;
   background:var(--surface-3); color:var(--gold-dim); flex-shrink:0;
@@ -393,18 +415,18 @@ button{font-family:inherit;}
 /* nota secundaria en filas de compra a crédito (dentro de .li-body, bajo el detalle):
    aclara que al saldo solo le pesa la cuota, no el monto total de la compra. Acompaña al
    detalle: visible solo cuando la fila está expandida (igual que la fecha/categoría). */
-/* rojo: esta es la cifra que realmente impacta el Disponible del mes (no el monto total) */
-.li-cuota-note{font-size:10px; color:var(--danger); line-height:1.3; margin:3px 0 0;}
+/* naranjo: esta es la cuota que realmente impacta el Disponible del mes (no el monto total) */
+.li-cuota-note{font-size:10px; color:var(--mv-cuota); line-height:1.3; margin:3px 0 0;}
 #hList .list-item:not(.expanded) .li-cuota-note{display:none;}
 /* compra a cuotas en su mes de origen: el número grande es la compra total, que NO es
    lo que afecta el Disponible de este mes -> se muestra en tono neutro, no de gasto */
 .li-amount.li-amount-cuota-origen{color:var(--cream-dim); font-weight:500;}
 /* fila VIRTUAL de cuota (meses posteriores al de origen): a diferencia de la fila de
-   origen, este monto SÍ es el impacto real en el Disponible de ese mes -> rojo. */
-.li-amount.li-amount-cuota-real{color:var(--danger); font-weight:600;}
-/* gasto que SÍ impacta el Disponible del mes (normal o fijo): en rojo, igual que la
-   cuota real. El blanco/neutro queda solo para la fila de origen de una compra a crédito. */
-.li-amount.li-amount-gasto{color:var(--danger); font-weight:600;}
+   origen, este monto SÍ es el impacto real en el Disponible de ese mes -> naranjo (tipo cuota). */
+.li-amount.li-amount-cuota-real{color:var(--mv-cuota); font-weight:600;}
+/* gasto que SÍ impacta el Disponible del mes (normal o fijo): en rojo (tipo gasto).
+   El neutro queda solo para la fila de origen de una compra a crédito. */
+.li-amount.li-amount-gasto{color:var(--mv-gasto); font-weight:600;}
 /* cuota de un mes ya marcada como pagada a mano (pestaña Cuotas): la fila virtual
    conserva su aspecto normal — el check ya es señal suficiente de que está pagada. */
 .li-cuota-check{display:inline-flex; align-items:center; color:var(--success); flex-shrink:0;}
@@ -490,13 +512,15 @@ button{font-family:inherit;}
 .sheet{
   background:var(--surface); width:100%; max-width:480px; margin:0 auto;
   border-radius:22px 22px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom));
-  /* max-height contra el viewport REAL, no contra 88vh: en iOS Safari `vh` se mide
-     contra el viewport grande (barras ocultas), así que 88vh con las barras visibles
-     puede tapar la barra de estado y no dejar hueco arriba en sheets largos
-     (Configuración, Resumen como imagen, Nuevo gasto). `dvh` sí sigue al alto visible;
-     el 88vh queda de fallback para navegadores sin dvh/min(). */
+  /* max-height contra el ALTO REAL de pantalla, no contra 88vh: en iOS Safari (y en
+     webviews embebidas / modo standalone / versiones viejas) `vh` —y a veces `dvh`—
+     se mide contra el viewport grande (barras ocultas), así que un sheet largo con
+     las barras visibles tapa la barra de estado y no deja hueco arriba (Nuevo gasto,
+     Configuración, Resumen como imagen). --app-vh lo fija el JS con
+     window.innerHeight, que sí refleja el alto visible en todos los casos. El 88vh
+     queda de fallback antes de que corra el JS / navegadores sin custom properties. */
   max-height:88vh;
-  max-height:min(88vh, calc(100dvh - env(safe-area-inset-top) - 8px));
+  max-height:calc(var(--app-vh, 88vh) - env(safe-area-inset-top) - 20px);
   overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
   touch-action:pan-y;
 }
@@ -770,8 +794,8 @@ button:active{ transform:scale(0.97); }
 .goal-racha .gr-count.gr-pop{ animation:grPop 520ms var(--ease-bounce); }
 @keyframes grPop{ 0%{ transform:scale(1); } 35%{ transform:scale(1.35); } 100%{ transform:scale(1); } }
 
-/* Barra de progreso de cada meta: crece hacia su valor cada vez que se muestra. */
-.goal-card .progress-fill{ transition:width var(--dur-slow) var(--ease-out); }
+/* Barra de progreso de cada meta / cuota: crece hacia su valor cada vez que se muestra. */
+.goal-card .progress-fill, #cList .progress-fill{ transition:width var(--dur-slow) var(--ease-out); }
 
 /* Semáforo de salud financiera: cada punto encendido entra suave; al pasar a rojo,
    un único pulso. */
@@ -900,6 +924,13 @@ button:active{ transform:scale(0.97); }
 .insight-cmp-row .ic-label{flex:1 1 40%; min-width:96px; color:var(--cream-dim);}
 :root.hc .insight-cmp-row .ic-label{color:var(--cream);}
 .insight-cmp-row .ic-cur{font-weight:600;}
+/* Color por tipo de movimiento en la comparación de Insights (Corrección Tanda I). */
+.insight-cmp-row.mv-ingreso .ic-cur{color:var(--mv-ingreso);}
+.insight-cmp-row.mv-gasto .ic-cur{color:var(--mv-gasto);}
+.insight-cmp-row.mv-aporte .ic-cur{color:var(--mv-aporte);}
+:root.hc .insight-cmp-row.mv-ingreso .ic-cur,
+:root.hc .insight-cmp-row.mv-gasto .ic-cur,
+:root.hc .insight-cmp-row.mv-aporte .ic-cur{color:var(--cream);}
 .insight-cmp-row .ic-prev{font-size:11.5px; color:var(--cream-dim);}
 .insight-cmp-row .ic-delta{margin-left:auto; font-size:12px; font-weight:600; white-space:nowrap;}
 .insight-cmp-row .ic-delta.good{color:var(--success);}
@@ -1043,8 +1074,12 @@ button:active{ transform:scale(0.97); }
     <div class="balance-card">
       <p class="label">Disponible este mes</p>
       <p class="amount" id="rDisponible">$0</p>
+      <p class="balance-pend" id="rDisponiblePendRow" style="display:none;">
+        <span class="bp-k">Con cuotas pendientes</span>
+        <span class="bp-v" id="rDisponiblePend">$0</span>
+      </p>
       <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
-        <span class="bc-k">Saldo de meses anteriores</span>
+        <span class="bc-k">Saldo mes anterior</span>
         <span class="bc-v" id="rSaldoAnterior">$0</span>
       </p>
       <div class="balance-row">
@@ -2505,6 +2540,19 @@ document.getElementById('nextMonth').onclick = nextMonth;
   });
 })();
 
+/* ==================== ALTO REAL DE PANTALLA PARA LOS SHEETS (Corrección Tanda I) ==================== */
+// Ver el comentario de `.sheet { max-height }`: expone window.innerHeight como
+// --app-vh para que ningún sheet largo se pase del alto visible ni tape la barra de
+// estado, en navegadores donde `vh`/`dvh` no reflejan el área realmente visible.
+(function initAppVH(){
+  let raf = 0;
+  function apply(){ raf = 0; document.documentElement.style.setProperty('--app-vh', window.innerHeight + 'px'); }
+  function schedule(){ if(!raf) raf = requestAnimationFrame(apply); }
+  apply();
+  window.addEventListener('resize', schedule);
+  window.addEventListener('orientationchange', ()=> setTimeout(apply, 250));
+})();
+
 /* ==================== SHEETS (modales) ==================== */
 function openSheet(id){
   document.getElementById(id).classList.add('open');
@@ -3634,6 +3682,39 @@ function toggleManualPaid(debtId, refDate){
   saveState(); renderCuotas();
 }
 
+/* ==================== DISPONIBLE DUAL: cuotas pagadas vs. pendientes (Corrección Tanda I) ====================
+   NO toca el cálculo de Disponible de siempre (ese sigue restando TODAS las cuotas del
+   mes y pasa a ser la cifra secundaria "con cuotas pendientes"). Estas funciones solo
+   sirven para la cifra principal nueva, que de las cuotas del mes descuenta únicamente
+   las ya pagadas. */
+// ¿La cuota de `debt` en el mes `refDate` cuenta como PAGADA hoy?
+//  - marcada manualmente, o
+//  - HOY (fecha real, recalculada en cada render) ya alcanzó su día de vencimiento
+//    (mismo día del mes que la compra original).
+// Si ese mes no tiene cuota activa de este debt -> false (no hay nada que pagar).
+function cuotaPagadaDelMes(debt, refDate){
+  if(!cuotaInfoForMonth(debt, refDate)) return false;
+  if(isManuallyPaid(debt, refDate)) return true;
+  const diaVenc = new Date(debt.purchaseDate + "T00:00:00").getDate();
+  const ultimoDia = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).getDate();
+  const venc = new Date(refDate.getFullYear(), refDate.getMonth(), Math.min(diaVenc, ultimoDia));
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  return hoy >= venc;
+}
+// Suma de las cuotas de `refDate` que todavía NO están pagadas.
+function cuotasPendientesDelMes(refDate){
+  let total = 0;
+  state.debts.forEach(d=>{
+    const info = cuotaInfoForMonth(d, refDate);
+    if(info && !cuotaPagadaDelMes(d, refDate)) total += info.monto;
+  });
+  return total;
+}
+// ¿El mes tiene alguna cuota activa (de cualquier deuda)?
+function mesTieneCuotasActivas(refDate){
+  return state.debts.some(d=> cuotaInfoForMonth(d, refDate) !== null);
+}
+
 /* ==================== CUOTAS: filas VIRTUALES en el Historial ==================== */
 // Salvedad del Día 4: una compra a cuotas solo tiene UNA fila real, en su mes de origen
 // (con el monto de la compra completa y saldo 0). Las cuotas de los meses siguientes
@@ -3729,10 +3810,17 @@ function renderResumen(){
   });
 
   // Metas del mes (manuales reales + automáticos virtuales que caben — Día 11) y
-  // arrastre de la cuenta corriente. El Disponible es: saldoAnterior + flujo del mes.
+  // arrastre de la cuenta corriente.
   const totalAportesMetas = totalAportesMetasDelMes(currentDate);
   const saldoAnterior = saldoAcumuladoHasta(currentDate);
-  const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
+  // "Disponible con cuotas pendientes" — cálculo de SIEMPRE, intacto: resta TODAS las
+  // cuotas del mes (pagadas o no). Pasa a ser la cifra secundaria.
+  const dispConPendientes = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
+  // "Disponible" (cifra principal, plata libre hoy) — de las cuotas del mes solo resta
+  // las ya pagadas (por fecha real de hoy o marcadas a mano). Equivale al de siempre
+  // más las cuotas que aún están pendientes.
+  const cuotasPendientes = cuotasPendientesDelMes(currentDate);
+  const dispLibre = dispConPendientes + cuotasPendientes;
 
   // Conteo animado (0 -> valor) de Ingresos / Gastos / Disponible: solo al cambiar de
   // mes o al abrir el Resumen, no en cada re-render (p. ej. tras guardar un gasto).
@@ -3744,14 +3832,25 @@ function renderResumen(){
     if(contar) animateCount(el, val);
     else el.textContent = money(val);
   };
-  setTotal('rDisponible', disponible);
-  document.getElementById('rDisponible').classList.toggle('neg', disponible<0);
+  setTotal('rDisponible', dispLibre);
+  document.getElementById('rDisponible').classList.toggle('neg', dispLibre<0);
   setTotal('rIngresos', totalIngresos);
   setTotal('rGastos', totalGastos);
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
-  // Línea "Saldo de meses anteriores": visible solo si es distinto de $0.
+  // "Con cuotas pendientes": solo si el mes tiene alguna cuota activa.
+  const pendRow = document.getElementById('rDisponiblePendRow');
+  if(mesTieneCuotasActivas(currentDate)){
+    const pEl = document.getElementById('rDisponiblePend');
+    pEl.textContent = money(dispConPendientes);
+    pEl.classList.toggle('neg', dispConPendientes < 0);
+    pendRow.style.display = '';
+  } else {
+    pendRow.style.display = 'none';
+  }
+
+  // Línea "Saldo mes anterior": visible solo si es distinto de $0.
   const carryRow = document.getElementById('rSaldoAnteriorRow');
   if(Math.round(saldoAnterior) !== 0){
     const el = document.getElementById('rSaldoAnterior');
@@ -3952,9 +4051,10 @@ function renderInsights(){
   const fraseHtml = `<p class="insight-frase">${frase}</p>`;
 
   // ---- c) Comparación mes a mes ----
-  const cmpRow = (label, curr, prev, upIsGood)=>{
+  const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
+    const rowCls = 'insight-cmp-row' + (mvClass ? ' ' + mvClass : '');
     if(!prevTiene){
-      return `<div class="insight-cmp-row"><span class="ic-label">${label}</span><span class="ic-cur">${signedMoney(curr)}</span></div>`;
+      return `<div class="${rowCls}"><span class="ic-label">${label}</span><span class="ic-cur">${signedMoney(curr)}</span></div>`;
     }
     const delta = curr - prev;
     const pct = prev !== 0 ? Math.round(delta / Math.abs(prev) * 100) : null;
@@ -3963,7 +4063,7 @@ function renderInsights(){
     else if(delta < 0){ arrow = '▼'; cls = upIsGood ? 'bad' : 'good'; }
     else { arrow = '='; cls = 'flat'; }
     const pctTxt = pct === null ? (delta === 0 ? 'sin cambio' : 'nuevo') : Math.abs(pct) + '%';
-    return `<div class="insight-cmp-row">
+    return `<div class="${rowCls}">
       <span class="ic-label">${label}</span>
       <span class="ic-cur">${signedMoney(curr)}</span>
       <span class="ic-prev">antes ${signedMoney(prev)}</span>
@@ -3971,10 +4071,10 @@ function renderInsights(){
     </div>`;
   };
   let cmpBody =
-    cmpRow('Ingresos', data.ingresos, prevData.ingresos, true) +
-    cmpRow('Gastos', data.gastos, prevData.gastos, false) +
+    cmpRow('Ingresos', data.ingresos, prevData.ingresos, true, 'mv-ingreso') +
+    cmpRow('Gastos', data.gastos, prevData.gastos, false, 'mv-gasto') +
     cmpRow('Disponible', data.disponible, prevData.disponible, true) +
-    cmpRow('Aporte total a metas', data.aportesMetas, prevData.aportesMetas, true);
+    cmpRow('Aporte total a metas', data.aportesMetas, prevData.aportesMetas, true, 'mv-aporte');
   if(!prevTiene){
     cmpBody += `<p class="insight-nodata">Aún no hay datos del mes anterior para comparar.</p>`;
   } else if(data.aportesMetas > prevData.aportesMetas){
@@ -4618,7 +4718,7 @@ function renderCuotas(){
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
       </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="progress-track"><div class="progress-fill" data-pct="${pct}" style="width:0%"></div></div>
       <button class="row-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       <div class="cuota-expand">
         <div class="debt-foot">
@@ -4629,6 +4729,16 @@ function renderCuotas(){
       </div>
     </div>`;
   }).join('');
+
+  // Barra de progreso de cada cuota: crece desde 0 hacia su valor al mostrarse (igual que Metas).
+  const fills = box.querySelectorAll('.progress-fill');
+  if(prefersReducedMotion()){
+    fills.forEach(f=>{ f.style.width = (f.dataset.pct || 0) + '%'; });
+  } else {
+    requestAnimationFrame(()=> requestAnimationFrame(()=>{
+      fills.forEach(f=>{ f.style.width = (f.dataset.pct || 0) + '%'; });
+    }));
+  }
 
   // Tap en la card (o en el chevron) expande/colapsa el detalle + botones.
   box.querySelectorAll('[data-cuotacard]').forEach(card=>{
@@ -4871,6 +4981,16 @@ function openPinOverlay(mode){
 function closePinOverlay(){
   document.getElementById('pinOverlay').classList.remove('open');
   if(pinLockTimer){ clearInterval(pinLockTimer); pinLockTimer = null; }
+  // Deshace cualquier desplazamiento de scroll/viewport que el foco de una tecla haya
+  // podido dejar mientras el bloqueo estaba abierto (ver el listener de pointerdown de
+  // más abajo): sin esto, en iOS el corrimiento del punto de toque persistía en TODA
+  // la app hasta reabrirla.
+  try{
+    document.getElementById('pinOverlay').scrollTop = 0;
+    window.scrollTo(0, 0);
+    if(document.scrollingElement) document.scrollingElement.scrollTop = 0;
+    if(document.body) document.body.scrollTop = 0;
+  }catch(_){}
 }
 function cancelPinSetup(){
   // Abandona crear/confirmar: el PIN queda tal como estaba (nada se guarda a medias).
@@ -4961,6 +5081,17 @@ document.querySelectorAll('#pinKeypad [data-pinkey]').forEach(btn=>{
   btn.addEventListener('click', ()=> onPinKeyPress(btn.dataset.pinkey));
 });
 document.getElementById('pinDeleteBtn').addEventListener('click', onPinDelete);
+// Las teclas del PIN NO deben tomar foco al tocarlas. En iOS, "llevar el elemento
+// enfocado a la vista" dentro de un overlay position:fixed desplaza el viewport visual
+// y ese desplazamiento no se revierte solo: con toques rápidos el punto donde registra
+// el toque queda corrido (tocar "5" registra "2") y sigue corrido en toda la app hasta
+// reabrirla. Prevenir el default de pointerdown/mousedown evita el foco (y con él el
+// scroll), sin bloquear el click.
+['pointerdown','mousedown'].forEach(evt=>{
+  document.getElementById('pinOverlay').addEventListener(evt, e=>{
+    if(e.target.closest && e.target.closest('.pin-key, .pin-forgot')) e.preventDefault();
+  });
+});
 // Soporte de teclado físico (útil en escritorio / para probar el bloqueo).
 document.addEventListener('keydown', e=>{
   if(!document.getElementById('pinOverlay').classList.contains('open')) return;
