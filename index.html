@@ -370,12 +370,13 @@ button{font-family:inherit;}
 /* fila VIRTUAL de cuota (meses posteriores al de origen): a diferencia de la fila de
    origen, este monto SÍ es el impacto real en el Disponible de ese mes -> rojo. */
 .li-amount.li-amount-cuota-real{color:var(--danger); font-weight:600;}
-/* cuota de un mes ya marcada como pagada a mano (pestaña Cuotas): la fila virtual sigue
-   visible pero atenuada y con un check. */
-#hList .list-item.cuota-paid{opacity:0.5;}
+/* cuota de un mes ya marcada como pagada a mano (pestaña Cuotas): la fila virtual
+   conserva su aspecto normal — el check ya es señal suficiente de que está pagada. */
 .li-cuota-check{display:inline-flex; align-items:center; color:var(--success); flex-shrink:0;}
 .li-cuota-check .icon{width:14px; height:14px; stroke-width:3;}
-:root.hc #hList .list-item.cuota-paid{opacity:1; border-style:dashed;}
+/* fila virtual de cuota AÚN sin pagar: segunda etiqueta junto a "CUOTA" */
+.li-badge.li-badge-unpaid{background:rgba(180,84,74,0.18); color:var(--danger);}
+:root.hc .li-badge.li-badge-unpaid{border:1.5px solid var(--danger); color:var(--cream);}
 /* detalle de proyección de cuota (fila virtual, no editable) */
 .cuota-proy-mes{font-size:13px; color:var(--gold-dim); margin:-12px 0 16px;}
 .cuota-proy-origen{
@@ -700,6 +701,102 @@ button{font-family:inherit;}
 :root.hc .aportar-warn{ background:transparent; border-width:2px; color:var(--gold); }
 :root.hc .goal-card.paused{ background:var(--surface-2); }
 :root.hc .premium-badge{ background:var(--gold); color:#000; }
+
+/* ---------- RESUMEN: sección INSIGHTS FINANCIEROS ---------- */
+.insights-wrap{margin-top:22px;}
+.insights-wrap .section-title{margin-bottom:12px;}
+/* a) Semáforo — indicador chico y discreto, no interrumpe la lectura */
+.insight-semaforo{
+  display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--cream-dim);
+  margin:0 0 10px;
+}
+.insight-semaforo .sem-dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+.insight-semaforo.sem-verde .sem-dot{background:var(--success);}
+.insight-semaforo.sem-ambar .sem-dot{background:var(--gold);}
+.insight-semaforo.sem-rojo  .sem-dot{background:var(--danger);}
+:root.hc .insight-semaforo{color:var(--cream);}
+:root.hc .insight-semaforo .sem-dot{width:11px; height:11px; border:1px solid var(--cream);}
+/* b) Frase resumen — una sola línea */
+.insight-frase{
+  font-size:14px; color:var(--cream); line-height:1.5; margin:0 0 14px;
+  padding:11px 13px; background:var(--surface-2); border:1px solid var(--border);
+  border-left:3px solid var(--gold); border-radius:var(--radius-sm);
+}
+/* bloques c/d/e */
+.insight-block{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:12px 14px; margin-bottom:10px;
+}
+.insight-block-title{
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold-dim); margin:0 0 10px;
+}
+.insight-nodata{font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:2px 0 0;}
+:root.hc .insight-nodata{color:var(--cream);}
+/* c) comparación mes a mes */
+.insight-cmp-row{
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  padding:7px 0; font-size:13px; color:var(--cream);
+}
+.insight-cmp-row + .insight-cmp-row{border-top:1px solid var(--border);}
+.insight-cmp-row .ic-label{flex:1 1 40%; min-width:96px; color:var(--cream-dim);}
+:root.hc .insight-cmp-row .ic-label{color:var(--cream);}
+.insight-cmp-row .ic-cur{font-weight:600;}
+.insight-cmp-row .ic-prev{font-size:11.5px; color:var(--cream-dim);}
+.insight-cmp-row .ic-delta{margin-left:auto; font-size:12px; font-weight:600; white-space:nowrap;}
+.insight-cmp-row .ic-delta.good{color:var(--success);}
+.insight-cmp-row .ic-delta.bad{color:var(--danger);}
+.insight-cmp-row .ic-delta.flat{color:var(--cream-dim);}
+.insight-motiv{
+  font-size:12.5px; color:var(--success); line-height:1.5; margin:10px 0 0;
+  padding-top:8px; border-top:1px solid var(--border);
+}
+/* d) categoría con mayor variación */
+.insight-var-row{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  font-size:13px; padding:6px 0;
+}
+.insight-var-row + .insight-var-row{border-top:1px solid var(--border);}
+.insight-var-row.up{color:var(--danger);}
+.insight-var-row.down{color:var(--success);}
+.insight-var-row > span:last-child{font-weight:600; white-space:nowrap;}
+/* e) proyección de fin de mes */
+.insight-proy-main{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  font-size:13.5px; color:var(--cream); margin-bottom:6px;
+}
+.insight-proy-main b{font-family:ui-serif,Georgia,serif; font-size:20px; color:var(--success);}
+.insight-proy-main.neg b{color:var(--danger);}
+.insight-proy-detail{font-size:11.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 10px;}
+:root.hc .insight-proy-detail{color:var(--cream);}
+.insight-alertas-title{
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold-dim); margin:10px 0 6px;
+}
+.insight-alerta{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  font-size:12.5px; color:var(--cream); padding:7px 10px; border-radius:8px;
+  background:rgba(180,84,74,0.10); border:1px solid rgba(180,84,74,0.35); margin-bottom:6px;
+}
+.insight-alerta.doble{
+  background:rgba(180,84,74,0.18); border-color:var(--danger); box-shadow:inset 3px 0 0 var(--danger);
+}
+.insight-alerta .ia-cat{font-weight:600;}
+.insight-alerta .ia-razon{font-size:11px; color:var(--cream-dim); text-align:right;}
+:root.hc .insight-alerta{border-width:2px;}
+:root.hc .insight-alerta .ia-razon{color:var(--cream);}
+.insight-ok{font-size:12.5px; color:var(--cream-dim); margin:8px 0 0;}
+:root.hc .insight-ok{color:var(--cream);}
+
+/* ---------- METAS: racha de cumplimiento del aporte automático ---------- */
+.goal-racha{
+  font-size:13px; color:var(--cream); margin:2px 0 8px; padding-bottom:8px;
+  border-bottom:1px solid var(--border);
+}
+.goal-racha .gr-count{font-weight:700; color:var(--gold);}
+.goal-racha-aviso{font-size:11.5px; color:var(--gold); line-height:1.5; margin:4px 0 0;}
+.goal-racha-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:4px 0 0;}
+.goal-racha-none{font-size:12px; color:var(--cream-dim); line-height:1.5; margin:2px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
+:root.hc .goal-racha-none{color:var(--cream);}
+:root.hc .goal-racha .gr-count{color:var(--cream);}
 </style>
 </head>
 <body>
@@ -743,6 +840,7 @@ button{font-family:inherit;}
     <p class="section-title">Gasto por categoría</p>
     <div id="rCategorias"></div>
     <div class="chart-box" id="rChart" style="display:none;"></div>
+    <div class="insights-wrap" id="rInsights" style="display:none;"></div>
   </div>
 
   <!-- HISTORIAL -->
@@ -2426,6 +2524,81 @@ document.getElementById('btnConfirmDeleteGoal').onclick = ()=>{
   closeSheet('sheetConfirmGoal'); renderAll();
 };
 
+/* ==================== METAS: RACHA DE CUMPLIMIENTO (aporte automático) ==================== */
+// Solo para metas con aporte automático configurado. Cuenta cuántos meses consecutivos
+// el aporte del mes (manual + automático que aplicó ese mes) fue >= al monto configurado.
+//  - aporte >= monto pactado  -> mes cumplido (suma a la racha)
+//  - aporte > 0 pero < pactado -> NO rompe la racha, pero se avisa que no se cumplió el total
+//  - aporte == 0              -> rompe la racha (vuelve a 0)
+// El mes en curso (aún sin cerrar) no rompe la racha si todavía no se aportó.
+// Monto configurado del mes: para tipo 'monto' es el fijo; para 'porcentaje' es el % del
+// disponibleBase de ESE mes (lo mismo que descuenta el aporte automático virtual).
+function aporteMetaObjetivoEnMes(g, d){
+  const aa = g && g.aporteAutomatico;
+  if(!aa || !aa.activo) return null;
+  if(aa.tipo === 'porcentaje'){
+    const va = aporteAutomaticoVirtualParaMes(g, d);
+    if(va) return va.monto;
+    return Math.max(0, Math.round(disponibleBaseDelMes(d) * (aa.valor || 0) / 100));
+  }
+  return aa.monto || 0;
+}
+// Total efectivamente aportado a la meta en un mes: aportes manuales con fecha en ese mes
+// + el aporte automático virtual de ese mes (si aplicó y no quedó pausado).
+function aporteMetaEnMes(g, d){
+  const mk = monthKey(d);
+  let total = 0;
+  (g.aportes || []).forEach(a=>{
+    if(a && monthKey(new Date(a.fecha+"T00:00:00")) === mk) total += a.monto;
+  });
+  const va = aporteAutomaticoVirtualParaMes(g, d);
+  if(va && !calcularEstadoAportesDelMes(d).has(g.id)) total += va.monto;
+  return total;
+}
+function rachaMeta(g){
+  const aa = g && g.aporteAutomatico;
+  if(!aa || !aa.activo || !aa.fechaActivacion) return null;
+  const activMk = monthKey(new Date(aa.fechaActivacion+"T00:00:00"));
+  const realMk = monthKey(new Date());
+  // Se cuenta hacia atrás desde el mes visto (acotado al mes real si se está viendo el futuro).
+  let mk = Math.min(monthKey(currentDate), realMk);
+  let streak = 0, parcial = null, rota = null;
+  while(mk > activMk){   // el aporte automático recurre desde el mes siguiente a la activación
+    const d = new Date(Math.floor(mk / 12), mk % 12, 1);
+    const objetivo = aporteMetaObjetivoEnMes(g, d) || 0;
+    const aportado = aporteMetaEnMes(g, d);
+    const enCurso = mk === realMk;
+    if(objetivo > 0 && aportado >= objetivo){
+      streak++;
+    } else if(aportado > 0){
+      if(!enCurso && !parcial) parcial = { mk, aportado, objetivo };   // no rompe la racha
+    } else {
+      if(!enCurso){ rota = { mk }; break; }   // mes cerrado sin aporte -> corta
+    }
+    mk--;
+  }
+  return { streak, parcial, rota };
+}
+function rachaMetaHtml(g){
+  const aa = g.aporteAutomatico || {};
+  if(!aa.activo){
+    return `<p class="goal-racha-none">Configura un aporte automático para llevar una racha de cumplimiento mes a mes.</p>`;
+  }
+  const r = rachaMeta(g);
+  if(!r) return '';
+  const mesNom = mk => MESES[mk % 12] + ' ' + Math.floor(mk / 12);
+  const plural = r.streak === 1 ? 'mes cumplido' : 'meses cumplidos';
+  let html = `<div class="goal-racha">Racha: <span class="gr-count">${r.streak === 0 ? '0' : '🔥 ' + r.streak}</span> ${plural}`;
+  if(r.parcial){
+    html += `<p class="goal-racha-aviso">En ${mesNom(r.parcial.mk)} aportaste ${money(r.parcial.aportado)} de ${money(r.parcial.objetivo)} pactado — ese mes no se cumplió el monto completo (la racha no se cortó).</p>`;
+  }
+  if(r.rota){
+    html += `<p class="goal-racha-rota">La racha se cortó en ${mesNom(r.rota.mk)}: ese mes no hubo ningún aporte.</p>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
 /* ==================== RENDER: METAS ==================== */
 function renderMetas(){
   const box = document.getElementById('mList');
@@ -2517,6 +2690,7 @@ function renderMetas(){
     // Lápiz de edición (siempre visible) + acciones dentro del bloque colapsable.
     const editBtn = `<button class="card-edit" data-editgoal="${g.id}" aria-label="Editar meta">${icon('edit')}</button>`;
     const expandInner =
+      rachaMetaHtml(g) +
       autoNote +
       aportesListHtml +
       `<button class="debt-action" data-aportar="${g.id}">Aportar</button>` +
@@ -3008,6 +3182,243 @@ function renderResumen(){
       el.addEventListener('click', ()=> openCategoriaDetalle(el.dataset.cat, normalExpenses));
     });
   }
+
+  renderInsights();
+}
+
+/* ==================== RESUMEN: INSIGHTS FINANCIEROS (reglas, sin IA) ==================== */
+// Todo el bloque es determinístico: mismas entradas -> misma salida, sin aleatoriedad.
+// No altera el cálculo del Disponible del mes ni la lógica de gastos fijos/cuotas: solo
+// LEE los mismos motores (getExpensesForMonth, cuotaInfoForMonth, saldoAcumuladoHasta,
+// totalAportesMetasDelMes) para derivar comparaciones, proyección y alertas.
+
+// Agregados de un mes, con el mismo criterio que renderResumen().
+function insightsMesData(refDate){
+  const normalExpenses = getExpensesForMonth(refDate).filter(e=>!e.debtId);
+  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
+  const gastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
+  let cuotas = 0; const cuotasPorCat = {};
+  state.debts.forEach(d=>{
+    const info = cuotaInfoForMonth(d, refDate);
+    if(info){ cuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
+  });
+  const aportesMetas = totalAportesMetasDelMes(refDate);
+  const saldoAnterior = saldoAcumuladoHasta(refDate);
+  const disponible = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
+  const catTotals = {};
+  normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
+  Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
+  const gastoTotal = Object.values(catTotals).reduce((s,v)=> s + v, 0);
+  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, disponible, catTotals, gastoTotal };
+}
+// ¿El mes tiene algún movimiento propio? (define si se puede comparar contra él).
+function mesTieneMovimientos(refDate){
+  if(getExpensesForMonth(refDate).length) return true;
+  if(getIncomesForMonth(refDate).length) return true;
+  if(state.debts.some(d=> cuotaInfoForMonth(d, refDate))) return true;
+  if(totalAportesMetasDelMes(refDate) > 0) return true;
+  return false;
+}
+// e) Proyección de fin de mes. Dos partes: (1) fijos/cuotas restantes conocidos con
+// certeza; (2) gasto variable estimado = promedio diario de gasto NO fijo / NO cuota
+// extrapolado a los días que quedan. Total = ya realizado + restante conocido + estimado.
+function proyeccionFinDeMes(refDate){
+  const data = insightsMesData(refDate);
+  const hoy = new Date();
+  const mkRef = monthKey(refDate), mkHoy = monthKey(hoy);
+  const diasEnMes = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
+  let diasTranscurridos, diasRestantes;
+  if(mkRef < mkHoy){ diasTranscurridos = diasEnMes; diasRestantes = 0; }        // mes cerrado
+  else if(mkRef > mkHoy){ diasTranscurridos = 0; diasRestantes = diasEnMes; }   // mes futuro
+  else { diasTranscurridos = hoy.getDate(); diasRestantes = diasEnMes - diasTranscurridos; }
+
+  const dayOf = iso => parseInt(iso.split('-')[2], 10);
+  const yaOcurrio = iso => {
+    if(mkRef < mkHoy) return true;
+    if(mkRef > mkHoy) return false;
+    return dayOf(iso) <= hoy.getDate();
+  };
+
+  let gastosRealizados = 0, fijosCuotasRestantes = 0, variableOcurrido = 0;
+  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=>{
+    if(yaOcurrio(e.date)){
+      gastosRealizados += e.amount;
+      if(e.tipo !== 'Fijo') variableOcurrido += e.amount;   // base del promedio diario
+    } else {
+      // Aún no ocurre: se conoce con certeza (fijo recurrente o gasto ya registrado a futuro).
+      fijosCuotasRestantes += e.amount;
+    }
+  });
+  cuotasVirtualesHistorial(refDate).forEach(c=>{
+    if(yaOcurrio(c.date)) gastosRealizados += c.amount;
+    else fijosCuotasRestantes += c.amount;
+  });
+
+  const promedioDiario = diasTranscurridos > 0 ? variableOcurrido / diasTranscurridos : 0;
+  const variableEstimado = promedioDiario * diasRestantes;
+  const proyGastos = gastosRealizados + fijosCuotasRestantes + variableEstimado;
+  // Ingresos y aportes a metas ya vienen proyectados al mes completo (fijos + automáticos).
+  const dispProyectado = data.saldoAnterior + data.ingresos - proyGastos - data.aportesMetas;
+
+  return {
+    diasTranscurridos, diasRestantes, diasEnMes,
+    gastosRealizados, fijosCuotasRestantes, variableEstimado, promedioDiario,
+    proyGastos, dispProyectado,
+    ingresos: data.ingresos, aportesMetas: data.aportesMetas, saldoAnterior: data.saldoAnterior
+  };
+}
+// Variación por categoría entre dos meses (curr vs prev). pct = null si no existía antes.
+function variacionCategorias(curr, prev){
+  const cats = new Set([...Object.keys(curr), ...Object.keys(prev)]);
+  const arr = [];
+  cats.forEach(c=>{
+    const a = curr[c] || 0, b = prev[c] || 0;
+    if(a === 0 && b === 0) return;
+    arr.push({ cat:c, curr:a, prev:b, delta:a - b, pct: b > 0 ? (a - b) / b * 100 : null });
+  });
+  return arr;
+}
+// Categorías en alerta dentro del bloque de proyección:
+//  c1 = creció más de 25% respecto a sí misma el mes anterior (necesita mes previo con datos)
+//  c2 = representa más de 35% del gasto total del mes actual
+// Si cumple ambas, se marca `doble` para distinguirla visualmente.
+function categoriasEnAlerta(data, prevData, prevTiene){
+  const res = [];
+  Object.entries(data.catTotals).forEach(([cat, val])=>{
+    if(val <= 0) return;
+    let c1 = false, c2 = false;
+    if(prevTiene){
+      const pv = prevData.catTotals[cat] || 0;
+      if(pv > 0 && (val - pv) / pv > 0.25) c1 = true;
+    }
+    if(data.gastoTotal > 0 && val / data.gastoTotal > 0.35) c2 = true;
+    if(c1 || c2) res.push({ cat, val, c1, c2 });
+  });
+  return res.sort((a,b)=> b.val - a.val);
+}
+
+function renderInsights(){
+  const box = document.getElementById('rInsights');
+  if(!box) return;
+  // Sin ningún dato en toda la app: no tiene sentido mostrar insights.
+  if(primerMesConDatos() === null){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+
+  const data = insightsMesData(currentDate);
+  const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1);
+  const prevTiene = mesTieneMovimientos(prevDate);
+  const prevData = insightsMesData(prevDate);
+
+  // Nada que mostrar: el mes visto no tiene movimientos, no hay mes anterior con datos
+  // y no se arrastra saldo. Evita un panel de puros ceros en meses vacíos.
+  if(!mesTieneMovimientos(currentDate) && !prevTiene && Math.round(data.saldoAnterior) === 0){
+    box.style.display = 'none'; box.innerHTML = ''; return;
+  }
+
+  const proy = proyeccionFinDeMes(currentDate);
+  const alertas = categoriasEnAlerta(data, prevData, prevTiene);
+  const hayAlerta = alertas.length > 0;
+  const disp = proy.dispProyectado;
+  const nombreMes = d => MESES[d.getMonth()] + ' ' + d.getFullYear();
+  const signedMoney = n => (n < 0 ? '−' : '') + money(Math.abs(n));
+
+  // ---- a) Semáforo de salud financiera ----
+  let sem, semTxt;
+  if(disp < 0){ sem = 'sem-rojo'; semTxt = 'en rojo'; }
+  else if(disp === 0 || disp < 0.10 * data.ingresos || hayAlerta){ sem = 'sem-ambar'; semTxt = 'en amarillo'; }
+  else { sem = 'sem-verde'; semTxt = 'en verde'; }
+  const semHtml = `<div class="insight-semaforo ${sem}"><span class="sem-dot"></span>Salud financiera: ${semTxt}</div>`;
+
+  // ---- b) Frase resumen del mes (prioridad: sobregasto > mayor aumento > neutro) ----
+  const varCats = variacionCategorias(data.catTotals, prevData.catTotals);
+  const topAumento = varCats.filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
+  let frase;
+  if(disp < 0){
+    frase = `Proyección de sobregasto: cerrarías el mes en ${signedMoney(disp)}.`;
+  } else if(prevTiene && topAumento){
+    frase = `${topAumento.cat} es la categoría que más subió este mes: +${money(topAumento.delta)} respecto al mes anterior.`;
+  } else {
+    frase = 'Vas bien encaminado este mes.';
+  }
+  const fraseHtml = `<p class="insight-frase">${frase}</p>`;
+
+  // ---- c) Comparación mes a mes ----
+  const cmpRow = (label, curr, prev, upIsGood)=>{
+    if(!prevTiene){
+      return `<div class="insight-cmp-row"><span class="ic-label">${label}</span><span class="ic-cur">${signedMoney(curr)}</span></div>`;
+    }
+    const delta = curr - prev;
+    const pct = prev !== 0 ? Math.round(delta / Math.abs(prev) * 100) : null;
+    let arrow, cls;
+    if(delta > 0){ arrow = '▲'; cls = upIsGood ? 'good' : 'bad'; }
+    else if(delta < 0){ arrow = '▼'; cls = upIsGood ? 'bad' : 'good'; }
+    else { arrow = '='; cls = 'flat'; }
+    const pctTxt = pct === null ? (delta === 0 ? 'sin cambio' : 'nuevo') : Math.abs(pct) + '%';
+    return `<div class="insight-cmp-row">
+      <span class="ic-label">${label}</span>
+      <span class="ic-cur">${signedMoney(curr)}</span>
+      <span class="ic-prev">antes ${signedMoney(prev)}</span>
+      <span class="ic-delta ${cls}">${arrow} ${pctTxt}</span>
+    </div>`;
+  };
+  let cmpBody =
+    cmpRow('Ingresos', data.ingresos, prevData.ingresos, true) +
+    cmpRow('Gastos', data.gastos, prevData.gastos, false) +
+    cmpRow('Disponible', data.disponible, prevData.disponible, true) +
+    cmpRow('Aporte total a metas', data.aportesMetas, prevData.aportesMetas, true);
+  if(!prevTiene){
+    cmpBody += `<p class="insight-nodata">Aún no hay datos del mes anterior para comparar.</p>`;
+  } else if(data.aportesMetas > prevData.aportesMetas){
+    cmpBody += `<p class="insight-motiv">Aportaste ${money(data.aportesMetas - prevData.aportesMetas)} más a tus metas que el mes pasado. ¡Sigue así!</p>`;
+  }
+  const cmpHtml = `<div class="insight-block"><p class="insight-block-title">Comparación con el mes anterior</p>${cmpBody}</div>`;
+
+  // ---- d) Categoría con mayor variación ----
+  let varBody;
+  if(!prevTiene){
+    varBody = `<p class="insight-nodata">Aún no hay datos del mes anterior para comparar.</p>`;
+  } else {
+    const inc = varCats.filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
+    const dec = varCats.filter(v=> v.delta < 0).sort((a,b)=> a.delta - b.delta)[0];
+    const pctTxt = v => v.pct === null ? 'nueva' : (v.pct >= 0 ? '+' : '') + Math.round(v.pct) + '%';
+    const parts = [];
+    if(inc) parts.push(`<div class="insight-var-row up"><span>▲ ${inc.cat}</span><span>+${money(inc.delta)} · ${pctTxt(inc)}</span></div>`);
+    if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${dec.cat}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
+    varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin cambios de categoría respecto al mes anterior.</p>`;
+  }
+  const varHtml = `<div class="insight-block"><p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
+
+  // ---- e) Proyección de fin de mes + categorías en alerta ----
+  const alertasHtml = alertas.length ? (
+    `<p class="insight-alertas-title">Categorías en alerta</p>` +
+    alertas.map(a=>{
+      const razones = [];
+      if(a.c1) razones.push('subió +25% vs. mes anterior');
+      if(a.c2) razones.push('más del 35% del gasto del mes');
+      const doble = a.c1 && a.c2;
+      return `<div class="insight-alerta${doble ? ' doble' : ''}">
+        <span class="ia-cat">${doble ? '⚠⚠' : '⚠'} ${a.cat} · ${money(a.val)}</span>
+        <span class="ia-razon">${razones.join(' + ')}</span>
+      </div>`;
+    }).join('')
+  ) : `<p class="insight-ok">Ninguna categoría en alerta este mes.</p>`;
+  const proyHtml = `<div class="insight-block">
+    <p class="insight-block-title">Proyección de fin de mes</p>
+    <div class="insight-proy-main${disp < 0 ? ' neg' : ''}">
+      <span>Disponible proyectado</span><b>${signedMoney(disp)}</b>
+    </div>
+    <p class="insight-proy-detail">
+      Gasto proyectado ${money(proy.proyGastos)} = ${money(proy.gastosRealizados)} ya realizado
+      + ${money(proy.fijosCuotasRestantes)} en fijos y cuotas por venir
+      + ${money(proy.variableEstimado)} de gasto variable estimado
+      ${proy.diasRestantes > 0 ? `· ${proy.diasRestantes === 1 ? 'queda 1 día' : 'quedan ' + proy.diasRestantes + ' días'} del mes` : '· mes cerrado'}.
+    </p>
+    ${alertasHtml}
+  </div>`;
+
+  box.innerHTML =
+    `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
+    semHtml + fraseHtml + cmpHtml + varHtml + proyHtml;
 }
 
 /* ==================== DETALLE DE CATEGORÍA (desde Resumen) ==================== */
@@ -3285,12 +3696,14 @@ function renderHistorial(){
     const rowHtml = (e)=>{
       if(e.isVirtualCuota){
         // Fila virtual: el monto SÍ es lo que impacta el Disponible de este mes -> rojo.
+        // Pagada: aspecto normal + check. Sin pagar: segunda etiqueta "SIN PAGAR".
         const check = e.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
+        const unpaidBadge = e.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
         return `
       <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${check}</p>
+          <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
           <p class="li-sub">${fmtDate(e.date)} · ${e.category} · cuota ${e.cuotaNum} de ${e.totalCuotas}</p>
         </div>
         <span class="li-amount li-amount-cuota-real">${money(e.amount)}</span>
@@ -3425,14 +3838,15 @@ function renderHistorialTodo(box){
       </div>`;
     }
     if(it.isVirtualCuota){
-      // Fila virtual de cuota: el −monto SÍ pesa en el saldo de este mes -> rojo. Si la
-      // cuota ya se marcó como pagada a mano, la fila se atenúa y muestra un check.
+      // Fila virtual de cuota: el −monto SÍ pesa en el saldo de este mes -> rojo.
+      // Pagada: aspecto normal + check. Sin pagar: segunda etiqueta "SIN PAGAR".
       const check = it.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
+      const unpaidBadge = it.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
       return `
       <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${check}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
           <p class="li-sub">${fmtDate(it.date)} · ${it.category} · cuota ${it.cuotaNum} de ${it.totalCuotas}</p>
         </div>
         <div class="li-amount-wrap">
@@ -4172,9 +4586,15 @@ document.getElementById('btnResumenImgCopy').onclick = async ()=>{
 };
 
 /* ==================== GRÁFICOS SVG (JS puro, sin librerías) — Día 14 ==================== */
-// Estado por pantalla: 'lista' -> 'barra' -> 'torta' -> 'lista' (el toggle cicla).
+// Estado por pantalla: el toggle cicla entre los estados de esa pantalla.
+// Historial ya no ofrece "Barra": alterna solo Lista <-> Torta.
 const chartView = { resumen:'lista', historial:'lista', metas:'lista' };
 const CHART_STATES = ['lista','barra','torta'];
+const CHART_STATES_BY_SCREEN = {
+  resumen: ['lista','barra','torta'],
+  historial: ['lista','torta'],
+  metas: ['lista','barra','torta']
+};
 // Colores de sectores (torta): salen de las CSS custom properties, se ciclan.
 const SLICE_COLORS = ['var(--gold)','var(--burgundy-light)','var(--success)','var(--gold-dim)','var(--danger)','var(--cream-dim)','var(--burgundy)'];
 
@@ -4190,7 +4610,9 @@ function syncChartToggle(screen){
 ['resumen','historial','metas'].forEach(screen=>{
   const btn = document.getElementById('tg' + cap(screen));
   if(btn) btn.addEventListener('click', ()=>{
-    chartView[screen] = CHART_STATES[(CHART_STATES.indexOf(chartView[screen]) + 1) % CHART_STATES.length];
+    const states = CHART_STATES_BY_SCREEN[screen] || CHART_STATES;
+    const idx = states.indexOf(chartView[screen]);
+    chartView[screen] = states[(idx + 1) % states.length];
     renderAll();
   });
 });
