@@ -1569,8 +1569,9 @@ function haptic(pattern){
 // Todas las animaciones nuevas pasan por aquí. Con "reducir movimiento" activo
 // (prefers-reduced-motion), cada helper salta directo al estado final: sin conteo,
 // sin shake, sin confetti, sin pop — el resultado se ve igual, solo sin recorrido.
-const reduceMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
-function prefersReducedMotion(){ return reduceMotionMQ.matches; }
+let reduceMotionMQ = null;
+try{ reduceMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)'); }catch(_){}
+function prefersReducedMotion(){ return !!(reduceMotionMQ && reduceMotionMQ.matches); }
 
 /* ---- Toast / snackbar propio (reemplaza alert() en flujos no críticos) ---- */
 function showToast(msg, type, ms){
