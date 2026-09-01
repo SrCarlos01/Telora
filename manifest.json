@@ -1,0 +1,21 @@
+{
+  "name": "MisFinanzas",
+  "short_name": "MisFinanzas",
+  "description": "Control de gastos, ingresos, cuotas y metas de ahorro.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1B1210",
+  "theme_color": "#1B1210",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

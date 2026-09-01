@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MisFinanzas">
+  <!-- Fondo a sangre (seguro para iconos "maskable" de Android) -->
+  <rect width="512" height="512" fill="#5C1F2E"/>
+  <!-- Marco sutil dorado, dentro de la zona segura -->
+  <rect x="96" y="96" width="320" height="320" rx="76" fill="none"
+        stroke="#C9A66B" stroke-width="9" opacity="0.6"/>
+  <!-- Símbolo "$" serif, en el dorado de la paleta -->
+  <text x="256" y="256" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif"
+        font-weight="700" font-size="248" fill="#C9A66B">$</text>
+</svg>
