@@ -1504,6 +1504,7 @@ button:active{ transform:scale(0.97); }
       <div class="field"><label>Desde</label><input type="date" id="expDesde"></div>
       <div class="field"><label>Hasta</label><input type="date" id="expHasta"></div>
     </div>
+    <button class="btn-primary" id="btnShareExport" style="display:none;">Compartir Excel</button>
     <button class="btn-primary" id="btnDoExport">Generar Excel</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
@@ -1518,6 +1519,7 @@ button:active{ transform:scale(0.97); }
       Imagen del resumen de <span id="resumenImgMes"></span> lista para guardar o compartir.
     </p>
     <div id="resumenImgPreview" style="margin-bottom:16px;"></div>
+    <button class="btn-primary" id="btnResumenImgShare" style="display:none;">Compartir</button>
     <button class="btn-primary" id="btnResumenImgDownload">Descargar</button>
     <button class="btn-ghost" id="btnResumenImgCopy">Copiar al portapapeles</button>
     <button class="btn-ghost" data-close>Cerrar</button>
@@ -2548,6 +2550,7 @@ document.getElementById('btnConfig').onclick = ()=>{
 };
 document.getElementById('btnExport').onclick = ()=>{
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
+  document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
   openSheet('sheetExportar');
 };
 
@@ -5237,25 +5240,54 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
   renderAll();
 };
 
+/* ==================== COMPARTIR ARCHIVOS (Web Share API, con fallback) ==================== */
+// ¿El navegador puede compartir archivos vía navigator.share? (mismo criterio que Tanda H
+// para el respaldo). Si no, los botones "Compartir" se ocultan y queda solo la descarga.
+function supportsFileShare(){
+  try{
+    if(!(navigator.share && navigator.canShare)) return false;
+    return navigator.canShare({ files:[ new File(['x'], 'probe.txt', { type:'text/plain' }) ] });
+  }catch(_){ return false; }
+}
+// Comparte un File ya construido; AbortError (el usuario cierra la hoja de compartir) no es error.
+async function shareFile(file, title, fallbackMsg){
+  if(!file || !(navigator.canShare && navigator.canShare({ files:[file] }))){
+    showToast(fallbackMsg || 'Tu navegador no permite compartir archivos.', 'error');
+    return;
+  }
+  try{
+    await navigator.share({ files:[file], title });
+    haptic(HAPTIC_OK);
+  }catch(err){
+    if(err && err.name === 'AbortError') return;
+    console.warn('No se pudo compartir el archivo:', err);
+    showToast(fallbackMsg || 'No se pudo compartir.', 'error');
+  }
+}
+
 /* ==================== EXPORTAR ==================== */
 document.querySelectorAll('input[name=exportScope]').forEach(r=>{
   r.addEventListener('change', ()=>{
     document.getElementById('rangoFields').style.display = r.value==='rango' ? 'flex' : 'none';
   });
 });
-document.getElementById('btnDoExport').onclick = ()=>{
+// Resuelve el rango de fechas según la opción elegida. Devuelve null (y muestra el
+// aviso) si la selección no es válida, para que ni descargar ni compartir sigan.
+function resolveExportRange(){
   const scope = document.querySelector('input[name=exportScope]:checked').value;
-  let fromDate, toDate;
   if(scope==='mes'){
-    fromDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    toDate = new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 0);
-  } else if(scope==='todo'){
+    return {
+      fromDate: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+      toDate: new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 0)
+    };
+  }
+  if(scope==='todo'){
     const allDates = [
       ...state.expenses.map(e=>e.date),
       ...state.incomes.map(i=>i.date),
       ...state.debts.map(d=>d.purchaseDate)
     ];
-    if(allDates.length===0){ showToast('Todavía no hay datos para exportar.', 'error'); return; }
+    if(allDates.length===0){ showToast('Todavía no hay datos para exportar.', 'error'); return null; }
     const minDate = new Date(allDates.reduce((a,b)=> a<b?a:b)+"T00:00:00");
     // hasta el mes más lejano con alguna cuota vigente, o hasta el mes actual visible, lo que sea más tarde
     let maxMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -5263,19 +5295,41 @@ document.getElementById('btnDoExport').onclick = ()=>{
       const lastCuotaMonth = addMonths(d.purchaseDate, d.numCuotas); // mes de la última cuota activa
       if(lastCuotaMonth > maxMonth) maxMonth = new Date(lastCuotaMonth.getFullYear(), lastCuotaMonth.getMonth(), 1);
     });
-    fromDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    toDate = new Date(maxMonth.getFullYear(), maxMonth.getMonth()+1, 0);
-  } else {
-    const d1 = document.getElementById('expDesde').value;
-    const d2 = document.getElementById('expHasta').value;
-    if(!d1 || !d2){ showToast('Selecciona ambas fechas.', 'error'); return; }
-    fromDate = new Date(d1+"T00:00:00"); toDate = new Date(d2+"T23:59:59");
+    return {
+      fromDate: new Date(minDate.getFullYear(), minDate.getMonth(), 1),
+      toDate: new Date(maxMonth.getFullYear(), maxMonth.getMonth()+1, 0)
+    };
   }
-  exportExcel(fromDate, toDate);
+  const d1 = document.getElementById('expDesde').value;
+  const d2 = document.getElementById('expHasta').value;
+  if(!d1 || !d2){ showToast('Selecciona ambas fechas.', 'error'); return null; }
+  return { fromDate: new Date(d1+"T00:00:00"), toDate: new Date(d2+"T23:59:59") };
+}
+document.getElementById('btnDoExport').onclick = ()=>{
+  const range = resolveExportRange();
+  if(!range) return;
+  exportExcel(range.fromDate, range.toDate);
+  closeSheet('sheetExportar');
+};
+document.getElementById('btnShareExport').onclick = async ()=>{
+  const range = resolveExportRange();
+  if(!range) return;
+  const { wb, filename } = buildExportWorkbook(range.fromDate, range.toDate);
+  let file = null;
+  try{
+    const buf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+    file = new File([buf], filename, { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }catch(_){}
+  if(!file || !(navigator.canShare && navigator.canShare({ files:[file] }))){
+    exportExcel(range.fromDate, range.toDate);   // fallback: descarga normal
+    closeSheet('sheetExportar');
+    return;
+  }
+  await shareFile(file, 'Exportación de MisFinanzas', 'No se pudo compartir. Prueba "Generar Excel".');
   closeSheet('sheetExportar');
 };
 
-function exportExcel(fromDate, toDate){
+function buildExportWorkbook(fromDate, toDate){
   const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
 
   // Expande cada gasto (incluyendo las ocurrencias mensuales de los gastos Fijos)
@@ -5331,6 +5385,11 @@ function exportExcel(fromDate, toDate){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeRows), "Ingresos");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(debtRows), "Deudas (Cuotas)");
   const filename = `MisFinanzas_${new Date().toISOString().slice(0,10)}.xlsx`;
+  return { wb, filename };
+}
+// Descarga (comportamiento de siempre de "Generar Excel").
+function exportExcel(fromDate, toDate){
+  const { wb, filename } = buildExportWorkbook(fromDate, toDate);
   XLSX.writeFile(wb, filename);
 }
 
@@ -5594,10 +5653,20 @@ function generarResumenImagen(){
       cpy.disabled = !(navigator.clipboard && window.ClipboardItem);
       cpy.style.opacity = cpy.disabled ? '0.5' : '';
     }
+    document.getElementById('btnResumenImgShare').style.display = supportsFileShare() ? 'block' : 'none';
     openSheet('sheetResumenImg');
     haptic(HAPTIC_OK);
   }, 'image/png');
 }
+
+document.getElementById('btnResumenImgShare').onclick = async ()=>{
+  if(!resumenImgBlob) return;
+  const filename = `MisFinanzas_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
+  let file = null;
+  try{ file = new File([resumenImgBlob], filename, { type:'image/png' }); }catch(_){}
+  await shareFile(file, 'Resumen ' + MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear(),
+                 'No se pudo compartir. Usa "Descargar".');
+};
 
 document.getElementById('btnResumenImg').onclick = ()=>{
   try{ generarResumenImagen(); }
