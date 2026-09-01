@@ -1360,9 +1360,9 @@ button:active{ transform:scale(0.97); }
 
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
     <p class="sheet-note" style="margin:0 0 12px;">
-      Descarga un archivo con todos tus datos (gastos, ingresos, cuotas y categorías). Sirve para no perder nada si cambias de link o de celular.
+      Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
     </p>
-    <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar respaldo</button>
+    <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
     <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
     <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
 
@@ -1399,11 +1399,35 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2>¿Restaurar este respaldo?</h2>
-    <p class="sheet-note">
+    <p class="sheet-note" style="margin-bottom:12px;">
       Esto reemplazará todos los datos actuales de la app (gastos, ingresos, cuotas y categorías) por los del archivo. Esta acción no se puede deshacer.
     </p>
+    <div class="cuota-proy-origen" id="restoreCompareBox">
+      <p class="cuota-proy-origen-title">Actual → en el respaldo</p>
+      <div class="cuota-proy-line"><span>Gastos</span><b id="rcGastos"></b></div>
+      <div class="cuota-proy-line"><span>Ingresos</span><b id="rcIngresos"></b></div>
+      <div class="cuota-proy-line"><span>Deudas / cuotas</span><b id="rcDeudas"></b></div>
+      <div class="cuota-proy-line"><span>Metas</span><b id="rcMetas"></b></div>
+    </div>
     <button class="btn-danger" id="btnConfirmRestore">Sí, restaurar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: tarjeta previa antes de compartir/descargar el respaldo -->
+<div class="sheet-overlay" id="sheetBackupShare">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="brand" style="justify-content:center; margin-bottom:16px;">
+      <div class="mark">$</div>
+      <span class="name">MisFinanzas</span>
+    </div>
+    <h2 style="text-align:center;">Tu respaldo está listo</h2>
+    <p class="sheet-note" id="backupSummaryText" style="text-align:center; margin:-4px 0 4px;"></p>
+    <p class="sheet-note" id="backupFilenameText" style="text-align:center; font-size:11.5px; margin:0 0 18px;"></p>
+    <button class="btn-primary" id="btnBackupShare" style="display:none;">Compartir</button>
+    <button class="btn-ghost" id="btnBackupDownload" style="margin-top:8px;">Descargar</button>
+    <button class="btn-ghost" data-close>Cerrar</button>
   </div>
 </div>
 
@@ -4889,19 +4913,119 @@ try{
 }catch(_){ /* sin soporte de visibilitychange: la app queda usable, solo sin el re-bloqueo automático */ }
 
 /* ==================== RESPALDO / RESTAURAR DATOS (JSON) ==================== */
-document.getElementById('btnBackupData').onclick = ()=>{
+// El respaldo es `state` completo tal cual: gastos, ingresos, deudas/cuotas, metas
+// (con sus aportes) y configuración. Lo único que NUNCA viaja aquí es el PIN (Tanda
+// H.1): vive en una clave de localStorage aparte a propósito.
+function buildBackupFile(){
   const payload = JSON.stringify(state, null, 2);
-  const blob = new Blob([payload], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const fecha = new Date().toISOString().slice(0,10);
+  const filename = `MisFinanzas_respaldo_${fecha}.json`;
+  const blob = new Blob([payload], {type:'application/json'});
+  let file = null;
+  try{ file = new File([blob], filename, {type:'application/json'}); }catch(_){ /* File API no disponible: solo queda la descarga */ }
+  return { blob, file, filename };
+}
+function pluralEs(n, singular, plural){ return n===1 ? singular : (plural || singular+'s'); }
+function backupSummaryLine(){
+  const g = state.expenses.length, i = state.incomes.length, d = state.debts.length, m = (state.goals||[]).length;
+  return [
+    `${g} ${pluralEs(g,'gasto','gastos')}`,
+    `${i} ${pluralEs(i,'ingreso','ingresos')}`,
+    `${d} ${pluralEs(d,'deuda','deudas')}`,
+    `${m} ${pluralEs(m,'meta','metas')}`,
+    'actualizado hoy'
+  ].join(' · ');
+}
+
+/* ---- Tarjeta previa: resumen del contenido + Compartir (nativo, con archivo) / Descargar ---- */
+let pendingBackup = null;
+document.getElementById('btnBackupData').onclick = ()=>{
+  pendingBackup = buildBackupFile();
+  document.getElementById('backupSummaryText').textContent = backupSummaryLine();
+  document.getElementById('backupFilenameText').textContent = pendingBackup.filename;
+  let canShareFiles = false;
+  try{ canShareFiles = !!(pendingBackup.file && navigator.canShare && navigator.canShare({files:[pendingBackup.file]})); }catch(_){}
+  document.getElementById('btnBackupShare').style.display = canShareFiles ? 'block' : 'none';
+  closeSheet('sheetConfig');
+  openSheet('sheetBackupShare');
+};
+document.getElementById('btnBackupShare').onclick = async ()=>{
+  if(!pendingBackup || !pendingBackup.file) return;
+  try{
+    await navigator.share({ files:[pendingBackup.file], title:'Respaldo de MisFinanzas' });
+  }catch(err){
+    if(err && err.name === 'AbortError') return;   // el usuario cerró el share sheet: no es un error
+    console.warn('No se pudo compartir el respaldo:', err);
+    showToast('No se pudo compartir. Prueba "Descargar".', 'error');
+  }
+};
+document.getElementById('btnBackupDownload').onclick = ()=>{
+  if(!pendingBackup) pendingBackup = buildBackupFile();
+  const url = URL.createObjectURL(pendingBackup.blob);
+  const a = document.createElement('a');
   a.href = url;
-  a.download = `MisFinanzas_respaldo_${fecha}.json`;
+  a.download = pendingBackup.filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  showToast('Respaldo descargado.', 'success');
 };
+
+/* ---- Validación estricta del archivo a restaurar (Tanda H.2) ----
+   No basta con que existan los arreglos: cada registro debe tener sus campos
+   esperados con el tipo correcto. Un archivo corrupto o incompleto se rechaza con
+   un mensaje claro, antes de tocar nada. */
+const isStr = v => typeof v === 'string';
+const isNum = v => typeof v === 'number' && isFinite(v);
+const isIsoDate = v => isStr(v) && /^\d{4}-\d{2}-\d{2}$/.test(v);
+function validExpenseShape(e){
+  return e && typeof e === 'object'
+    && isStr(e.id) && isIsoDate(e.date) && isNum(e.amount)
+    && isStr(e.category) && isStr(e.method) && isStr(e.description) && isStr(e.tipo)
+    && (e.debtId == null || isStr(e.debtId));
+}
+function validIncomeShape(i){
+  return i && typeof i === 'object'
+    && isStr(i.id) && isIsoDate(i.date) && isNum(i.amount)
+    && isStr(i.source) && isStr(i.description) && isStr(i.tipo);
+}
+function validDebtShape(d){
+  return d && typeof d === 'object'
+    && isStr(d.id) && isStr(d.description) && isIsoDate(d.purchaseDate)
+    && isStr(d.category) && isNum(d.totalAmount) && isNum(d.numCuotas)
+    && (d.manualPaidMonthKeys === undefined || Array.isArray(d.manualPaidMonthKeys));
+}
+function validAporteShape(a){
+  return a && typeof a === 'object' && isStr(a.id) && isStr(a.fecha) && isNum(a.monto);
+}
+function validGoalShape(g){
+  if(!g || typeof g !== 'object' || !isStr(g.id) || !isStr(g.name)) return false;
+  if(g.aportes !== undefined && (!Array.isArray(g.aportes) || !g.aportes.every(validAporteShape))) return false;
+  return true;
+}
+function validConfigShape(c){
+  const isStrArr = arr => Array.isArray(arr) && arr.every(isStr);
+  return c && typeof c === 'object' && isStrArr(c.categorias) && isStrArr(c.metodos) && isStrArr(c.fuentes);
+}
+// Devuelve null si el respaldo es válido, o un mensaje de error para mostrar.
+function validateBackupShape(parsed){
+  if(!parsed || typeof parsed !== 'object') return 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.';
+  if(!validConfigShape(parsed.config)) return 'La configuración del respaldo está incompleta o dañada.';
+  if(!Array.isArray(parsed.expenses) || !parsed.expenses.every(validExpenseShape)) return 'Los gastos del respaldo están incompletos o dañados.';
+  if(!Array.isArray(parsed.incomes) || !parsed.incomes.every(validIncomeShape)) return 'Los ingresos del respaldo están incompletos o dañados.';
+  if(!Array.isArray(parsed.debts) || !parsed.debts.every(validDebtShape)) return 'Las deudas/cuotas del respaldo están incompletas o dañadas.';
+  // goals puede faltar del todo en respaldos de antes de la función Metas; si está, debe ser válido.
+  if(parsed.goals !== undefined && (!Array.isArray(parsed.goals) || !parsed.goals.every(validGoalShape))) return 'Las metas del respaldo están incompletas o dañadas.';
+  return null;
+}
+function fillRestoreCompare(backup){
+  const set = (id, cur, nue)=> document.getElementById(id).textContent = `${cur} → ${nue}`;
+  set('rcGastos', state.expenses.length, (backup.expenses||[]).length);
+  set('rcIngresos', state.incomes.length, (backup.incomes||[]).length);
+  set('rcDeudas', state.debts.length, (backup.debts||[]).length);
+  set('rcMetas', (state.goals||[]).length, (backup.goals||[]).length);
+}
 
 let pendingRestoreData = null;
 document.getElementById('btnRestoreData').onclick = ()=>{
@@ -4914,11 +5038,13 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
   reader.onload = (ev)=>{
     try{
       const parsed = JSON.parse(ev.target.result);
-      if(!parsed || !parsed.config || !Array.isArray(parsed.expenses) || !Array.isArray(parsed.incomes) || !Array.isArray(parsed.debts)){
-        showToast('Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.', 'error');
+      const errMsg = validateBackupShape(parsed);
+      if(errMsg){
+        showToast(errMsg, 'error');
         return;
       }
       pendingRestoreData = parsed;
+      fillRestoreCompare(parsed);
       closeSheet('sheetConfig');
       openSheet('sheetConfirmRestore');
     }catch(err){
