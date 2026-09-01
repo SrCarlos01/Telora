@@ -33,6 +33,15 @@
   --radius:16px;
   --radius-sm:10px;
   --font-scale:1;   /* Tamaño de letra (accesibilidad): 1 / 1.15 / 1.3 — ver Configuración */
+
+  /* Sistema de animación (Tanda G) — una sola curva y tres duraciones para que
+     todas las microinteracciones nuevas se sientan parte del mismo conjunto.
+     --ease-out replica la curva del sheet; --ease-bounce se usa solo en "pops". */
+  --ease-out: cubic-bezier(.32,.72,0,1);
+  --ease-bounce: cubic-bezier(.34,1.56,.64,1);
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
 html,body{
@@ -657,6 +666,101 @@ button{font-family:inherit;}
 }
 .export-opt input{accent-color:var(--burgundy); width:18px; height:18px; font-size:16px;}  /* 16px: sin efecto visual en el radio, evita el auto-zoom de iOS */
 .export-opt span{font-size:15px; color:var(--cream);}
+
+/* ---------- SISTEMA DE ANIMACIÓN (Tanda G · Día 6) ---------- */
+/* Microinteracciones nuevas. Todas usan --ease-out / --ease-bounce y --dur-*.
+   El bloque prefers-reduced-motion de más abajo las neutraliza (quedan instantáneas,
+   mostrando el estado final) sin tocar ninguna funcionalidad. */
+
+/* Feedback táctil genérico: cualquier botón sin su propia regla :active se hunde un
+   poco al presionarlo. Las reglas más específicas ya existentes (nav-add, btn-primary,
+   card-edit, chips…) siguen ganando por especificidad. */
+button{ transition:transform var(--dur-fast) var(--ease-out); }
+button:active{ transform:scale(0.97); }
+
+/* Transición entre pantallas (Resumen / Historial / Cuotas / Metas): fade + slide
+   corto según la dirección de navegación, en vez del corte seco. */
+.screen.active.scr-fwd{ animation:scrInFwd var(--dur-base) var(--ease-out); }
+.screen.active.scr-back{ animation:scrInBack var(--dur-base) var(--ease-out); }
+@keyframes scrInFwd{ from{ opacity:0; transform:translateX(16px); } to{ opacity:1; transform:translateX(0); } }
+@keyframes scrInBack{ from{ opacity:0; transform:translateX(-16px); } to{ opacity:1; transform:translateX(0); } }
+
+/* Botón "Guardar": destello + check breve antes de cerrar el formulario. */
+.btn-primary.btn-flash-ok{ background:var(--success); }
+.btn-primary .btn-check-icon{ width:22px; height:22px; vertical-align:-6px; animation:btnCheckPop 260ms var(--ease-bounce); }
+@keyframes btnCheckPop{ from{ transform:scale(.3); opacity:0; } to{ transform:scale(1); opacity:1; } }
+
+/* Filas que se van (eliminar movimiento / aporte): fade-out corto antes del re-render. */
+.list-item.row-removing, .cat-row.row-removing, .aporte-row.row-removing,
+.debt-card.row-removing, .goal-card.row-removing{
+  animation:rowOut var(--dur-base) var(--ease-out) forwards; overflow:hidden; pointer-events:none;
+}
+@keyframes rowOut{
+  to{ opacity:0; transform:translateX(-16px); max-height:0;
+      padding-top:0; padding-bottom:0; margin-top:0; margin-bottom:0; }
+}
+/* Filas que entran en el Historial al registrar un movimiento nuevo: slide-in sutil. */
+.list-item.row-new{ animation:rowIn var(--dur-base) var(--ease-out); }
+@keyframes rowIn{ from{ opacity:0; transform:translateY(-8px); } to{ opacity:1; transform:translateY(0); } }
+
+/* Chips (categoría, categorías frecuentes, montos rápidos): micro-bounce al tocarlos. */
+.chip-bounce{ animation:chipBounce 300ms var(--ease-bounce); }
+@keyframes chipBounce{ 0%{ transform:scale(1); } 40%{ transform:scale(.9); } 70%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
+
+/* Validación inline en formularios: shake al fallar, check verde breve al validar. */
+.field-shake{ animation:fieldShake 460ms var(--ease-out); }
+@keyframes fieldShake{
+  10%,90%{ transform:translateX(-2px); } 20%,80%{ transform:translateX(3px); }
+  30%,50%,70%{ transform:translateX(-5px); } 40%,60%{ transform:translateX(5px); }
+}
+.field-shake input, .field-shake select, .field-shake textarea{ border-color:var(--danger); }
+.field-ok input, .field-ok select, .field-ok textarea{ border-color:var(--success); }
+.field .lbl-ok{ color:var(--success); font-weight:700; display:inline-block; animation:btnCheckPop 300ms var(--ease-bounce); }
+
+/* Totales grandes del Resumen: la animación de conteo se hace por JS (animateCount);
+   aquí solo el número de la racha de metas, que "popea" al subir. */
+.goal-racha .gr-count{ display:inline-block; }
+.goal-racha .gr-count.gr-pop{ animation:grPop 520ms var(--ease-bounce); }
+@keyframes grPop{ 0%{ transform:scale(1); } 35%{ transform:scale(1.35); } 100%{ transform:scale(1); } }
+
+/* Barra de progreso de cada meta: crece hacia su valor cada vez que se muestra. */
+.goal-card .progress-fill{ transition:width var(--dur-slow) var(--ease-out); }
+
+/* Semáforo de salud financiera: cada punto encendido entra suave; al pasar a rojo,
+   un único pulso. */
+.insight-semaforo .sem-dot.on{ animation:semDotIn var(--dur-base) var(--ease-out); }
+@keyframes semDotIn{ from{ transform:scale(.4); opacity:0; } to{ transform:scale(1); opacity:1; } }
+.insight-semaforo.sem-pulse .sem-dot.sem-rojo.on{
+  animation:semDotIn var(--dur-base) var(--ease-out), semPulseRed 900ms var(--ease-out) 120ms;
+}
+@keyframes semPulseRed{
+  0%{ box-shadow:0 0 0 0 rgba(236,59,59,.55); }
+  70%{ box-shadow:0 0 0 10px rgba(236,59,59,0); }
+  100%{ box-shadow:0 0 0 0 rgba(236,59,59,0); }
+}
+
+/* Toast / snackbar propio (reemplaza los alert() nativos). */
+.toast-host{
+  position:fixed; left:0; right:0; bottom:calc(92px + env(safe-area-inset-bottom));
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  z-index:120; padding:0 16px; pointer-events:none;
+}
+.toast{
+  max-width:440px; width:fit-content; box-sizing:border-box;
+  background:var(--surface-3); color:var(--cream);
+  border:1px solid var(--border); border-left:3px solid var(--gold);
+  border-radius:var(--radius-sm); padding:12px 16px; font-size:14px; line-height:1.45;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+  opacity:0; transform:translateY(14px);
+  transition:opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+.toast.show{ opacity:1; transform:translateY(0); }
+.toast.error{ border-left-color:var(--danger); }
+.toast.success{ border-left-color:var(--success); }
+:root.hc .toast{ border-width:2px; color:#fff; }
+
+/* Confetti al completar una meta (canvas nativo, sin librerías). */
+.confetti-cv{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:200; }
 
 /* ---------- ACCESIBILIDAD: reducir movimiento (prefers-reduced-motion) ---------- */
 /* Respeta la preferencia del sistema: neutraliza animaciones y transiciones (swipes,
@@ -1420,6 +1524,13 @@ let editingIncomeId = null;
 let pendingDeleteExpenseId = null;
 let pendingDeleteIncomeId = null;
 
+/* Estado de microinteracciones (Tanda G) */
+let lastResumenMonthKey = null;      // conteo animado de totales: solo al cambiar de mes / abrir Resumen
+let lastSemEstado = null;            // semáforo: detectar el paso a rojo para el pulso único
+let lastCreatedMovementId = null;    // fila nueva del Historial: slide-in una sola vez
+const rachaSeen = new Map();         // racha por meta ya vista: "pop" solo cuando sube
+let rachaSeenSeeded = false;
+
 const GOALS_FREE_LIMIT = 3; // metas activas permitidas en la versión gratuita (freemium)
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -1439,6 +1550,194 @@ function haptic(pattern){
     if(navigator && typeof navigator.vibrate === 'function') navigator.vibrate(pattern);
   }catch(_){ /* sin soporte: silencioso */ }
 }
+
+/* ==================== SISTEMA DE ANIMACIÓN / MICROINTERACCIONES (Tanda G · Día 6) ==================== */
+// Todas las animaciones nuevas pasan por aquí. Con "reducir movimiento" activo
+// (prefers-reduced-motion), cada helper salta directo al estado final: sin conteo,
+// sin shake, sin confetti, sin pop — el resultado se ve igual, solo sin recorrido.
+const reduceMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+function prefersReducedMotion(){ return reduceMotionMQ.matches; }
+
+/* ---- Toast / snackbar propio (reemplaza alert() en flujos no críticos) ---- */
+function showToast(msg, type, ms){
+  try{
+    let host = document.getElementById('toastHost');
+    if(!host){
+      host = document.createElement('div');
+      host.id = 'toastHost'; host.className = 'toast-host';
+      document.body.appendChild(host);
+    }
+    const t = document.createElement('div');
+    t.className = 'toast' + (type ? ' ' + type : '');
+    t.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    t.textContent = String(msg == null ? '' : msg);
+    host.appendChild(t);
+    const life = ms || 3400;
+    if(prefersReducedMotion()){
+      t.classList.add('show');
+      setTimeout(()=> t.remove(), life);
+      return;
+    }
+    requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
+    setTimeout(()=>{
+      t.classList.remove('show');
+      setTimeout(()=> t.remove(), 320);
+    }, life);
+  }catch(_){ /* último recurso: no romper el flujo que llamaba */ }
+}
+
+/* ---- Conteo animado 0 -> valor para los totales grandes del Resumen ---- */
+function animateCount(el, to, fmt){
+  if(!el) return;
+  fmt = fmt || (n => money(n));
+  if(prefersReducedMotion()){ el.textContent = fmt(to); return; }
+  const dur = 650, start = performance.now();
+  function tick(now){
+    const p = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic, coherente con --ease-out
+    el.textContent = fmt(to * eased);
+    if(p < 1) requestAnimationFrame(tick);
+    else el.textContent = fmt(to);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---- Botón "Guardar": destello + check breve, luego continúa (cerrar + render) ---- */
+function flashSaveButton(btn, done){
+  if(!btn || prefersReducedMotion()){ done(); return; }
+  const orig = btn.innerHTML;
+  btn.classList.add('btn-flash-ok');
+  btn.innerHTML = icon('check', 'btn-check-icon');
+  btn.disabled = true;
+  setTimeout(()=>{
+    btn.classList.remove('btn-flash-ok');
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    done();
+  }, 520);
+}
+
+/* ---- Fade-out de una fila antes de que el re-render la quite de la lista ---- */
+function fadeRow(row, done){
+  if(!row || prefersReducedMotion()){ done(); return; }
+  row.classList.add('row-removing');
+  setTimeout(done, 240);
+}
+
+/* ---- Slide-in de la fila recién agregada al Historial (una sola vez) ---- */
+function markNewRow(box){
+  if(!lastCreatedMovementId || !box) return;
+  const id = lastCreatedMovementId;
+  lastCreatedMovementId = null;
+  if(prefersReducedMotion()) return;
+  const nr = box.querySelector('[data-editexpense="' + id + '"], [data-editincome="' + id + '"]');
+  if(nr) nr.classList.add('row-new');
+}
+
+/* ---- Validación inline: shake al fallar / check verde breve al validar ---- */
+function fieldError(el){
+  if(!el) return;
+  const field = (el.closest && el.closest('.field')) || el;
+  if(prefersReducedMotion()) return;
+  field.classList.remove('field-shake');
+  void field.offsetWidth;                       // reinicia la animación si se repite
+  field.classList.add('field-shake');
+  setTimeout(()=> field.classList.remove('field-shake'), 500);
+}
+function fieldOk(el){
+  if(!el || prefersReducedMotion()) return;
+  const field = el.closest && el.closest('.field');
+  if(!field) return;
+  field.classList.add('field-ok');
+  const label = field.querySelector('label');
+  if(label && !label.querySelector('.lbl-ok')){
+    const s = document.createElement('span');
+    s.className = 'lbl-ok'; s.textContent = ' ✓';
+    label.appendChild(s);
+  }
+  setTimeout(()=>{
+    field.classList.remove('field-ok');
+    const o = label && label.querySelector('.lbl-ok');
+    if(o) o.remove();
+  }, 1500);
+}
+
+/* ---- Confetti al completar una meta al 100% (canvas nativo) ---- */
+function launchConfetti(){
+  if(prefersReducedMotion()) return;
+  try{
+    const cv = document.createElement('canvas');
+    cv.className = 'confetti-cv';
+    document.body.appendChild(cv);
+    const ctx = cv.getContext('2d');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = window.innerWidth, h = window.innerHeight;
+    cv.width = w * dpr; cv.height = h * dpr; ctx.scale(dpr, dpr);
+    const colors = ['#C9A66B', '#7A2A3D', '#7D9B69', '#F3E9DD', '#B4544A'];
+    const parts = [];
+    for(let i = 0; i < 90; i++){
+      parts.push({
+        x: w / 2 + (Math.random() - .5) * 90,
+        y: h / 2 + (Math.random() - .5) * 40,
+        vx: (Math.random() - .5) * 9,
+        vy: -6 - Math.random() * 8,
+        g: 0.22 + Math.random() * 0.12,
+        s: 5 + Math.random() * 6,
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - .5) * 0.32,
+        c: colors[i % colors.length]
+      });
+    }
+    const DUR = 1600, start = performance.now();
+    function frame(now){
+      const t = now - start;
+      ctx.clearRect(0, 0, w, h);
+      for(const p of parts){
+        p.vy += p.g; p.vx *= 0.99;
+        p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, 1 - t / DUR);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+        ctx.restore();
+      }
+      if(t < DUR) requestAnimationFrame(frame);
+      else cv.remove();
+    }
+    requestAnimationFrame(frame);
+  }catch(_){ /* si algo falla, la celebración simplemente no se muestra */ }
+}
+
+/* ---- Micro-bounce de chips al seleccionarlos (delegado: sobreviven al re-render) ---- */
+document.addEventListener('click', e=>{
+  if(prefersReducedMotion()) return;
+  const c = e.target.closest && e.target.closest('.chip, .hist-cat-chip, [data-fav]');
+  if(!c) return;
+  c.classList.remove('chip-bounce');
+  void c.offsetWidth;
+  c.classList.add('chip-bounce');
+  setTimeout(()=> c.classList.remove('chip-bounce'), 320);
+});
+
+/* ---- Check verde al salir de un campo ya válido (formularios principales) ---- */
+(function initInlineValidation(){
+  const onBlurOk = (id, test)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('blur', ()=>{ try{ if(test(el)) fieldOk(el); }catch(_){} });
+  };
+  onBlurOk('gMonto', el => parseMonto(el) > 0);
+  onBlurOk('iMonto', el => parseMonto(el) > 0);
+  onBlurOk('mMonto', el => parseMonto(el) > 0);
+  onBlurOk('mNombre', el => el.value.trim().length > 0);
+  const onChangeOk = id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', ()=>{ if(el.value) fieldOk(el); });
+  };
+  onChangeOk('gCategoria');
+  onChangeOk('iFuente');
+})();
 
 /* ==================== FORMATO DE MILES EN INPUTS DE MONTO ==================== */
 // Los inputs de dinero son type="text": se muestran con separador de miles
@@ -1862,14 +2161,23 @@ function topGastoCategoria(refDate){
 const SCREEN_ORDER = ['resumen','historial','cuotas','metas'];
 function switchScreen(id){
   if(!SCREEN_ORDER.includes(id)) return;
+  const prevIdx = SCREEN_ORDER.indexOf(currentScreen);
+  const nextIdx = SCREEN_ORDER.indexOf(id);
   currentScreen = id;
+  // Al abrir el Resumen se re-dispara el conteo animado de los totales.
+  if(id === 'resumen') lastResumenMonthKey = null;
   document.querySelectorAll('.nav-btn').forEach(b=>{
     const on = b.dataset.screen===id;
     b.classList.toggle('active', on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
-  document.querySelectorAll('.screen').forEach(s=> s.classList.remove('active'));
-  document.getElementById('screen-'+id).classList.add('active');
+  document.querySelectorAll('.screen').forEach(s=> s.classList.remove('active','scr-fwd','scr-back'));
+  const scr = document.getElementById('screen-'+id);
+  scr.classList.add('active');
+  // Fade + slide corto según la dirección; sin dirección (carga inicial) no aplica.
+  if(prevIdx !== -1 && prevIdx !== nextIdx){
+    scr.classList.add(nextIdx > prevIdx ? 'scr-fwd' : 'scr-back');
+  }
   renderAll();
 }
 document.querySelectorAll('.nav-btn').forEach(btn=>{
@@ -2196,10 +2504,11 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   const esCredito = metodo === 'Crédito';
   const numCuotas = esCredito ? (parseInt(document.getElementById('gNumCuotas').value, 10) || 1) : 0;
 
-  if(!monto || monto<=0){ alert('Ingresa un monto mayor a 0.'); return; }
-  if(!categoria){ alert('Elige una categoría.'); return; }
+  if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('gMonto')); return; }
+  if(!categoria){ showToast('Elige una categoría.', 'error'); fieldError(document.getElementById('gCategoria')); return; }
   if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
 
+  let nuevoGastoId = null;
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
     e.date=fecha; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
@@ -2224,9 +2533,12 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
       expense.debtId = debt.id;
     }
     state.expenses.push(expense);
+    nuevoGastoId = expense.id;
   }
   haptic(HAPTIC_OK);
-  saveState(); closeSheet('sheetGasto'); renderAll();
+  saveState();
+  if(nuevoGastoId) lastCreatedMovementId = nuevoGastoId;   // slide-in de la fila nueva en Historial
+  flashSaveButton(document.getElementById('btnSaveGasto'), ()=>{ closeSheet('sheetGasto'); renderAll(); });
 };
 
 let pendingDeleteType = null; // 'cuota' | 'fijo'
@@ -2249,9 +2561,11 @@ document.getElementById('btnDeleteGasto').onclick = ()=>{
     closeSheet('sheetGasto');
     openSheet('sheetConfirmDebt');
   } else {
-    state.expenses = state.expenses.filter(x=>x.id!==editingExpenseId);
+    const delId = editingExpenseId;
+    state.expenses = state.expenses.filter(x=>x.id!==delId);
     haptic(HAPTIC_DELETE);
-    saveState(); closeSheet('sheetGasto'); renderAll();
+    saveState(); closeSheet('sheetGasto');
+    fadeRow(document.querySelector('[data-editexpense="' + delId + '"]'), renderAll);
   }
 };
 document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
@@ -2316,17 +2630,22 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   const monto = parseMonto('iMonto');
   const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional
   const itipo = document.querySelector('#sheetIngreso [data-itipo].active').dataset.itipo;
-  if(!monto || monto<=0){ alert('Ingresa un monto mayor a 0.'); return; }
-  if(!fuente){ alert('Elige una fuente.'); return; }
+  if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('iMonto')); return; }
+  if(!fuente){ showToast('Elige una fuente.', 'error'); fieldError(document.getElementById('iFuente')); return; }
   if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
+  let nuevoIngresoId = null;
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
     i.date=fecha; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
   } else {
-    state.incomes.push({id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion, tipo:itipo});
+    const inc = {id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion, tipo:itipo};
+    state.incomes.push(inc);
+    nuevoIngresoId = inc.id;
   }
   haptic(HAPTIC_OK);
-  saveState(); closeSheet('sheetIngreso'); renderAll();
+  saveState();
+  if(nuevoIngresoId) lastCreatedMovementId = nuevoIngresoId;
+  flashSaveButton(document.getElementById('btnSaveIngreso'), ()=>{ closeSheet('sheetIngreso'); renderAll(); });
 };
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
   const i = state.incomes.find(x=>x.id===editingIncomeId);
@@ -2340,9 +2659,11 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
     closeSheet('sheetIngreso');
     openSheet('sheetConfirmDebt');
   } else {
-    state.incomes = state.incomes.filter(x=>x.id!==editingIncomeId);
+    const delId = editingIncomeId;
+    state.incomes = state.incomes.filter(x=>x.id!==delId);
     haptic(HAPTIC_DELETE);
-    saveState(); closeSheet('sheetIngreso'); renderAll();
+    saveState(); closeSheet('sheetIngreso');
+    fadeRow(document.querySelector('[data-editincome="' + delId + '"]'), renderAll);
   }
 };
 
@@ -2381,7 +2702,7 @@ function openMetaForm(goalId){
   editingGoalId = goalId || null;
 
   if(!editingGoalId && activeGoalsCount() >= GOALS_FREE_LIMIT){
-    alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
+    showToast(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`, 'error');
     return;
   }
 
@@ -2437,17 +2758,17 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   const autoValor = leerMontoPct('mAutoValor', autoTipo);
   const autoDia = parseInt(document.getElementById('mAutoDia').value, 10);
 
-  if(!nombre){ alert('Ponle un nombre a la meta.'); return; }
+  if(!nombre){ showToast('Ponle un nombre a la meta.', 'error'); return; }
   if(!indefinida && (!montoObjetivo || montoObjetivo <= 0)){
-    alert('Completa un monto objetivo válido (o marca la meta como indefinida).'); return;
+    showToast('Completa un monto objetivo válido (o marca la meta como indefinida).', 'error'); return;
   }
   if(autoOn){
     if(autoTipo === 'porcentaje'){
-      if(isNaN(autoValor) || autoValor <= 0 || autoValor > 100){ alert('El porcentaje del aporte automático debe estar entre 1 y 100.'); return; }
+      if(isNaN(autoValor) || autoValor <= 0 || autoValor > 100){ showToast('El porcentaje del aporte automático debe estar entre 1 y 100.', 'error'); return; }
     } else {
-      if(!autoValor || autoValor <= 0){ alert('Ingresa un monto mensual válido para el aporte automático.'); return; }
+      if(!autoValor || autoValor <= 0){ showToast('Ingresa un monto mensual válido para el aporte automático.', 'error'); return; }
     }
-    if(!autoDia || autoDia < 1 || autoDia > 28){ alert('El día del mes del aporte automático debe estar entre 1 y 28.'); return; }
+    if(!autoDia || autoDia < 1 || autoDia > 28){ showToast('El día del mes del aporte automático debe estar entre 1 y 28.', 'error'); return; }
   }
 
   const construirAA = (prev)=>{
@@ -2487,7 +2808,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   }
 
   if(activeGoalsCount() >= GOALS_FREE_LIMIT){
-    alert(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`);
+    showToast(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`, 'error');
     return;
   }
   state.goals.push({
@@ -2744,7 +3065,7 @@ function renderMetas(){
         </div>
         <div class="debt-amt">${money(g.montoObjetivo)}<small>objetivo</small></div>
       </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="progress-track"><div class="progress-fill" data-pct="${pct}" style="width:0%"></div></div>
       <div class="debt-foot">
         <span>Ahorrado <b>${money(ahorrado)}</b>${ahorradoNota}</span>
         <span><b>${pct}%</b></span>
@@ -2755,6 +3076,29 @@ function renderMetas(){
       <div class="goal-expand">${expandInner}</div>
     </div>`;
   }).join('');
+
+  // Barra de progreso de cada meta: crece desde 0 hacia su valor cada vez que se muestra.
+  const fills = box.querySelectorAll('.goal-card .progress-fill');
+  if(prefersReducedMotion()){
+    fills.forEach(f=>{ f.style.width = (f.dataset.pct || 0) + '%'; });
+  } else {
+    requestAnimationFrame(()=> requestAnimationFrame(()=>{
+      fills.forEach(f=>{ f.style.width = (f.dataset.pct || 0) + '%'; });
+    }));
+  }
+
+  // Racha de metas: "pop" en el número solo cuando sube respecto a lo ya visto.
+  visibles.forEach(g=>{
+    const r = rachaMeta(g);
+    const cur = r ? r.streak : 0;
+    const prev = rachaSeen.has(g.id) ? rachaSeen.get(g.id) : cur;
+    if(rachaSeenSeeded && cur > prev && !prefersReducedMotion()){
+      const n = box.querySelector('[data-goalcard="' + g.id + '"] .gr-count');
+      if(n){ n.classList.remove('gr-pop'); void n.offsetWidth; n.classList.add('gr-pop'); }
+    }
+    rachaSeen.set(g.id, cur);
+  });
+  rachaSeenSeeded = true;
 
   // Tap en la tarjeta: expande/colapsa (motivo de pausa + botones). Independiente por meta.
   box.querySelectorAll('[data-goalcard]').forEach(card=>{
@@ -2786,7 +3130,8 @@ function renderMetas(){
       if(!confirm(`¿Eliminar el aporte de ${money(a.monto)} del ${fmtDate(a.fecha)}? Se recalculará lo ahorrado y el disponible de ese mes.`)) return;
       g.aportes = g.aportes.filter(x=> x.id!==aid);
       haptic(HAPTIC_DELETE);
-      saveState(); renderAll();
+      saveState();
+      fadeRow(el.closest('.aporte-row'), renderAll);
     });
   });
 }
@@ -2820,7 +3165,7 @@ function openAportar(goalId){
 }
 document.getElementById('btnAportarRevisar').onclick = ()=>{
   const monto = parseMonto('apMonto');
-  if(!monto || monto <= 0){ alert('Ingresa un monto válido.'); return; }
+  if(!monto || monto <= 0){ showToast('Ingresa un monto válido.', 'error'); fieldError(document.getElementById('apMonto')); return; }
   const g = state.goals.find(x=>x.id===aportarGoalId);
   if(!g){ closeSheet('sheetAportar'); return; }
   document.getElementById('aportarConfirmText').textContent =
@@ -2866,9 +3211,12 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
   const objetivo = g.montoObjetivo || 0;
   const ahorradoAntes = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
-  if(!g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo) haptic(HAPTIC_GOAL);
+  const completaMeta = !g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo;
+  if(completaMeta) haptic(HAPTIC_GOAL);
   else haptic(HAPTIC_OK);
-  saveState(); closeSheet('sheetAportar'); renderAll();
+  saveState(); closeSheet('sheetAportar');
+  if(completaMeta) launchConfetti();   // logro puntual: celebración un poco más notoria
+  renderAll();
 };
 
 /* ==================== APORTE AUTOMÁTICO MENSUAL: configuración ==================== */
@@ -2909,11 +3257,11 @@ document.getElementById('btnSaveAutoMeta').onclick = ()=>{
   const valor = leerMontoPct('autoMonto', tipo);
   const dia = parseInt(document.getElementById('autoDia').value, 10);
   if(tipo === 'porcentaje'){
-    if(isNaN(valor) || valor <= 0 || valor > 100){ alert('El porcentaje debe estar entre 1 y 100.'); return; }
+    if(isNaN(valor) || valor <= 0 || valor > 100){ showToast('El porcentaje debe estar entre 1 y 100.', 'error'); return; }
   } else {
-    if(!valor || valor <= 0){ alert('Ingresa un monto mensual válido.'); return; }
+    if(!valor || valor <= 0){ showToast('Ingresa un monto mensual válido.', 'error'); return; }
   }
-  if(!dia || dia < 1 || dia > 28){ alert('El día del mes debe estar entre 1 y 28.'); return; }
+  if(!dia || dia < 1 || dia > 28){ showToast('El día del mes debe estar entre 1 y 28.', 'error'); return; }
   const prev = g.aporteAutomatico || {};
   g.aporteAutomatico = {
     activo: true,
@@ -3150,10 +3498,20 @@ function renderResumen(){
   const saldoAnterior = saldoAcumuladoHasta(currentDate);
   const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
 
-  document.getElementById('rDisponible').textContent = money(disponible);
+  // Conteo animado (0 -> valor) de Ingresos / Gastos / Disponible: solo al cambiar de
+  // mes o al abrir el Resumen, no en cada re-render (p. ej. tras guardar un gasto).
+  const mkNow = monthKey(currentDate);
+  const contar = mkNow !== lastResumenMonthKey;
+  lastResumenMonthKey = mkNow;
+  const setTotal = (id, val)=>{
+    const el = document.getElementById(id);
+    if(contar) animateCount(el, val);
+    else el.textContent = money(val);
+  };
+  setTotal('rDisponible', disponible);
   document.getElementById('rDisponible').classList.toggle('neg', disponible<0);
-  document.getElementById('rIngresos').textContent = money(totalIngresos);
-  document.getElementById('rGastos').textContent = money(totalGastos);
+  setTotal('rIngresos', totalIngresos);
+  setTotal('rGastos', totalGastos);
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
@@ -3434,6 +3792,13 @@ function renderInsights(){
   box.innerHTML =
     `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
     semHtml + fraseHtml + cmpHtml + varHtml + proyHtml;
+
+  // Semáforo: un único pulso cuando el estado pasa a rojo (entrar, no en cada render).
+  if(!prefersReducedMotion() && semEstado === 'sem-rojo' && lastSemEstado && lastSemEstado !== 'sem-rojo'){
+    const sem = box.querySelector('.insight-semaforo');
+    if(sem) sem.classList.add('sem-pulse');
+  }
+  lastSemEstado = semEstado;
 }
 
 /* ==================== DETALLE DE CATEGORÍA (desde Resumen) ==================== */
@@ -3750,7 +4115,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
       el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
     });
-    wireRowExpand(box);
+    wireRowExpand(box); markNewRow(box);
   } else {
     const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date').filter(histPasaIngreso);
     updateHistCount(items.length);
@@ -3772,7 +4137,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-editincome]').forEach(el=>{
       el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
     });
-    wireRowExpand(box);
+    wireRowExpand(box); markNewRow(box);
   }
 }
 
@@ -3915,7 +4280,7 @@ function renderHistorialTodo(box){
   box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
     el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
   });
-  wireRowExpand(box);
+  wireRowExpand(box); markNewRow(box);
 }
 // Chevron "aparte" que expande/colapsa el sub-detalle de una fila, sin disparar el tap de edición.
 function wireRowExpand(box){
@@ -4139,7 +4504,7 @@ document.querySelectorAll('#sheetCatIcon [data-icontab]').forEach(el=>{
 });
 document.getElementById('btnSaveCatEmoji').onclick = ()=>{
   const v = document.getElementById('catEmojiInput').value.trim();
-  if(!v){ alert('Escribe un emoji.'); return; }
+  if(!v){ showToast('Escribe un emoji.', 'error'); return; }
   setCatIcon(catIconTarget, { tipo:'emoji', valor:v });
 };
 document.getElementById('btnCatIconDefault').onclick = ()=>{
@@ -4178,14 +4543,14 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
     try{
       const parsed = JSON.parse(ev.target.result);
       if(!parsed || !parsed.config || !Array.isArray(parsed.expenses) || !Array.isArray(parsed.incomes) || !Array.isArray(parsed.debts)){
-        alert('Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.');
+        showToast('Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.', 'error');
         return;
       }
       pendingRestoreData = parsed;
       closeSheet('sheetConfig');
       openSheet('sheetConfirmRestore');
     }catch(err){
-      alert('No se pudo leer el archivo. Asegúrate de elegir un respaldo (.json) generado por esta misma app.');
+      showToast('No se pudo leer el archivo. Asegúrate de elegir un respaldo (.json) generado por esta misma app.', 'error');
     }
   };
   reader.readAsText(file);
@@ -4230,7 +4595,7 @@ document.getElementById('btnDoExport').onclick = ()=>{
       ...state.incomes.map(i=>i.date),
       ...state.debts.map(d=>d.purchaseDate)
     ];
-    if(allDates.length===0){ alert('Todavía no hay datos para exportar.'); return; }
+    if(allDates.length===0){ showToast('Todavía no hay datos para exportar.', 'error'); return; }
     const minDate = new Date(allDates.reduce((a,b)=> a<b?a:b)+"T00:00:00");
     // hasta el mes más lejano con alguna cuota vigente, o hasta el mes actual visible, lo que sea más tarde
     let maxMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -4243,7 +4608,7 @@ document.getElementById('btnDoExport').onclick = ()=>{
   } else {
     const d1 = document.getElementById('expDesde').value;
     const d2 = document.getElementById('expHasta').value;
-    if(!d1 || !d2){ alert('Selecciona ambas fechas.'); return; }
+    if(!d1 || !d2){ showToast('Selecciona ambas fechas.', 'error'); return; }
     fromDate = new Date(d1+"T00:00:00"); toDate = new Date(d2+"T23:59:59");
   }
   exportExcel(fromDate, toDate);
@@ -4548,7 +4913,7 @@ function generarResumenImagen(){
   // --- Exportar ---
   canvas.toBlob(blob=>{
     resumenImgBusy = false;
-    if(!blob){ alert('No se pudo generar la imagen del resumen.'); return; }
+    if(!blob){ showToast('No se pudo generar la imagen del resumen.', 'error'); return; }
     resumenImgBlob = blob;
     if(resumenImgURL) URL.revokeObjectURL(resumenImgURL);
     resumenImgURL = URL.createObjectURL(blob);
@@ -4576,7 +4941,7 @@ function generarResumenImagen(){
 
 document.getElementById('btnResumenImg').onclick = ()=>{
   try{ generarResumenImagen(); }
-  catch(err){ resumenImgBusy = false; console.error('generarResumenImagen', err); alert('No se pudo generar la imagen del resumen.'); }
+  catch(err){ resumenImgBusy = false; console.error('generarResumenImagen', err); showToast('No se pudo generar la imagen del resumen.', 'error'); }
 };
 document.getElementById('btnResumenImgDownload').onclick = ()=>{
   if(!resumenImgURL) return;
@@ -4590,7 +4955,7 @@ document.getElementById('btnResumenImgCopy').onclick = async ()=>{
   const btn = document.getElementById('btnResumenImgCopy');
   if(!resumenImgBlob) return;
   if(!(navigator.clipboard && window.ClipboardItem)){
-    alert('Tu navegador no permite copiar imágenes. Usa "Descargar".');
+    showToast('Tu navegador no permite copiar imágenes. Usa "Descargar".', 'error');
     return;
   }
   try{
@@ -4600,7 +4965,7 @@ document.getElementById('btnResumenImgCopy').onclick = async ()=>{
     setTimeout(()=>{ btn.textContent = 'Copiar al portapapeles'; }, 1600);
   }catch(err){
     console.warn('copiar imagen', err);
-    alert('No se pudo copiar la imagen. Usa "Descargar".');
+    showToast('No se pudo copiar la imagen. Usa "Descargar".', 'error');
   }
 };
 
