@@ -476,6 +476,11 @@ button{font-family:inherit;}
 .sheet-overlay.open .sheet{transform:translateY(0);}
 .sheet-handle{width:36px; height:4px; background:var(--border); border-radius:4px; margin:6px auto 16px;}
 .sheet h2{font-size:21px; font-weight:500; margin:0 0 18px; color:var(--cream);}
+/* Párrafo explicativo bajo el título de un sheet. Antes se repetía como estilo
+   inline con tamaños (12.5 / 13.5px) y márgenes (12–18px) distintos en cada sheet;
+   unificado aquí a la escala de texto secundario del resto de la app (13px). */
+.sheet-note{font-size:13px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;}
+:root.hc .sheet-note{color:var(--cream);}
 
 .choice-row{display:flex; gap:12px; margin-bottom:6px;}
 .choice-card{
@@ -493,7 +498,10 @@ button{font-family:inherit;}
   width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:12px 12px; color:var(--cream); font-size:16px; font-family:inherit;
 }
-.field select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center;}
+/* Flecha del <select>: mismo chevron que ICONS['chevron-down'] (polyline con
+   stroke-linecap/linejoin round), para que no tenga esquinas más marcadas que el
+   resto de chevrons de la app. */
+.field select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center;}
 .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
 .field input.input-lg{font-size:19px; font-weight:600;}
 .field-row{display:flex; gap:10px;}
@@ -1161,7 +1169,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2>Eliminar esta meta</h2>
-    <p style="font-size:13.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;" id="confirmGoalText"></p>
+    <p class="sheet-note" id="confirmGoalText"></p>
     <button class="btn-danger" id="btnConfirmDeleteGoal">Sí, eliminar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
@@ -1187,7 +1195,7 @@ button:active{ transform:scale(0.97); }
       <label class="check-row" id="aportarNoWarnRow" style="display:none; margin-bottom:12px;">
         <input type="checkbox" id="aportarNoWarn"><span>No volver a advertir esto</span>
       </label>
-      <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 18px;">Revisa el monto antes de confirmar.</p>
+      <p class="sheet-note" style="margin-top:0;">Revisa el monto antes de confirmar.</p>
       <button class="btn-primary" id="btnAportarConfirmar">Confirmar aporte</button>
       <button class="btn-ghost" id="btnAportarVolver">Volver</button>
     </div>
@@ -1199,7 +1207,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="autoMetaTitle">Aporte automático</h2>
-    <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 16px;">
+    <p class="sheet-note">
       Cada mes se sumará un aporte (monto fijo o un % de tu Disponible) al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
     </p>
     <div class="field">
@@ -1235,7 +1243,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="confirmDeleteTitle">Este gasto tiene cuotas asociadas</h2>
-    <p style="font-size:13.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;" id="confirmDeleteText">
+    <p class="sheet-note" id="confirmDeleteText">
       Si eliminas este gasto, también se eliminará la deuda completa y todas sus cuotas pendientes en meses futuros. Esta acción no se puede deshacer.
     </p>
     <button class="btn-danger" id="btnConfirmDeleteDebt">Sí, eliminar todo</button>
@@ -1296,7 +1304,7 @@ button:active{ transform:scale(0.97); }
     </label>
 
     <p class="section-title" style="margin-top:20px;">Respaldo de datos</p>
-    <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 12px;">
+    <p class="sheet-note" style="margin:0 0 12px;">
       Descarga un archivo con todos tus datos (gastos, ingresos, cuotas y categorías). Sirve para no perder nada si cambias de link o de celular.
     </p>
     <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar respaldo</button>
@@ -1336,7 +1344,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2>¿Restaurar este respaldo?</h2>
-    <p style="font-size:13.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;">
+    <p class="sheet-note">
       Esto reemplazará todos los datos actuales de la app (gastos, ingresos, cuotas y categorías) por los del archivo. Esta acción no se puede deshacer.
     </p>
     <button class="btn-danger" id="btnConfirmRestore">Sí, restaurar</button>
@@ -1366,7 +1374,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2>Resumen como imagen</h2>
-    <p style="font-size:12.5px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 14px;">
+    <p class="sheet-note">
       Imagen del resumen de <span id="resumenImgMes"></span> lista para guardar o compartir.
     </p>
     <div id="resumenImgPreview" style="margin-bottom:16px;"></div>
