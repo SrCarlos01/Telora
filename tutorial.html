@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>MisFinanzas — Cómo instalar y usar</title>
+<style>
+  :root{
+    --bg:#161011;
+    --burgundy:#5C1F2E;
+    --burgundy-light:#7A2A3D;
+    --burgundy-dim:#4A1826;
+    --gold:#C9A66B;
+    --gold-dim:#8A6A55;
+    --cream:#F3E9DD;
+    --cream-dim:#B79A82;
+    --success:#7D9B69;
+    --radius:16px;
+    --radius-sm:10px;
+    --ease-out: cubic-bezier(.32,.72,0,1);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--cream);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  h1,h2,h3,.serif{font-family:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;}
+
+  #shell{max-width:460px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+
+  header{padding:22px 24px 0; display:flex; align-items:center; gap:10px;}
+  .mark{width:32px; height:32px; border-radius:9px; background:var(--burgundy);
+    display:flex; align-items:center; justify-content:center; font-family:ui-serif,Georgia,serif;
+    color:var(--gold); font-weight:700; font-size:16px; flex-shrink:0;}
+  .brandname{font-size:13.5px; letter-spacing:.08em; color:var(--gold-dim); text-transform:uppercase;}
+
+  /* progreso */
+  .dots{display:flex; gap:6px; padding:18px 24px 6px;}
+  .dot{height:3px; flex:1; background:var(--burgundy-dim); border-radius:3px; overflow:hidden;}
+  .dot i{display:block; height:100%; width:0%; background:var(--gold); transition:width .35s var(--ease-out);}
+  .dot.done i{width:100%;}
+  .dot.current i{width:100%;}
+
+  main{flex:1; position:relative; overflow:hidden;}
+  .panel{position:absolute; inset:0; padding:20px 24px 100px; overflow-y:auto;
+    opacity:0; transform:translateX(16px); pointer-events:none; transition:opacity .3s var(--ease-out), transform .3s var(--ease-out);}
+  .panel.active{opacity:1; transform:translateX(0); pointer-events:auto; position:relative;}
+
+  .eyebrow{font-size:13px; color:var(--gold); margin:2px 0 8px;}
+  h1.title{font-size:26px; font-weight:500; margin:0 0 12px; line-height:1.25; color:var(--cream);}
+  p.lead{font-size:15px; line-height:1.55; color:var(--cream-dim); margin:0 0 20px;}
+
+  .card{background:var(--burgundy-dim); border:1px solid rgba(201,166,107,.18); border-radius:var(--radius);
+    padding:16px 18px; margin-bottom:14px;}
+  .card p{margin:0; font-size:14.5px; line-height:1.55; color:var(--cream);}
+  .card + .card{margin-top:0;}
+
+  .step-num{width:26px; height:26px; border-radius:50%; background:var(--burgundy);
+    color:var(--gold); font-size:13px; font-weight:700; display:flex; align-items:center;
+    justify-content:center; flex-shrink:0;}
+  .step{display:flex; gap:12px; margin-bottom:16px;}
+  .step .txt p{margin:0; font-size:14.5px; line-height:1.5; color:var(--cream);}
+  .step .txt .sub{color:var(--cream-dim); font-size:13px; margin-top:3px;}
+
+  .toggle{display:flex; background:var(--burgundy-dim); border-radius:12px; padding:4px; margin-bottom:18px;}
+  .toggle button{flex:1; border:none; background:none; color:var(--cream-dim); padding:9px 0;
+    font-size:14px; font-weight:600; border-radius:9px; cursor:pointer; font-family:inherit;}
+  .toggle button.active{background:var(--burgundy); color:var(--gold);}
+
+  .platform{display:none;}
+  .platform.active{display:block;}
+
+  .badge{display:inline-block; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--gold-dim); border:1px solid var(--gold-dim); border-radius:20px; padding:2px 9px; margin-bottom:14px;}
+
+  .icon-inline{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--burgundy); border-radius:6px; color:var(--gold); font-size:12px; flex-shrink:0;}
+
+  footer{position:sticky; bottom:0; padding:16px 24px 22px; background:linear-gradient(180deg, rgba(22,16,17,0) 0%, var(--bg) 30%);
+    display:flex; gap:10px;}
+  .btn{flex:1; border:none; border-radius:var(--radius-sm); padding:14px 0; font-size:15px; font-weight:600;
+    cursor:pointer; font-family:inherit; transition:transform .12s ease, opacity .12s ease;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--burgundy); color:var(--cream);}
+  .btn-ghost{background:none; color:var(--cream-dim); border:1px solid rgba(201,166,107,.25); max-width:90px; flex:none;}
+  .btn-ghost:disabled{opacity:.3; pointer-events:none;}
+
+  .final-check{display:flex; align-items:flex-start; gap:10px; margin-bottom:12px;}
+  .final-check .tick{width:20px; height:20px; border-radius:50%; background:var(--success); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; margin-top:1px;}
+  .final-check .tick svg{width:11px; height:11px;}
+  .final-check p{margin:0; font-size:14px; color:var(--cream); line-height:1.4;}
+
+  .whatsbox{background:var(--burgundy); border-radius:var(--radius); padding:18px; margin-top:6px;}
+  .whatsbox p{margin:0 0 4px; font-size:14px; color:var(--cream); line-height:1.5;}
+  .whatsbox .small{color:var(--cream-dim); font-size:12.5px; margin-top:8px;}
+
+  svg.line{stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+</style>
+</head>
+<body>
+<div id="shell">
+  <header>
+    <div class="mark">$</div>
+    <div class="brandname">MisFinanzas · Guía de prueba</div>
+  </header>
+
+  <div class="dots" id="dots"></div>
+
+  <main>
+
+    <!-- PANEL 0 — Bienvenida -->
+    <section class="panel" data-panel="0">
+      <p class="eyebrow">2 minutos</p>
+      <h1 class="title">Bienvenida a MisFinanzas</h1>
+      <p class="lead">Esta es una app para llevar gastos, ingresos, cuotas y metas de ahorro. Te invito a probarla un par de días como si fuera tuya — esta guía te deja instalada y usándola en un par de minutos.</p>
+      <div class="card">
+        <p>No necesitas crear cuenta ni dar tus datos bancarios. Todo lo que ingreses queda guardado solo en tu teléfono.</p>
+      </div>
+      <div class="card">
+        <p>Al final te voy a preguntar qué te pareció y si la usarías de verdad — así que trata de registrar tus gastos reales de estos días, no datos de prueba.</p>
+      </div>
+    </section>
+
+    <!-- PANEL 1 — Instalar -->
+    <section class="panel" data-panel="1">
+      <p class="eyebrow">Paso 1</p>
+      <h1 class="title">Instalar en tu celular</h1>
+      <p class="lead">No se descarga de una tienda de apps — se agrega directo desde el navegador. Elige tu sistema:</p>
+
+      <div class="toggle">
+        <button type="button" class="active" data-plat="ios">iPhone</button>
+        <button type="button" data-plat="android">Android</button>
+      </div>
+
+      <div class="platform active" data-plat-panel="ios">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="txt"><p>Abre <a href="https://srcarlos01.github.io/MisFinanzas/" target="_blank" rel="noopener" style="color:var(--gold); text-decoration:underline;">este link</a> <b>en Safari</b> (no en Instagram/WhatsApp — si lo abriste ahí, toca los tres puntos y elige "Abrir en Safari").</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="txt"><p>Toca el ícono de <b>Compartir</b> (el cuadrado con la flecha hacia arriba), en la barra inferior.</p>
+          <p class="sub">Si no lo ves, desliza hacia arriba en la barra de Safari primero.</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="txt"><p>Baja en la lista y toca <b>"Agregar a pantalla de inicio"</b>.</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="txt"><p>Toca <b>"Agregar"</b> arriba a la derecha. Listo — ya tienes el ícono en tu pantalla, como cualquier otra app.</p></div>
+        </div>
+      </div>
+
+      <div class="platform" data-plat-panel="android">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="txt"><p>Abre <a href="https://srcarlos01.github.io/MisFinanzas/" target="_blank" rel="noopener" style="color:var(--gold); text-decoration:underline;">este link</a> <b>en Chrome</b>.</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="txt"><p>Toca los <b>tres puntos</b> (⋮) arriba a la derecha.</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="txt"><p>Elige <b>"Instalar app"</b> o <b>"Añadir a pantalla de inicio"</b> (el texto exacto varía un poco según tu Android).</p></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="txt"><p>Confirma tocando <b>"Instalar"</b>. Listo — ya tienes el ícono en tu pantalla, como cualquier otra app.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL 2 — Primer gasto -->
+    <section class="panel" data-panel="2">
+      <p class="eyebrow">Paso 2</p>
+      <h1 class="title">Registra tu primer gasto</h1>
+      <p class="lead">Abre la app desde el ícono que instalaste (no desde Safari/Chrome). Así se ve el flujo:</p>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="txt"><p>Toca el botón <b>"+"</b> del centro, abajo.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="txt"><p>Elige <b>Gasto</b> o <b>Ingreso</b>.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="txt"><p>Escribe un nombre corto (ej. "Supermercado"), el monto, y elige categoría, descripción y método de pago.</p></div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="txt"><p>Toca <b>"Guardar gasto"</b>. Aparece de inmediato en tu Historial y descuenta de tu Disponible del mes.</p></div>
+      </div>
+      <div class="card">
+        <p><b>Tip:</b> si compraste algo en cuotas, elige método de pago "Crédito" — te va a pedir el número de cuotas y se hace cargo de dividirlo mes a mes solo.</p>
+      </div>
+    </section>
+
+    <!-- PANEL 3 — Recorrido rápido -->
+    <section class="panel" data-panel="3">
+      <p class="eyebrow">Paso 3</p>
+      <h1 class="title">Dónde ver cada cosa</h1>
+      <p class="lead">Cuatro pestañas abajo, todo el resto se explica solo:</p>
+      <div class="card"><p><b>Resumen</b> — tu Disponible del mes y asesor financiero.</p></div>
+      <div class="card"><p><b>Historial</b> — todos tus gastos e ingresos, con filtros y búsqueda.</p></div>
+      <div class="card"><p><b>Cuotas</b> — tus compras a crédito, activas y pagadas.</p></div>
+      <div class="card"><p><b>Metas</b> — crea una meta de ahorro (con fecha o sin ella) y ve tu progreso.</p></div>
+    </section>
+
+    <!-- PANEL 4 — Cierre -->
+    <section class="panel" data-panel="4">
+      <p class="eyebrow">Ya casi</p>
+      <h1 class="title">Úsala estos días como si fuera tuya</h1>
+      <p class="lead">No hace falta que hagas nada especial — solo ve registrando tus gastos e ingresos reales un par de días.</p>
+
+      <div class="final-check">
+        <div class="tick"><svg class="line" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <p>Instala la app en tu pantalla de inicio.</p>
+      </div>
+      <div class="final-check">
+        <div class="tick"><svg class="line" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <p>Registra tus gastos e ingresos reales por 2-3 días.</p>
+      </div>
+      <div class="final-check">
+        <div class="tick"><svg class="line" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <p>Prueba crear una meta de ahorro.</p>
+      </div>
+
+      <div class="whatsbox">
+        <p><b>En unos días te voy a escribir</b> para preguntarte qué te pareció: si la usarías seguido y si pagarías por ella.</p>
+        <p class="small">Cualquier duda, error u oportunidad de mejora hazme la saber, muchas gracias!</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <button class="btn btn-ghost" id="btnBack" disabled>Atrás</button>
+    <button class="btn btn-primary" id="btnNext">Siguiente</button>
+  </footer>
+</div>
+
+<script>
+  const TOTAL = 5;
+  let idx = 0;
+  const dotsBox = document.getElementById('dots');
+  for(let i=0;i<TOTAL;i++){
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.innerHTML = '<i></i>';
+    dotsBox.appendChild(d);
+  }
+  const dots = [...dotsBox.children];
+  const panels = [...document.querySelectorAll('.panel')];
+  const btnNext = document.getElementById('btnNext');
+  const btnBack = document.getElementById('btnBack');
+
+  function render(){
+    panels.forEach(p => p.classList.toggle('active', Number(p.dataset.panel) === idx));
+    dots.forEach((d,i)=>{
+      d.classList.toggle('done', i < idx);
+      d.classList.toggle('current', i === idx);
+    });
+    btnBack.disabled = idx === 0;
+    btnNext.textContent = idx === TOTAL - 1 ? 'Entendido' : 'Siguiente';
+    document.querySelector('main').scrollTop = 0;
+    const activePanel = panels[idx];
+    if(activePanel) activePanel.scrollTop = 0;
+  }
+
+  btnNext.addEventListener('click', ()=>{
+    if(idx < TOTAL - 1){ idx++; render(); }
+    else { btnNext.textContent = '¡Listo! 🎉'; }
+  });
+  btnBack.addEventListener('click', ()=>{
+    if(idx > 0){ idx--; render(); }
+  });
+
+  document.querySelectorAll('[data-plat]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const plat = btn.dataset.plat;
+      document.querySelectorAll('[data-plat]').forEach(b=> b.classList.toggle('active', b.dataset.plat === plat));
+      document.querySelectorAll('[data-plat-panel]').forEach(p=> p.classList.toggle('active', p.dataset.platPanel === plat));
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>
