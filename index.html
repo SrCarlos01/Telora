@@ -987,60 +987,6 @@ button:active{ transform:scale(0.97); }
 .goal-racha-none{font-size:12px; color:var(--cream-dim); line-height:1.5; margin:2px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
 :root.hc .goal-racha-none{color:var(--cream);}
 :root.hc .goal-racha .gr-count{color:var(--cream);}
-
-/* ---------- PIN DE BLOQUEO LOCAL (Tanda H) ---------- */
-/* Pantalla completa, opaca (no backdrop-blur del sheet): tapa el contenido financiero
-   por completo mientras pide el PIN. z-index por encima de sheets/toast/confetti. */
-.pin-overlay{
-  position:fixed; inset:0; z-index:500; background:var(--bg);
-  display:none; align-items:center; justify-content:center; flex-direction:column;
-  padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); text-align:center;
-  /* Sin touch-action, iOS Safari deja activo el doble-tap-zoom (ignora user-scalable=no):
-     con toques rápidos y repetidos el viewport visual se desplaza respecto al layout, y
-     como este overlay es position:fixed el toque empieza a caer en la tecla equivocada
-     (el "5" registra el "2") hasta reabrir la app. `manipulation` desactiva ese
-     doble-tap-zoom sin impedir scroll ni pinch. */
-  touch-action:manipulation;
-  overflow-y:auto;
-  justify-content:center;
-  justify-content:safe center;   /* si el teclado no cabe en pantallas bajas, se scrollea desde arriba en vez de recortarse */
-}
-.pin-overlay.open{display:flex; animation:fadeIn2 .2s ease;}
-.pin-card{width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center;}
-.pin-mark{
-  width:52px; height:52px; border-radius:16px; background:var(--gold);
-  display:flex; align-items:center; justify-content:center;
-  color:var(--burgundy); font-weight:700; font-size:26px; font-family:ui-serif,Georgia,serif;
-  margin-bottom:18px;
-}
-.pin-card h2{font-size:20px; font-weight:500; color:var(--cream); margin:0 0 6px;}
-.pin-sub{font-size:13.5px; color:var(--cream-dim); margin:0 0 22px; line-height:1.5;}
-.pin-dots{display:flex; gap:16px; margin-bottom:6px;}
-.pin-dot{
-  width:14px; height:14px; border-radius:50%; border:1.5px solid var(--gold-dim);
-  background:transparent; transition:background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-.pin-dot.filled{background:var(--gold); border-color:var(--gold);}
-.pin-lockmsg{font-size:12.5px; color:var(--danger); min-height:18px; margin:10px 0 0;}
-.pin-keypad{
-  display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; width:100%; max-width:280px; margin-top:30px;
-}
-.pin-key{
-  aspect-ratio:1; border-radius:50%; background:var(--surface-2); border:1px solid var(--border);
-  color:var(--cream); font-size:22px; font-family:inherit; cursor:pointer;
-  display:flex; align-items:center; justify-content:center; transition:all .15s ease;
-  touch-action:manipulation;   /* mismo motivo que .pin-overlay: nada de doble-tap-zoom sobre las teclas */
-}
-.pin-key:active{transform:scale(0.92); background:var(--surface-3);}
-.pin-key-del{color:var(--gold-dim); font-size:18px;}
-.pin-keypad-disabled .pin-key{opacity:0.4; pointer-events:none;}
-.pin-forgot{
-  background:none; border:none; color:var(--gold-dim); font-size:13.5px; margin-top:24px;
-  padding:8px; cursor:pointer; text-decoration:underline; font-family:inherit;
-}
-/* el sheet de "olvidé mi PIN" debe quedar por encima del propio bloqueo cuando se abre desde ahí */
-#sheetForgotPin{z-index:600;}
-:root.hc .pin-key, :root.hc .pin-dot{border-width:2px;}
 </style>
 </head>
 <body>
@@ -1433,19 +1379,6 @@ button:active{ transform:scale(0.97); }
     </details>
 
     <details class="cfg-group">
-      <summary>Bloqueo con PIN <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-        <label class="check-row" style="margin-bottom:0;">
-          <input type="checkbox" id="cfgPinEnabled">
-          <small>Pide un PIN de 4 dígitos al abrir la app y al volver de segundo plano. Es una traba local básica: no cifra tus datos ni protege frente a alguien con acceso al código o a las herramientas de desarrollador del navegador.</small>
-        </label>
-        <p class="sheet-note" id="pinUnsupportedNote" style="display:none; margin:8px 0 0;">
-          Tu navegador no soporta esta función (necesita una conexión segura, https).
-        </p>
-      </div>
-    </details>
-
-    <details class="cfg-group">
       <summary>Modo solo lectura <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
         <label class="check-row" style="margin-bottom:0;">
@@ -1604,49 +1537,6 @@ button:active{ transform:scale(0.97); }
     </p>
     <button class="btn-primary" id="btnCuotaProyOrigen">Ir a la compra original</button>
     <button class="btn-ghost" data-close>Cerrar</button>
-  </div>
-</div>
-
-<!-- SHEET: olvidé mi PIN (explica con precisión qué se pierde antes de resetear) -->
-<div class="sheet-overlay" id="sheetForgotPin">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <h2>¿Olvidaste tu PIN?</h2>
-    <p class="sheet-note">
-      Esto borrará el PIN configurado en este dispositivo — la app dejará de pedirlo al abrir.
-      Tus datos financieros (gastos, ingresos, deudas y metas) <b>no se tocan</b>: siguen exactamente
-      igual. Puedes activar un PIN nuevo cuando quieras desde Configuración.
-    </p>
-    <button class="btn-danger" id="btnResetPin">Sí, borrar el PIN</button>
-    <button class="btn-ghost" data-close>Cancelar</button>
-  </div>
-</div>
-
-<!-- PANTALLA DE BLOQUEO POR PIN (Tanda H) — cubre toda la app; no es un sheet -->
-<div class="pin-overlay" id="pinOverlay">
-  <div class="pin-card">
-    <div class="pin-mark">$</div>
-    <h2 id="pinTitle">Ingresa tu PIN</h2>
-    <p class="pin-sub" id="pinSub">Desbloquea MisFinanzas para continuar</p>
-    <div class="pin-dots" id="pinDots">
-      <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
-    </div>
-    <p class="pin-lockmsg" id="pinLockMsg" style="display:none;"></p>
-    <div class="pin-keypad" id="pinKeypad">
-      <button type="button" class="pin-key" data-pinkey="1">1</button>
-      <button type="button" class="pin-key" data-pinkey="2">2</button>
-      <button type="button" class="pin-key" data-pinkey="3">3</button>
-      <button type="button" class="pin-key" data-pinkey="4">4</button>
-      <button type="button" class="pin-key" data-pinkey="5">5</button>
-      <button type="button" class="pin-key" data-pinkey="6">6</button>
-      <button type="button" class="pin-key" data-pinkey="7">7</button>
-      <button type="button" class="pin-key" data-pinkey="8">8</button>
-      <button type="button" class="pin-key" data-pinkey="9">9</button>
-      <span></span>
-      <button type="button" class="pin-key" data-pinkey="0">0</button>
-      <button type="button" class="pin-key pin-key-del" id="pinDeleteBtn" aria-label="Borrar dígito">⌫</button>
-    </div>
-    <button type="button" class="pin-forgot" id="pinForgotBtn">¿Olvidaste tu PIN?</button>
   </div>
 </div>
 
@@ -4768,7 +4658,6 @@ function renderConfig(){
   renderPaletteRow();
   renderFontScaleRow();
   renderAltoContrasteRow();
-  renderPinRow();
   renderReadOnlyRow();
 }
 function renderConfigList(key, boxId){
@@ -4869,289 +4758,13 @@ document.getElementById('btnCatIconDefault').onclick = ()=>{
   renderAll();
 };
 
-/* ==================== PIN DE BLOQUEO LOCAL (Tanda H.1) ====================
-   Traba local básica, NO cifrado: solo evita que alguien que toma el celular vea la
-   app de un vistazo. No protege frente a alguien con acceso al código fuente o a las
-   herramientas de desarrollador del navegador (ahí el PIN y los datos son legibles
-   igual). El PIN se guarda en una clave de localStorage APARTE de `state`
-   (misfinanzas_pin), nunca dentro de `state`: así nunca queda incluido en un respaldo
-   exportado ni se pisa al restaurar uno. Solo se guarda el hash SHA-256 (con sal),
-   nunca el PIN en texto plano. */
-const PIN_STORAGE_KEY = 'misfinanzas_pin';
-const PIN_BG_THRESHOLD_MS = 60 * 1000;    // ~60s en segundo plano antes de re-pedir el PIN
-const PIN_MAX_ATTEMPTS = 5;               // intentos fallidos antes de la primera espera
-const PIN_LOCK_BASE_MS = 15 * 1000;       // primera espera: 15s (se duplica cada vez que se agota, tope 5 min)
-const PIN_LOCK_MAX_MS = 5 * 60 * 1000;
-
-function cryptoSubtleAvailable(){
-  return !!(window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === 'function');
-}
-function loadPinConfig(){
-  try{
-    const s = localStorage.getItem(PIN_STORAGE_KEY);
-    if(s){
-      const p = JSON.parse(s);
-      return { enabled:!!p.enabled, hash:p.hash||null, salt:p.salt||null,
-               failCount:p.failCount||0, lockUntil:p.lockUntil||0, lockMs:p.lockMs||0 };
-    }
-  }catch(_){ /* localStorage corrupto o inaccesible: se sigue sin PIN */ }
-  return { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
-}
-let pinConfig = loadPinConfig();
-function savePinConfig(){ try{ localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinConfig)); }catch(_){} }
-
-function bufToHex(buf){ return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-function randomHex(byteLen){
-  const arr = new Uint8Array(byteLen);
-  crypto.getRandomValues(arr);
-  return bufToHex(arr.buffer);
-}
-async function hashPin(pin, salt){
-  const enc = new TextEncoder().encode(salt + ':' + pin);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return bufToHex(buf);
-}
-
-/* ---- Estado de la pantalla de bloqueo (unlock / crear / confirmar) ---- */
-let pinMode = 'unlock';       // 'unlock' | 'create' | 'confirm'
-let pinBuffer = '';
-let pinFirstEntry = null;     // dígitos del primer paso, mientras se confirma
-let pinLockTimer = null;
-
-function pinDotEls(){ return document.querySelectorAll('#pinDots .pin-dot'); }
-function renderPinDots(){
-  pinDotEls().forEach((d,i)=> d.classList.toggle('filled', i < pinBuffer.length));
-}
-function shakePinDots(){
-  const dots = document.getElementById('pinDots');
-  dots.classList.remove('field-shake'); void dots.offsetWidth; dots.classList.add('field-shake');
-}
-// Refleja si sigue en espera por intentos fallidos; devuelve true si está bloqueado.
-function updatePinLockUI(){
-  const now = Date.now();
-  const locked = pinConfig.lockUntil > now;
-  const msgEl = document.getElementById('pinLockMsg');
-  const keypad = document.getElementById('pinKeypad');
-  if(locked){
-    const secs = Math.ceil((pinConfig.lockUntil - now) / 1000);
-    msgEl.textContent = `Demasiados intentos. Espera ${secs}s.`;
-    msgEl.style.display = 'block';
-    keypad.classList.add('pin-keypad-disabled');
-  } else {
-    msgEl.style.display = 'none';
-    keypad.classList.remove('pin-keypad-disabled');
-  }
-  return locked;
-}
-function tickPinLock(){
-  if(!updatePinLockUI() && pinLockTimer){ clearInterval(pinLockTimer); pinLockTimer = null; }
-}
-function startPinLockTimerIfNeeded(){
-  if(pinConfig.lockUntil > Date.now() && !pinLockTimer) pinLockTimer = setInterval(tickPinLock, 1000);
-}
-
-function openPinOverlay(mode){
-  pinMode = mode;
-  pinBuffer = '';
-  pinFirstEntry = null;
-  renderPinDots();
-  const title = document.getElementById('pinTitle');
-  const sub = document.getElementById('pinSub');
-  const forgot = document.getElementById('pinForgotBtn');
-  if(mode === 'create'){
-    title.textContent = 'Crea tu PIN';
-    sub.textContent = 'Elige 4 dígitos para bloquear la app';
-    forgot.textContent = 'Cancelar';
-    forgot.onclick = cancelPinSetup;
-  } else if(mode === 'confirm'){
-    title.textContent = 'Confirma tu PIN';
-    sub.textContent = 'Ingresa los mismos 4 dígitos otra vez';
-    forgot.textContent = 'Cancelar';
-    forgot.onclick = cancelPinSetup;
-  } else {
-    title.textContent = 'Ingresa tu PIN';
-    sub.textContent = 'Desbloquea MisFinanzas para continuar';
-    forgot.textContent = '¿Olvidaste tu PIN?';
-    forgot.onclick = ()=> openSheet('sheetForgotPin');
-  }
-  document.getElementById('pinOverlay').classList.add('open');
-  updatePinLockUI();
-  startPinLockTimerIfNeeded();
-}
-function closePinOverlay(){
-  document.getElementById('pinOverlay').classList.remove('open');
-  if(pinLockTimer){ clearInterval(pinLockTimer); pinLockTimer = null; }
-  // Deshace cualquier desplazamiento de scroll/viewport que el foco de una tecla haya
-  // podido dejar mientras el bloqueo estaba abierto (ver el listener de pointerdown de
-  // más abajo): sin esto, en iOS el corrimiento del punto de toque persistía en TODA
-  // la app hasta reabrirla.
-  try{
-    document.getElementById('pinOverlay').scrollTop = 0;
-    window.scrollTo(0, 0);
-    if(document.scrollingElement) document.scrollingElement.scrollTop = 0;
-    if(document.body) document.body.scrollTop = 0;
-  }catch(_){}
-}
-function cancelPinSetup(){
-  // Abandona crear/confirmar: el PIN queda tal como estaba (nada se guarda a medias).
-  closePinOverlay();
-  openSheet('sheetConfig');
-  renderConfig();
-}
-
-async function handlePinComplete(){
-  if(pinMode === 'unlock'){
-    try{
-      if(!cryptoSubtleAvailable()) throw new Error('sin soporte de crypto.subtle');
-      const hash = await hashPin(pinBuffer, pinConfig.salt);
-      if(hash === pinConfig.hash){
-        pinConfig.failCount = 0; pinConfig.lockUntil = 0; pinConfig.lockMs = 0;
-        savePinConfig();
-        haptic(HAPTIC_OK);
-        closePinOverlay();
-        return;
-      }
-    }catch(err){
-      console.warn('No se pudo verificar el PIN:', err);
-      showToast('No se pudo verificar el PIN en este navegador.', 'error');
-      pinBuffer = ''; renderPinDots();
-      return;
-    }
-    // PIN incorrecto: cuenta el intento y, si se agotan, aplica espera progresiva.
-    pinConfig.failCount = (pinConfig.failCount || 0) + 1;
-    if(pinConfig.failCount >= PIN_MAX_ATTEMPTS){
-      pinConfig.lockMs = pinConfig.lockMs ? Math.min(pinConfig.lockMs * 2, PIN_LOCK_MAX_MS) : PIN_LOCK_BASE_MS;
-      pinConfig.lockUntil = Date.now() + pinConfig.lockMs;
-      pinConfig.failCount = 0;
-    }
-    savePinConfig();
-    haptic(HAPTIC_DELETE);
-    shakePinDots();
-    pinBuffer = '';
-    renderPinDots();
-    startPinLockTimerIfNeeded();
-    updatePinLockUI();
-  } else if(pinMode === 'create'){
-    pinFirstEntry = pinBuffer;
-    pinBuffer = '';
-    pinMode = 'confirm';
-    document.getElementById('pinTitle').textContent = 'Confirma tu PIN';
-    document.getElementById('pinSub').textContent = 'Ingresa los mismos 4 dígitos otra vez';
-    renderPinDots();
-  } else if(pinMode === 'confirm'){
-    if(pinBuffer === pinFirstEntry){
-      try{
-        const salt = randomHex(16);
-        const hash = await hashPin(pinBuffer, salt);
-        pinConfig = { enabled:true, hash, salt, failCount:0, lockUntil:0, lockMs:0 };
-        savePinConfig();
-        haptic(HAPTIC_OK);
-        closePinOverlay();
-        openSheet('sheetConfig');
-        renderConfig();
-        showToast('PIN activado.', 'success');
-      }catch(err){
-        console.warn('No se pudo activar el PIN:', err);
-        showToast('No se pudo activar el PIN en este navegador.', 'error');
-        cancelPinSetup();
-      }
-    } else {
-      showToast('Los PIN no coinciden. Intenta de nuevo.', 'error');
-      haptic(HAPTIC_DELETE);
-      shakePinDots();
-      pinBuffer = ''; pinFirstEntry = null; pinMode = 'create';
-      document.getElementById('pinTitle').textContent = 'Crea tu PIN';
-      document.getElementById('pinSub').textContent = 'Elige 4 dígitos para bloquear la app';
-      renderPinDots();
-    }
-  }
-}
-function onPinKeyPress(digit){
-  if(updatePinLockUI()) return;   // en espera por intentos fallidos
-  if(pinBuffer.length >= 4) return;
-  pinBuffer += digit;
-  renderPinDots();
-  if(pinBuffer.length === 4) handlePinComplete();
-}
-function onPinDelete(){
-  pinBuffer = pinBuffer.slice(0, -1);
-  renderPinDots();
-}
-document.querySelectorAll('#pinKeypad [data-pinkey]').forEach(btn=>{
-  btn.addEventListener('click', ()=> onPinKeyPress(btn.dataset.pinkey));
-});
-document.getElementById('pinDeleteBtn').addEventListener('click', onPinDelete);
-// Las teclas del PIN NO deben tomar foco al tocarlas. En iOS, "llevar el elemento
-// enfocado a la vista" dentro de un overlay position:fixed desplaza el viewport visual
-// y ese desplazamiento no se revierte solo: con toques rápidos el punto donde registra
-// el toque queda corrido (tocar "5" registra "2") y sigue corrido en toda la app hasta
-// reabrirla. Prevenir el default de pointerdown/mousedown evita el foco (y con él el
-// scroll), sin bloquear el click.
-['pointerdown','mousedown'].forEach(evt=>{
-  document.getElementById('pinOverlay').addEventListener(evt, e=>{
-    if(e.target.closest && e.target.closest('.pin-key, .pin-forgot')) e.preventDefault();
-  });
-});
-// Soporte de teclado físico (útil en escritorio / para probar el bloqueo).
-document.addEventListener('keydown', e=>{
-  if(!document.getElementById('pinOverlay').classList.contains('open')) return;
-  if(/^[0-9]$/.test(e.key)) onPinKeyPress(e.key);
-  else if(e.key === 'Backspace') onPinDelete();
-});
-
-/* ---- Olvidé mi PIN: explica qué se pierde (el PIN) y qué NO (los datos), y resetea ---- */
-document.getElementById('btnResetPin').onclick = ()=>{
-  pinConfig = { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
-  savePinConfig();
-  closeSheet('sheetForgotPin');
-  closePinOverlay();
-  renderConfig();
-  showToast('PIN desactivado. Tus datos financieros siguen intactos.', 'success');
-};
-
-/* ---- Toggle en Configuración ---- */
-function renderPinRow(){
-  const chk = document.getElementById('cfgPinEnabled');
-  if(!chk) return;
-  const supported = cryptoSubtleAvailable();
-  chk.checked = !!pinConfig.enabled;
-  chk.disabled = !supported;
-  const note = document.getElementById('pinUnsupportedNote');
-  if(note) note.style.display = supported ? 'none' : 'block';
-}
-document.getElementById('cfgPinEnabled').addEventListener('change', e=>{
-  if(isReadOnly()){
-    e.target.checked = !e.target.checked;   // revierte el toggle visual: no se tocó nada
-    blockReadOnly();
-    return;
-  }
-  if(e.target.checked){
-    // No se activa todavía: recién queda activo si crear+confirmar el PIN sale bien.
-    e.target.checked = false;
-    closeSheet('sheetConfig');
-    openPinOverlay('create');
-  } else {
-    pinConfig = { enabled:false, hash:null, salt:null, failCount:0, lockUntil:0, lockMs:0 };
-    savePinConfig();
-    showToast('PIN desactivado.', 'success');
-  }
-});
-
-/* ---- Pide el PIN al abrir la app, y al volver de segundo plano tras un buen rato ---- */
-try{
-  if(pinConfig.enabled) openPinOverlay('unlock');
-  let pinHiddenAt = null;
-  document.addEventListener('visibilitychange', ()=>{
-    if(document.hidden){
-      pinHiddenAt = Date.now();
-    } else {
-      if(pinConfig.enabled && pinHiddenAt && (Date.now() - pinHiddenAt) >= PIN_BG_THRESHOLD_MS){
-        openPinOverlay('unlock');
-      }
-      pinHiddenAt = null;
-    }
-  });
-}catch(_){ /* sin soporte de visibilitychange: la app queda usable, solo sin el re-bloqueo automático */ }
+/* ==================== PIN DE BLOQUEO LOCAL: eliminado (Tanda K) ====================
+   El bloqueo con PIN (Tanda H) se retira por completo: tenia un bug no resuelto de
+   toque desplazado con toques rapidos. No se reemplaza por ahora. Al cargar se borra
+   la clave 'misfinanzas_pin' para que a nadie que lo tuviera activado le quede un
+   PIN fantasma bloqueando el acceso. Los datos financieros (misfinanzas_data) no se
+   tocan. */
+try{ localStorage.removeItem('misfinanzas_pin'); }catch(_){}
 
 /* ==================== MODO SOLO LECTURA (Tanda H.3) ====================
    Guardia central: cualquier acción que agregue/edite/elimine un gasto, ingreso,
@@ -5211,8 +4824,7 @@ document.getElementById('cfgReadOnly').addEventListener('change', e=>{
 
 /* ==================== RESPALDO / RESTAURAR DATOS (JSON) ==================== */
 // El respaldo es `state` completo tal cual: gastos, ingresos, deudas/cuotas, metas
-// (con sus aportes) y configuración. Lo único que NUNCA viaja aquí es el PIN (Tanda
-// H.1): vive en una clave de localStorage aparte a propósito.
+// (con sus aportes) y configuración.
 function buildBackupFile(){
   const payload = JSON.stringify(state, null, 2);
   const fecha = new Date().toISOString().slice(0,10);
@@ -5269,52 +4881,176 @@ document.getElementById('btnBackupDownload').onclick = ()=>{
   showToast('Respaldo descargado.', 'success');
 };
 
-/* ---- Validación estricta del archivo a restaurar (Tanda H.2) ----
-   No basta con que existan los arreglos: cada registro debe tener sus campos
-   esperados con el tipo correcto. Un archivo corrupto o incompleto se rechaza con
-   un mensaje claro, antes de tocar nada. */
+/* ---- Validación + migración del archivo a restaurar (Tanda K, sobre Tanda H.2) ----
+   La validación de la Tanda H rechazaba respaldos de versiones anteriores por exigir
+   campos que aún no existían (p. ej. `tipo` en ingresos, la clave `goals`). Ahora:
+     · validateBackupShape solo comprueba que los CONTENEDORES presentes sean del tipo
+       correcto (arrays / objeto config) y que los campos que SÍ vienen en cada registro
+       tengan el tipo correcto. Los campos/secciones ausentes NO son error.
+     · migrateBackup recorre cada tipo de registro y cada sección de config y completa
+       con los valores por defecto actuales lo que falte, conservando lo que el archivo
+       sí trae. Así absorbe futuros cambios de esquema sin volver a romperse.
+   Se sigue rechazando: JSON inválido, arrays que no son arrays, y tipos incorrectos en
+   campos que sí están presentes. */
 const isStr = v => typeof v === 'string';
 const isNum = v => typeof v === 'number' && isFinite(v);
+const isBool = v => typeof v === 'boolean';
 const isIsoDate = v => isStr(v) && /^\d{4}-\d{2}-\d{2}$/.test(v);
+// "opcional: ausente, o presente con el tipo correcto"
+const optStr = v => v === undefined || isStr(v);
+const optNum = v => v === undefined || isNum(v);
+const optBool = v => v === undefined || isBool(v);
+const optArr = v => v === undefined || Array.isArray(v);
+const optPlainObj = v => v === undefined || (v !== null && typeof v === 'object' && !Array.isArray(v));
+
 function validExpenseShape(e){
-  return e && typeof e === 'object'
-    && isStr(e.id) && isIsoDate(e.date) && isNum(e.amount)
-    && isStr(e.category) && isStr(e.method) && isStr(e.description) && isStr(e.tipo)
-    && (e.debtId == null || isStr(e.debtId));
+  return e && typeof e === 'object' && !Array.isArray(e)
+    && isIsoDate(e.date) && isNum(e.amount)                                   // requeridos
+    && optStr(e.id) && optStr(e.category) && optStr(e.method) && optStr(e.description)
+    && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId));
 }
 function validIncomeShape(i){
-  return i && typeof i === 'object'
-    && isStr(i.id) && isIsoDate(i.date) && isNum(i.amount)
-    && isStr(i.source) && isStr(i.description) && isStr(i.tipo);
+  return i && typeof i === 'object' && !Array.isArray(i)
+    && isIsoDate(i.date) && isNum(i.amount)                                   // requeridos
+    && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.tipo);
 }
 function validDebtShape(d){
-  return d && typeof d === 'object'
-    && isStr(d.id) && isStr(d.description) && isIsoDate(d.purchaseDate)
-    && isStr(d.category) && isNum(d.totalAmount) && isNum(d.numCuotas)
-    && (d.manualPaidMonthKeys === undefined || Array.isArray(d.manualPaidMonthKeys));
+  return d && typeof d === 'object' && !Array.isArray(d)
+    && isIsoDate(d.purchaseDate) && isNum(d.totalAmount) && isNum(d.numCuotas) // requeridos
+    && optStr(d.id) && optStr(d.description) && optStr(d.category)
+    && optArr(d.manualPaidMonthKeys);
 }
 function validAporteShape(a){
-  return a && typeof a === 'object' && isStr(a.id) && isStr(a.fecha) && isNum(a.monto);
+  return a && typeof a === 'object' && !Array.isArray(a)
+    && isNum(a.monto)
+    && optStr(a.id) && optStr(a.fecha) && optStr(a.tipo);
 }
 function validGoalShape(g){
-  if(!g || typeof g !== 'object' || !isStr(g.id) || !isStr(g.name)) return false;
+  if(!g || typeof g !== 'object' || Array.isArray(g)) return false;
+  if(!optStr(g.id) || !optStr(g.name) || !optBool(g.indefinida)
+     || !optNum(g.montoObjetivo) || !optStr(g.fechaLimite) || !optStr(g.fechaCreacion)
+     || !optPlainObj(g.aporteAutomatico)) return false;
   if(g.aportes !== undefined && (!Array.isArray(g.aportes) || !g.aportes.every(validAporteShape))) return false;
   return true;
 }
 function validConfigShape(c){
-  const isStrArr = arr => Array.isArray(arr) && arr.every(isStr);
-  return c && typeof c === 'object' && isStrArr(c.categorias) && isStrArr(c.metodos) && isStrArr(c.fuentes);
+  if(c === undefined) return true;                             // config puede faltar del todo
+  if(c === null || typeof c !== 'object' || Array.isArray(c)) return false;
+  const optStrArr = a => a === undefined || (Array.isArray(a) && a.every(isStr));
+  return optStrArr(c.categorias) && optStrArr(c.metodos) && optStrArr(c.fuentes)
+    && optPlainObj(c.categoriaIconos);
 }
-// Devuelve null si el respaldo es válido, o un mensaje de error para mostrar.
+// Devuelve null si el respaldo es aceptable (aunque le falten campos/secciones), o un
+// mensaje de error si está genuinamente corrupto.
 function validateBackupShape(parsed){
-  if(!parsed || typeof parsed !== 'object') return 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.';
-  if(!validConfigShape(parsed.config)) return 'La configuración del respaldo está incompleta o dañada.';
-  if(!Array.isArray(parsed.expenses) || !parsed.expenses.every(validExpenseShape)) return 'Los gastos del respaldo están incompletos o dañados.';
-  if(!Array.isArray(parsed.incomes) || !parsed.incomes.every(validIncomeShape)) return 'Los ingresos del respaldo están incompletos o dañados.';
-  if(!Array.isArray(parsed.debts) || !parsed.debts.every(validDebtShape)) return 'Las deudas/cuotas del respaldo están incompletas o dañadas.';
-  // goals puede faltar del todo en respaldos de antes de la función Metas; si está, debe ser válido.
-  if(parsed.goals !== undefined && (!Array.isArray(parsed.goals) || !parsed.goals.every(validGoalShape))) return 'Las metas del respaldo están incompletas o dañadas.';
-  return null;
+  if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    return 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.';
+  if(!validConfigShape(parsed.config))
+    return 'La configuración del respaldo tiene un formato inválido.';
+  const checkArr = (v, every, msg) => {
+    if(v === undefined) return null;
+    if(!Array.isArray(v) || !v.every(every)) return msg;
+    return null;
+  };
+  return checkArr(parsed.expenses, validExpenseShape, 'Algún gasto del respaldo tiene datos inválidos (revisa fecha y monto).')
+      || checkArr(parsed.incomes,  validIncomeShape,  'Algún ingreso del respaldo tiene datos inválidos (revisa fecha y monto).')
+      || checkArr(parsed.debts,    validDebtShape,    'Alguna deuda o cuota del respaldo tiene datos inválidos.')
+      || checkArr(parsed.goals,    validGoalShape,    'Alguna meta del respaldo tiene datos inválidos.')
+      || ((parsed.config === undefined && parsed.expenses === undefined && parsed.incomes === undefined
+           && parsed.debts === undefined && parsed.goals === undefined)
+            ? 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.' : null);
+}
+
+/* ---- Migración: completa con defaults lo que falte, conserva lo que el archivo trae ---- */
+function migrateBackup(parsed){
+  const gen = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const arrOf = v => Array.isArray(v) ? v : [];
+  const src = (parsed && typeof parsed === 'object') ? parsed : {};
+
+  // config: DEFAULTS + lo del archivo (pisa) + normalización de claves conocidas
+  const c = (src.config && typeof src.config === 'object' && !Array.isArray(src.config)) ? src.config : {};
+  const config = { ...DEFAULTS, ...c };
+  config.categorias = Array.isArray(c.categorias) ? c.categorias.slice() : DEFAULTS.categorias.slice();
+  config.metodos    = Array.isArray(c.metodos)    ? c.metodos.slice()    : DEFAULTS.metodos.slice();
+  config.fuentes    = Array.isArray(c.fuentes)    ? c.fuentes.slice()    : DEFAULTS.fuentes.slice();
+  config.categoriaIconos = (c.categoriaIconos && typeof c.categoriaIconos === 'object' && !Array.isArray(c.categoriaIconos))
+    ? c.categoriaIconos : {};
+  if(config.paleta === undefined) config.paleta = 'cafe';
+  if(config.fontScale === undefined) config.fontScale = '1';
+  if(!isBool(config.altoContraste)) config.altoContraste = false;
+  if(!isBool(config.readOnly)) config.readOnly = false;
+  if(!isBool(config.historialDetalle)) config.historialDetalle = false;
+
+  const expenses = arrOf(src.expenses).map(e=>{
+    const o = {
+      id: isStr(e.id) ? e.id : gen(),
+      date: e.date,
+      amount: e.amount,
+      category: isStr(e.category) ? e.category : 'Varios',
+      method: isStr(e.method) ? e.method : 'Efectivo',
+      description: isStr(e.description) ? e.description : '',
+      tipo: (e.tipo === 'Fijo' || e.tipo === 'Casual') ? e.tipo : 'Casual',
+      debtId: isStr(e.debtId) ? e.debtId : null
+    };
+    if(e.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = e.fixedEndMonthKey;
+    return o;
+  });
+
+  const incomes = arrOf(src.incomes).map(i=>{
+    const o = {
+      id: isStr(i.id) ? i.id : gen(),
+      date: i.date,
+      source: isStr(i.source) ? i.source : 'Otros',
+      amount: i.amount,
+      description: isStr(i.description) ? i.description : '',
+      tipo: (i.tipo === 'Fijo' || i.tipo === 'Casual') ? i.tipo : 'Casual'   // `tipo` no existía en la alfa
+    };
+    if(i.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = i.fixedEndMonthKey;
+    return o;
+  });
+
+  const debts = arrOf(src.debts).map(d=>({
+    id: isStr(d.id) ? d.id : gen(),
+    description: isStr(d.description) ? d.description : '',
+    purchaseDate: d.purchaseDate,
+    category: isStr(d.category) ? d.category : 'Varios',
+    totalAmount: d.totalAmount,
+    numCuotas: d.numCuotas,
+    manualPaidMonthKeys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys.slice() : []
+  }));
+
+  const goals = arrOf(src.goals).map(g=>{
+    const aa = (g.aporteAutomatico && typeof g.aporteAutomatico === 'object' && !Array.isArray(g.aporteAutomatico))
+      ? g.aporteAutomatico : {};
+    const o = {
+      id: isStr(g.id) ? g.id : gen(),
+      name: isStr(g.name) ? g.name : 'Meta',
+      indefinida: isBool(g.indefinida) ? g.indefinida : false,
+      montoObjetivo: isNum(g.montoObjetivo) ? g.montoObjetivo : 0,
+      fechaLimite: isStr(g.fechaLimite) ? g.fechaLimite : '',
+      fechaCreacion: isStr(g.fechaCreacion) ? g.fechaCreacion : new Date().toISOString().slice(0,10),
+      aportes: arrOf(g.aportes).map(a=>({
+        id: isStr(a.id) ? a.id : gen(),
+        fecha: isStr(a.fecha) ? a.fecha : new Date().toISOString().slice(0,10),
+        monto: isNum(a.monto) ? a.monto : 0,
+        tipo: isStr(a.tipo) ? a.tipo : 'manual'
+      })),
+      aporteAutomatico: {
+        activo: isBool(aa.activo) ? aa.activo : false,
+        tipo: (aa.tipo === 'porcentaje' || aa.tipo === 'monto') ? aa.tipo : 'monto',
+        monto: isNum(aa.monto) ? aa.monto : 0,
+        valor: isNum(aa.valor) ? aa.valor : 0,
+        diaDelMes: isNum(aa.diaDelMes) ? aa.diaDelMes : 1,
+        pausado: isBool(aa.pausado) ? aa.pausado : false,
+        razonPausa: aa.razonPausa != null ? aa.razonPausa : null
+      }
+    };
+    if(aa.fechaActivacion !== undefined) o.aporteAutomatico.fechaActivacion = aa.fechaActivacion;
+    if(g.goalEndMonthKey !== undefined) o.goalEndMonthKey = g.goalEndMonthKey;
+    return o;
+  });
+
+  return { config, expenses, incomes, debts, goals };
 }
 function fillRestoreCompare(backup){
   const set = (id, cur, nue)=> document.getElementById(id).textContent = `${cur} → ${nue}`;
@@ -5343,8 +5079,9 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
         showToast(errMsg, 'error');
         return;
       }
-      pendingRestoreData = parsed;
-      fillRestoreCompare(parsed);
+      // Se migra ya al leer, así el conteo (actual vs. a importar) refleja los datos migrados.
+      pendingRestoreData = migrateBackup(parsed);
+      fillRestoreCompare(pendingRestoreData);
       closeSheet('sheetConfig');
       openSheet('sheetConfirmRestore');
     }catch(err){
@@ -5357,18 +5094,9 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
 document.getElementById('btnConfirmRestore').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   if(pendingRestoreData){
-    state = pendingRestoreData;
-    if(state.config && !state.config.categoriaIconos) state.config.categoriaIconos = {};
-    if(!Array.isArray(state.goals)) state.goals = [];   // respaldos previos a las metas
-    state.goals.forEach(g=>{                            // normaliza campos nuevos de meta
-      if(typeof g.indefinida !== 'boolean') g.indefinida = false;
-      if(!Array.isArray(g.aportes)) g.aportes = [];
-      if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
-      if(!g.aporteAutomatico.tipo) g.aporteAutomatico.tipo = 'monto';
-      if(typeof g.aporteAutomatico.valor !== 'number') g.aporteAutomatico.valor = 0;
-    });
-    aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // aplica/normaliza la paleta del respaldo
-    aplicarFontScale((state.config && state.config.fontScale) || '1'); // aplica/normaliza el tamaño de letra del respaldo
+    state = pendingRestoreData;   // ya viene migrado y normalizado por migrateBackup()
+    aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // aplica la paleta del respaldo
+    aplicarFontScale((state.config && state.config.fontScale) || '1'); // aplica el tamaño de letra del respaldo
     saveState();
     pendingRestoreData = null;
   }
