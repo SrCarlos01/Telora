@@ -273,6 +273,12 @@ button{font-family:inherit;}
 }
 .metas-add{margin-bottom:18px;}
 .debt-manual-note.paused{color:var(--danger);}
+/* Etiqueta "Sin confirmar": cuota que la fecha da por pagada pero el usuario nunca confirmó (Tanda M). */
+.cuota-sinconf{
+  font-size:10px; text-transform:uppercase; letter-spacing:.04em; padding:2px 7px; border-radius:20px;
+  background:rgba(201,166,107,0.16); color:var(--gold); display:inline-block; margin-left:8px; vertical-align:middle;
+}
+:root.hc .cuota-sinconf{border:2px solid var(--gold); color:var(--cream);}
 
 /* ---------- TARJETAS COMPACTAS + EXPANSIÓN (C/D) ---------- */
 .goal-card{position:relative;}
@@ -343,9 +349,11 @@ button{font-family:inherit;}
 .li-expand .icon{width:16px; height:16px; transition:transform .2s ease;}
 .list-item.expanded .li-expand .icon{transform:rotate(180deg);}
 
-/* ---------- HISTORIAL: fila de controles (Detalle + selector de vista) ---------- */
-.hist-controls{display:flex; align-items:center; justify-content:flex-end; gap:8px; margin:0 0 14px;}
+/* ---------- HISTORIAL: fila de controles (totales + Detalle + selector de vista) ---------- */
+/* Tanda M: los totales del mes van A LA IZQUIERDA de "Detalle"/"Lista", en la misma fila. */
+.hist-controls{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 14px;}
 .hist-controls .chart-toggle{margin:0;}
+.hist-controls-btns{display:flex; align-items:center; gap:8px; flex-shrink:0;}
 .chart-toggle.toggle-on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
 
 /* ---------- HISTORIAL: búsqueda + filtros ---------- */
@@ -390,24 +398,19 @@ button{font-family:inherit;}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23FBEFE9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 
-/* Historial: fila compacta de totales del mes navegado (Tanda L). */
-.hist-month-totals{display:flex; gap:8px; margin:0 0 16px;}
-.hist-month-totals .hmt-item{
-  flex:1; min-width:0; background:var(--surface-2); border:1px solid var(--border);
-  border-radius:var(--radius-sm); padding:10px 8px; text-align:center;
-}
+/* Historial: totales del mes navegado, compactos y en línea junto a "Detalle"/"Lista" (Tanda L + M). */
+.hist-month-totals{display:flex; align-items:center; gap:14px; min-width:0; flex-wrap:wrap;}
+.hist-month-totals .hmt-item{display:flex; flex-direction:column; line-height:1.15; min-width:0;}
 .hist-month-totals .hmt-k{
-  display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
-  color:var(--gold-dim); margin-bottom:3px;
+  font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--gold-dim); margin-bottom:1px;
 }
 .hist-month-totals .hmt-v{
-  display:block; font-size:14px; font-weight:600; color:var(--cream);
+  font-size:13.5px; font-weight:700; color:var(--cream);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .hist-month-totals .hmt-v.hmt-in{color:var(--mv-ingreso);}
 .hist-month-totals .hmt-v.hmt-out{color:var(--mv-gasto);}
-.hist-month-totals .hmt-v.neg{color:var(--danger);}
-:root.hc .hist-kind-select, :root.hc .hist-month-totals .hmt-item{border-width:2px;}
+:root.hc .hist-kind-select{border-width:2px;}
 :root.hc .hist-month-totals .hmt-k{color:var(--cream);}
 .hist-cat-carousel{
   display:flex; flex-wrap:nowrap; gap:8px; margin-top:10px; padding-bottom:2px;
@@ -1086,25 +1089,26 @@ button:active{ transform:scale(0.97); }
 
   <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
-    <div class="hist-month-totals" id="hMonthTotals">
-      <div class="hmt-item"><span class="hmt-k">Ingresos</span><span class="hmt-v hmt-in" id="hmtIngresos">$0</span></div>
-      <div class="hmt-item"><span class="hmt-k">Gastos</span><span class="hmt-v hmt-out" id="hmtGastos">$0</span></div>
-      <div class="hmt-item"><span class="hmt-k">Disponible</span><span class="hmt-v" id="hmtDisponible">$0</span></div>
-    </div>
     <div class="segmented" role="tablist" aria-label="Filtrar historial">
       <button class="active" data-htab="gastos" role="tab" aria-selected="true">Gastos</button>
       <button data-htab="ingresos" role="tab" aria-selected="false">Ingresos</button>
       <button data-htab="todo" role="tab" aria-selected="false">Todo</button>
     </div>
     <div class="hist-controls">
-      <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
-      <button class="chart-toggle" id="tgHistorial"></button>
+      <div class="hist-month-totals" id="hMonthTotals">
+        <span class="hmt-item" id="hmtGastosItem"><span class="hmt-k">Total gasto</span><span class="hmt-v hmt-out" id="hmtGastos">$0</span></span>
+        <span class="hmt-item" id="hmtIngresosItem"><span class="hmt-k">Total ingresos</span><span class="hmt-v hmt-in" id="hmtIngresos">$0</span></span>
+      </div>
+      <div class="hist-controls-btns">
+        <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
+        <button class="chart-toggle" id="tgHistorial"></button>
+      </div>
     </div>
     <div class="hist-search" id="histSearchWrap">
       <div class="hist-search-bar">
         <div class="hist-search-input">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="hSearchInput" placeholder="Buscar por descripción..." inputmode="search" autocomplete="off" aria-label="Buscar por descripción">
+          <input type="text" id="hSearchInput" placeholder="Buscar por nombre..." inputmode="search" autocomplete="off" aria-label="Buscar por nombre">
         </div>
         <span class="hist-search-count" id="hSearchCount" style="display:none;"></span>
         <select class="hist-kind-select" id="hKindSelect" aria-label="Filtrar entre cuotas y gastos normales">
@@ -1180,6 +1184,7 @@ button:active{ transform:scale(0.97); }
     <div class="sheet-handle"></div>
     <h2 id="gastoTitle">Nuevo gasto</h2>
     <div class="field"><label>Fecha</label><input type="date" id="gFecha"></div>
+    <div class="field"><label>Nombre</label><input type="text" id="gNombre" placeholder="Ej: Supermercado, Bencina, Arriendo" autocomplete="off"></div>
     <div class="field">
       <label>Monto</label>
       <input type="text" id="gMonto" placeholder="0" inputmode="numeric" autocomplete="off">
@@ -1222,6 +1227,7 @@ button:active{ transform:scale(0.97); }
     <div class="sheet-handle"></div>
     <h2 id="ingresoTitle">Nuevo ingreso</h2>
     <div class="field"><label>Fecha</label><input type="date" id="iFecha"></div>
+    <div class="field"><label>Nombre</label><input type="text" id="iNombre" placeholder="Ej: Sueldo, Devolución, Venta" autocomplete="off"></div>
     <div class="field">
       <label>Fuente</label>
       <select id="iFuente"></select>
@@ -1652,7 +1658,8 @@ const ICONS = {
   "filter": '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
   "image": '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
   "check": '<polyline points="20 6 9 17 4 12"/>',
-  "lock": '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+  "lock": '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  "alert-triangle": '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
 };
 function icon(name, extraClass){
   const path = ICONS[name] || ICONS['tag'];
@@ -1690,6 +1697,28 @@ function loadState(){
   if(s){
     const parsed = JSON.parse(s);
     if(parsed.config && !parsed.config.categoriaIconos) parsed.config.categoriaIconos = {};   // íconos por categoría
+    // Tanda M · campo "Nombre" en gastos e ingresos. Migración obligatoria: ningún
+    // registro puede quedar sin nombre. Por defecto = su descripción completa; si no
+    // hay descripción, cae a la categoría (gasto) o la fuente (ingreso) para nunca
+    // quedar vacío en el Historial.
+    if(Array.isArray(parsed.expenses)) parsed.expenses.forEach(e=>{
+      if(typeof e.nombre !== 'string' || e.nombre.trim() === ''){
+        const desc = (typeof e.description === 'string') ? e.description.trim() : '';
+        e.nombre = desc || (typeof e.category === 'string' && e.category) || 'Gasto';
+      }
+    });
+    if(Array.isArray(parsed.incomes)) parsed.incomes.forEach(i=>{
+      if(typeof i.nombre !== 'string' || i.nombre.trim() === ''){
+        const desc = (typeof i.description === 'string') ? i.description.trim() : '';
+        i.nombre = desc || (typeof i.source === 'string' && i.source) || 'Ingreso';
+      }
+    });
+    // Tanda M · punto 1: override manual "esta cuota NO está pagada / trátala como
+    // activa", para revertir de Pagada a Activa incluso cuando la fecha la da por
+    // pagada. No afecta el cálculo del Disponible (ese conserva el supuesto de Tanda J).
+    if(Array.isArray(parsed.debts)) parsed.debts.forEach(d=>{
+      if(!Array.isArray(d.manualUnpaidMonthKeys)) d.manualUnpaidMonthKeys = [];
+    });
     if(!Array.isArray(parsed.goals)) parsed.goals = [];   // migración: metas de ahorro (Día 5)
     parsed.goals.forEach(g=>{                              // migración: campos nuevos de meta (Días 4-9)
       if(typeof g.indefinida !== 'boolean') g.indefinida = false;
@@ -2666,6 +2695,7 @@ function openGastoForm(expenseId){
   fillSelect('gMetodo', state.config.metodos);
   const today = new Date();
   document.getElementById('gFecha').value = today.toISOString().slice(0,10);
+  document.getElementById('gNombre').value = '';
   document.getElementById('gMonto').value = '';
   document.getElementById('gDescripcion').value = '';
   document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo==='Casual'));
@@ -2679,6 +2709,9 @@ function openGastoForm(expenseId){
     const e = state.expenses.find(x=>x.id===expenseId);
     document.getElementById('gastoTitle').textContent = 'Editar gasto';
     document.getElementById('gFecha').value = e.date;
+    // Editar un gasto anterior a Tanda M: Nombre y Descripción llegan poblados (el
+    // Nombre ya migró desde la descripción) para separarlos a mano si se quiere.
+    document.getElementById('gNombre').value = e.nombre || e.description || '';
     setMonto('gMonto', e.amount);
     fillSelect('gCategoria', state.config.categorias, e.category);
     fillSelect('gMetodo', state.config.metodos, e.method);
@@ -2733,31 +2766,32 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
   const fecha = document.getElementById('gFecha').value || new Date().toISOString().slice(0,10);
+  const nombre = document.getElementById('gNombre').value.trim();             // obligatorio (Tanda M)
   const monto = parseMonto('gMonto');
   const categoria = document.getElementById('gCategoria').value;
   const metodo = document.getElementById('gMetodo').value;
-  const descripcion = document.getElementById('gDescripcion').value.trim();   // opcional (puede quedar vacía)
+  const descripcion = document.getElementById('gDescripcion').value.trim();   // opcional (puede quedar vacía); solo se ve al expandir el detalle en el Historial
   const tipo = document.querySelector('#sheetGasto [data-tipo].active').dataset.tipo;
   // Con método Crédito el gasto es SIEMPRE una cuota; nº de cuotas = 1 por defecto
   // (pago único a crédito), tal como antes con "¿Es cuota? = Sí" y 1 cuota.
   const esCredito = metodo === 'Crédito';
   const numCuotas = esCredito ? (parseInt(document.getElementById('gNumCuotas').value, 10) || 1) : 0;
 
+  if(!nombre){ showToast('Ponle un nombre al gasto.', 'error'); fieldError(document.getElementById('gNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('gMonto')); return; }
   if(!categoria){ showToast('Elige una categoría.', 'error'); fieldError(document.getElementById('gCategoria')); return; }
-  if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
 
   let nuevoGastoId = null;
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
-    e.date=fecha; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
+    e.date=fecha; e.nombre=nombre; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
     if(esCredito){
       const debt = e.debtId ? state.debts.find(d=>d.id===e.debtId) : null;
       if(debt){
         debt.description=descripcion; debt.category=categoria; debt.purchaseDate=fecha; debt.totalAmount=monto; debt.numCuotas=numCuotas;
       } else {
         // Cambió a Crédito en la edición: ahora es una cuota.
-        const nd = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[] };
+        const nd = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
         state.debts.push(nd);
         e.debtId = nd.id;
       }
@@ -2765,9 +2799,9 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     // Si tenía deuda y el método dejó de ser Crédito, se conserva la deuda intacta
     // (caso borde); para quitarla del todo hay que eliminar el gasto.
   } else {
-    const expense = { id:uid(), date:fecha, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null };
+    const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null };
     if(esCredito){
-      const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[] };
+      const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
       state.debts.push(debt);
       expense.debtId = debt.id;
     }
@@ -2845,6 +2879,7 @@ function openIngresoForm(incomeId){
   // Sin fuente preseleccionada al crear: opción vacía al inicio (obliga a elegir).
   document.getElementById('iFuente').insertAdjacentHTML('afterbegin', '<option value="" disabled selected>Elige una fuente…</option>');
   document.getElementById('iFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('iNombre').value = '';
   document.getElementById('iMonto').value = '';
   document.getElementById('iDescripcion').value = '';
   // Tipo Fijo/Casual (mismo motor de recurrencia que los gastos): por defecto Casual.
@@ -2856,6 +2891,7 @@ function openIngresoForm(incomeId){
     const i = state.incomes.find(x=>x.id===incomeId);
     document.getElementById('ingresoTitle').textContent = 'Editar ingreso';
     document.getElementById('iFecha').value = i.date;
+    document.getElementById('iNombre').value = i.nombre || i.description || '';
     document.getElementById('iFuente').value = i.source;
     setMonto('iMonto', i.amount);
     document.getElementById('iDescripcion').value = i.description;
@@ -2870,19 +2906,20 @@ function openIngresoForm(incomeId){
 document.getElementById('btnSaveIngreso').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   const fecha = document.getElementById('iFecha').value || new Date().toISOString().slice(0,10);
+  const nombre = document.getElementById('iNombre').value.trim();             // obligatorio (Tanda M)
   const fuente = document.getElementById('iFuente').value;
   const monto = parseMonto('iMonto');
-  const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional
+  const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional; solo se ve al expandir el detalle en el Historial
   const itipo = document.querySelector('#sheetIngreso [data-itipo].active').dataset.itipo;
+  if(!nombre){ showToast('Ponle un nombre al ingreso.', 'error'); fieldError(document.getElementById('iNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('iMonto')); return; }
   if(!fuente){ showToast('Elige una fuente.', 'error'); fieldError(document.getElementById('iFuente')); return; }
-  if(!descripcion && !confirm('Vas a guardar sin descripción, ¿continuar?')) return;
   let nuevoIngresoId = null;
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
-    i.date=fecha; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
+    i.date=fecha; i.nombre=nombre; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
   } else {
-    const inc = {id:uid(), date:fecha, source:fuente, amount:monto, description:descripcion, tipo:itipo};
+    const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo};
     state.incomes.push(inc);
     nuevoIngresoId = inc.id;
   }
@@ -3645,15 +3682,70 @@ function debtStatusForMonth(debt, refDate){
 function isManuallyPaid(debt, refDate){
   return (debt.manualPaidMonthKeys||[]).includes(monthKey(refDate));
 }
-function toggleManualPaid(debtId, refDate){
-  if(isReadOnly()){ blockReadOnly(); return; }
+// Tanda M · punto 1: override "esta cuota NO está confirmada, trátala como Activa",
+// para revertir de Pagada a Activa incluso cuando la FECHA ya la daba por pagada.
+// SOLO afecta la clasificación Activas/Pagadas de la pestaña Cuotas — el cálculo del
+// Disponible (Tanda J) conserva intacto su supuesto "vencida = pagada".
+function isManuallyUnpaid(debt, refDate){
+  return (debt.manualUnpaidMonthKeys||[]).includes(monthKey(refDate));
+}
+// ¿El usuario confirmó a mano TODAS las cuotas de esta deuda (una por cada mes de su ciclo)?
+function cuotasTodasConfirmadas(debt){
+  if(!(debt.numCuotas > 0)) return false;
+  const keys = debt.manualPaidMonthKeys || [];
+  for(let i = 1; i <= debt.numCuotas; i++){
+    if(!keys.includes(monthKey(addMonths(debt.purchaseDate, i)))) return false;
+  }
+  return true;
+}
+// Estado de una deuda en el mes `refDate` PARA LA PESTAÑA CUOTAS (no para el Disponible).
+// Se basa solo en confirmación manual: la fecha vencida por sí sola nunca marca "pagada
+// de verdad". Devuelve { tab:'activas'|'pagadas'|null, ... }.
+function cuotaEstadoMes(debt, refDate){
+  const auto = debtStatusForMonth(debt, refDate);   // 'futura' | 'activa' | 'pagada'
+  if(auto === 'futura') return { tab:null, auto };
+  const paid = isManuallyPaid(debt, refDate);
+  if(paid) return { tab:'pagadas', auto, confirmada:true };
+  if(auto === 'activa') return { tab:'activas', auto, confirmada:false };
+  // auto === 'pagada' (la fecha dio por terminado el ciclo)
+  if(isManuallyUnpaid(debt, refDate)) return { tab:'activas', auto, confirmada:false, revertida:true };
+  if(cuotasTodasConfirmadas(debt)) return { tab:'pagadas', auto, confirmada:true };
+  return { tab:'pagadas', auto, confirmada:false, sinConfirmar:true };
+}
+function _cuotaKeyCtx(debtId, refDate){
+  if(isReadOnly()){ blockReadOnly(); return null; }
   const d = state.debts.find(x=>x.id===debtId);
-  if(!d) return;
-  if(!d.manualPaidMonthKeys) d.manualPaidMonthKeys = [];
-  const mk = monthKey(refDate);
-  const idx = d.manualPaidMonthKeys.indexOf(mk);
-  if(idx>=0) d.manualPaidMonthKeys.splice(idx,1);
-  else d.manualPaidMonthKeys.push(mk);
+  if(!d) return null;
+  if(!Array.isArray(d.manualPaidMonthKeys)) d.manualPaidMonthKeys = [];
+  if(!Array.isArray(d.manualUnpaidMonthKeys)) d.manualUnpaidMonthKeys = [];
+  return { d, mk: monthKey(refDate) };
+}
+function _rmKey(arr, mk){ const i = arr.indexOf(mk); if(i >= 0) arr.splice(i, 1); }
+// "Marcar como pagada este mes": confirmación manual genuina.
+function marcarCuotaPagada(debtId, refDate){
+  const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
+  _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
+  if(!c.d.manualPaidMonthKeys.includes(c.mk)) c.d.manualPaidMonthKeys.push(c.mk);
+  saveState(); renderCuotas();
+}
+// Revertir de Pagada a Activa — sin restricciones (marca reciente, marca antigua o
+// "vencida sin confirmar"). Si la fecha ya daba la cuota por pagada, deja un override
+// explícito para que reaparezca en Activas.
+function marcarCuotaActiva(debtId, refDate){
+  const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
+  _rmKey(c.d.manualPaidMonthKeys, c.mk);
+  if(debtStatusForMonth(c.d, refDate) === 'pagada'){
+    if(!c.d.manualUnpaidMonthKeys.includes(c.mk)) c.d.manualUnpaidMonthKeys.push(c.mk);
+  } else {
+    _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
+  }
+  saveState(); renderCuotas();
+}
+// Quita cualquier marca manual de este mes y vuelve al estado que dicta la fecha.
+function limpiarCuotaEstado(debtId, refDate){
+  const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
+  _rmKey(c.d.manualPaidMonthKeys, c.mk);
+  _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
   saveState(); renderCuotas();
 }
 
@@ -3736,6 +3828,7 @@ function cuotasVirtualesHistorial(refDate){
       category: d.category,
       method: 'Crédito',
       description: d.description || '',
+      nombre: d.description || '',        // solo para ordenar junto a los demás; la fila usa `description`
       tipo: 'Casual',
       isVirtualCuota: true,
       cuotaNum: info.cuotaNum,
@@ -4140,7 +4233,7 @@ function openCategoriaDetalle(categoria, normalExpenses){
 
   const items = [];
   normalExpenses.filter(e=> e.category===categoria).forEach(e=>{
-    items.push({ tipo: e.debtId ? 'Cuota' : (e.tipo==='Fijo' ? 'Fijo' : null), descripcion: e.description, monto: e.amount, fecha: e.date });
+    items.push({ tipo: e.debtId ? 'Cuota' : (e.tipo==='Fijo' ? 'Fijo' : null), descripcion: e.nombre || e.description, monto: e.amount, fecha: e.date });
   });
   state.debts.filter(d=> d.category===categoria).forEach(d=>{
     const info = cuotaInfoForMonth(d, currentDate);
@@ -4202,7 +4295,7 @@ function histPasaKind(row){
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
 // Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
 function histPasaGasto(e){
-  if(!histMatchTexto(e.description)) return false;
+  if(!histMatchTexto((e.nombre || '') + ' ' + (e.description || ''))) return false;
   if(hFilterCats.size > 0 && !hFilterCats.has(e.category)) return false;
   if(!histPasaKind(e)) return false;
   return true;
@@ -4210,7 +4303,7 @@ function histPasaGasto(e){
 // Filtro para un ingreso: busca en descripción + fuente. La categoría no aplica a
 // ingresos, así que si hay categorías seleccionadas el ingreso queda fuera.
 function histPasaIngreso(i){
-  if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
+  if(!histMatchTexto((i.nombre || '') + ' ' + (i.description || '') + ' ' + (i.source || ''))) return false;
   if(hFilterCats.size > 0) return false;
   return true;
 }
@@ -4363,7 +4456,7 @@ function applySort(items, nameKey, amountKey, dateKey){
   return items.slice().sort((a,b)=>{
     if(campo==='fecha') return sign * a[dateKey].localeCompare(b[dateKey]);
     if(campo==='valor') return sign * (a[amountKey]-b[amountKey]);
-    if(campo==='nombre') return sign * a[nameKey].localeCompare(b[nameKey], 'es');
+    if(campo==='nombre') return sign * String(a[nameKey]||'').localeCompare(String(b[nameKey]||''), 'es');
     return 0;
   });
 }
@@ -4384,20 +4477,22 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
 });
 // ¿El botón "Detalle" está activado? (por defecto sí; se persiste en state.config)
 function historialDetalleOn(){ return !state.config || state.config.historialDetalle !== false; }
-// Fila compacta de totales del mes navegado en el Historial (Tanda L). Ingresos y Gastos
-// con sus tokens de color; Disponible = la cifra principal del Resumen. Mismos cálculos
-// (resumenTotalesDelMes), sin fórmula paralela.
+// Totales del mes navegado en el Historial (Tanda L + M). Mismos cálculos
+// (resumenTotalesDelMes), sin fórmula paralela. Tanda M: qué se muestra depende de la
+// pestaña de filtro activa — Gastos: solo "Total gasto"; Ingresos: solo "Total ingresos";
+// Todo: ambos. El "Disponible" ya no vive aquí (vive en Resumen).
 function renderHistMonthTotals(){
   const T = resumenTotalesDelMes(currentDate);
-  const put = (id, val, neg)=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.textContent = money(val);
-    el.classList.toggle('neg', !!neg && val < 0);
-  };
-  put('hmtIngresos', T.ingresos, false);
-  put('hmtGastos', T.gastos, false);
-  put('hmtDisponible', T.dispLibre, true);
+  const gEl = document.getElementById('hmtGastos');
+  const iEl = document.getElementById('hmtIngresos');
+  if(gEl) gEl.textContent = money(T.gastos);
+  if(iEl) iEl.textContent = money(T.ingresos);
+  const gItem = document.getElementById('hmtGastosItem');
+  const iItem = document.getElementById('hmtIngresosItem');
+  const showG = hTab === 'gastos' || hTab === 'todo';
+  const showI = hTab === 'ingresos' || hTab === 'todo';
+  if(gItem) gItem.style.display = showG ? '' : 'none';
+  if(iItem) iItem.style.display = showI ? '' : 'none';
 }
 function renderHistorial(){
   const mk = monthKey(currentDate);
@@ -4447,7 +4542,7 @@ function renderHistorial(){
   if(hTab==='gastos'){
     // Gastos reales/fijos + filas virtuales de cuota (meses posteriores al de la compra).
     const base = [...getExpensesForMonth(currentDate), ...cuotasVirtualesHistorial(currentDate)];
-    const items = applySort(base, 'description', 'amount', 'date').filter(histPasaGasto);
+    const items = applySort(base, 'nombre', 'amount', 'date').filter(histPasaGasto);
     updateHistCount(items.length);
     if(items.length===0){
       box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
@@ -4477,12 +4572,15 @@ function renderHistorial(){
       // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro y
       // más opaco. El resto de gastos (normal / fijo) SÍ impactan el Disponible -> rojo.
       const amtCls = e.debtId ? 'li-amount li-amount-cuota-origen' : 'li-amount li-amount-gasto';
+      // Tanda M: la etiqueta principal es el "Nombre"; la "Descripción" (opcional) solo
+      // aparece al expandir el Detalle, dentro de .li-sub.
+      const nom = e.nombre || e.description || '';
       return `
       <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span>${badge}</p>
-          <p class="li-sub">${fmtDate(e.date)} · ${e.category} · ${e.method}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${badge}</p>
+          <p class="li-sub">${fmtDate(e.date)} · ${e.category} · ${e.method}${e.description ? ' · ' + e.description : ''}</p>
         </div>
         <span class="${amtCls}">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -4497,22 +4595,26 @@ function renderHistorial(){
     });
     wireRowExpand(box); markNewRow(box);
   } else {
-    const items = applySort(getIncomesForMonth(currentDate), 'source', 'amount', 'date').filter(histPasaIngreso);
+    const items = applySort(getIncomesForMonth(currentDate), 'nombre', 'amount', 'date').filter(histPasaIngreso);
     updateHistCount(items.length);
     if(items.length===0){
       box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún ingreso coincide con la búsqueda.' : 'Sin ingresos registrados este mes.');
       return;
     }
-    const rowHtml = (i)=>`
+    // Tanda M: etiqueta principal = "Nombre"; fuente y descripción pasan al Detalle (.li-sub).
+    const rowHtml = (i)=>{
+      const nom = i.nombre || i.description || i.source || '';
+      return `
       <div class="list-item income${expCls}" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${i.source}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
-          <p class="li-sub">${fmtDate(i.date)}${i.description? ' · '+i.description:''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
+          <p class="li-sub">${fmtDate(i.date)} · ${i.source}${i.description? ' · '+i.description:''}</p>
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       </div>`;
+    };
     box.innerHTML = agrupaPorDia ? groupByDayHtml(items, rowHtml) : items.map(rowHtml).join('');
     box.querySelectorAll('[data-editincome]').forEach(el=>{
       el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
@@ -4534,18 +4636,19 @@ function renderHistorialTodo(box){
 
   const gastos = getExpensesForMonth(currentDate).map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
-    name:e.description||'', category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
+    name:e.nombre || e.description || '', description:e.description||'',
+    category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
   })).filter(g=>{
-    if(!histMatchTexto(g.name)) return false;
+    if(!histMatchTexto((g.name || '') + ' ' + (g.description || ''))) return false;
     if(hFilterCats.size > 0 && !hFilterCats.has(g.category)) return false;
     if(!histPasaKind(g)) return false;
     return true;
   });
   const ingresos = getIncomesForMonth(currentDate).map(i=>({
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
-    name:i.source||'', source:i.source, description:i.description||'', tipo:i.tipo
+    name:i.nombre || i.description || i.source || '', source:i.source, description:i.description||'', tipo:i.tipo
   })).filter(i=>{
-    if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
+    if(!histMatchTexto((i.name || '') + ' ' + (i.description || '') + ' ' + (i.source || ''))) return false;
     if(hFilterCats.size > 0) return false;
     if(hKindFilter !== 'all') return false;   // Cuotas / Gastos normales: los ingresos no son ninguno
     return true;
@@ -4593,8 +4696,8 @@ function renderHistorialTodo(box){
       <div class="list-item income${expCls}" data-editincome="${it.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.source}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
-          <p class="li-sub">${fmtDate(it.date)}${it.description ? ' · '+it.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
+          <p class="li-sub">${fmtDate(it.date)} · ${it.source}${it.description ? ' · '+it.description : ''}</p>
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount income">+${money(it.amount)}</span>
@@ -4641,8 +4744,8 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-editexpense="${it.id}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
-          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
+          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}${it.description ? ' · ' + it.description : ''}</p>
           ${cuotaNote}
         </div>
         <div class="li-amount-wrap">
@@ -4718,42 +4821,57 @@ function renderCuotas(){
   const box = document.getElementById('cList');
   const refDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
 
-  // "Activas" = automáticamente activa según fecha Y no marcada manualmente como pagada.
-  // "Pagadas" = automáticamente pagada (terminó su ciclo) O marcada manualmente este mes.
-  const filtered = state.debts.filter(d=>{
-    const autoStatus = debtStatusForMonth(d, refDate);
-    const manual = isManuallyPaid(d, refDate);
-    if(cTab==='activas') return autoStatus==='activa' && !manual;
-    return autoStatus==='pagada' || (autoStatus==='activa' && manual);
-  });
+  // Tanda M · punto 1: la clasificación Activas / Pagadas se basa SOLO en confirmación
+  // manual (cuotaEstadoMes), nunca en la fecha vencida por sí sola. Una cuota vencida
+  // sin confirmar sigue apareciendo en "Pagadas" (como en el diseño anterior), pero con
+  // la etiqueta "Sin confirmar" y siempre se puede revertir a Activa.
+  const filtered = state.debts.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
 
   if(filtered.length===0){
-    box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas por completo hasta este mes.');
+    box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.');
     return;
   }
 
   box.innerHTML = filtered.map(d=>{
-    const autoStatus = debtStatusForMonth(d, refDate);
-    const manual = isManuallyPaid(d, refDate);
+    const est = cuotaEstadoMes(d, refDate);
     const montoCuota = d.totalAmount/d.numCuotas;
+    // Nº de cuota / saldo: si este mes tiene cuota vigente, se leen de cuotaInfoForMonth;
+    // si la fecha ya cerró el ciclo, es la última cuota con saldo 0.
+    const info = cuotaInfoForMonth(d, refDate);
     let cuotaNum, saldoRestante;
-    if(autoStatus==='activa'){
-      const info = cuotaInfoForMonth(d, refDate);
-      cuotaNum = info.cuotaNum;
-      saldoRestante = info.saldoRestante;
-    } else {
-      cuotaNum = d.numCuotas;
-      saldoRestante = 0;
-    }
+    if(info){ cuotaNum = info.cuotaNum; saldoRestante = info.saldoRestante; }
+    else { cuotaNum = d.numCuotas; saldoRestante = 0; }
     const pct = Math.round((cuotaNum/d.numCuotas)*100);
 
     let actionHtml = '';
-    if(autoStatus==='activa' && !manual){
-      actionHtml = `<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
-    } else if(autoStatus==='activa' && manual){
-      actionHtml = `
+    let estadoBadge = '';
+    if(est.tab === 'activas'){
+      if(est.revertida){
+        actionHtml = `
+        <p class="debt-manual-note">${icon('tag')} Revertida a activa — la fecha ya la daba por pagada, pero no la confirmaste.</p>
+        <button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>
+        <button class="debt-action undo" data-markclear="${d.id}">Deshacer (volver a Pagadas)</button>`;
+      } else {
+        actionHtml = `<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
+      }
+    } else { // pagadas
+      if(est.auto === 'activa'){
+        // Confirmada a mano en un mes que todavía tiene cuota vigente.
+        actionHtml = `
         <p class="debt-manual-note">${icon('tag')} Marcada como pagada manualmente</p>
-        <button class="debt-action undo" data-markpending="${d.id}">Marcar como pendiente</button>`;
+        <button class="debt-action undo" data-markactiva="${d.id}">Marcar como pendiente</button>`;
+      } else if(est.confirmada){
+        // La fecha cerró el ciclo Y el usuario confirmó a mano todas las cuotas.
+        actionHtml = `
+        <p class="debt-manual-note">${icon('check')} Confirmaste el pago de todas las cuotas.</p>
+        <button class="debt-action undo" data-markactiva="${d.id}">Revertir a activa</button>`;
+      } else {
+        // Vencida sin confirmar: aparece en Pagadas, pero claramente etiquetada.
+        estadoBadge = `<span class="cuota-sinconf">Sin confirmar</span>`;
+        actionHtml = `
+        <p class="debt-manual-note">${icon('alert-triangle')} La fecha de vencimiento ya pasó, pero no confirmaste el pago.</p>
+        <button class="debt-action undo" data-markactiva="${d.id}">Revertir a activa</button>`;
+      }
     }
 
     return `
@@ -4761,7 +4879,7 @@ function renderCuotas(){
       <div class="debt-top">
         <div>
           <p class="debt-title">${d.description}</p>
-          <p class="debt-cat">${d.category}</p>
+          <p class="debt-cat">${d.category}${estadoBadge}</p>
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
       </div>
@@ -4800,10 +4918,13 @@ function renderCuotas(){
     });
   });
   box.querySelectorAll('[data-markpaid]').forEach(el=>{
-    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); toggleManualPaid(el.dataset.markpaid, refDate); });
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); marcarCuotaPagada(el.dataset.markpaid, refDate); });
   });
-  box.querySelectorAll('[data-markpending]').forEach(el=>{
-    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); toggleManualPaid(el.dataset.markpending, refDate); });
+  box.querySelectorAll('[data-markactiva]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); marcarCuotaActiva(el.dataset.markactiva, refDate); });
+  });
+  box.querySelectorAll('[data-markclear]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); limpiarCuotaEstado(el.dataset.markclear, refDate); });
   });
 }
 
@@ -5109,18 +5230,18 @@ function validExpenseShape(e){
   return e && typeof e === 'object' && !Array.isArray(e)
     && isIsoDate(e.date) && isNum(e.amount)                                   // requeridos
     && optStr(e.id) && optStr(e.category) && optStr(e.method) && optStr(e.description)
-    && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId));
+    && optStr(e.nombre) && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId));
 }
 function validIncomeShape(i){
   return i && typeof i === 'object' && !Array.isArray(i)
     && isIsoDate(i.date) && isNum(i.amount)                                   // requeridos
-    && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.tipo);
+    && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.nombre) && optStr(i.tipo);
 }
 function validDebtShape(d){
   return d && typeof d === 'object' && !Array.isArray(d)
     && isIsoDate(d.purchaseDate) && isNum(d.totalAmount) && isNum(d.numCuotas) // requeridos
     && optStr(d.id) && optStr(d.description) && optStr(d.category)
-    && optArr(d.manualPaidMonthKeys);
+    && optArr(d.manualPaidMonthKeys) && optArr(d.manualUnpaidMonthKeys);
 }
 function validAporteShape(a){
   return a && typeof a === 'object' && !Array.isArray(a)
@@ -5188,13 +5309,18 @@ function migrateBackup(parsed){
     delete config.mesInicioRegistro;
 
   const expenses = arrOf(src.expenses).map(e=>{
+    const desc = isStr(e.description) ? e.description : '';
+    const cat = isStr(e.category) ? e.category : 'Varios';
     const o = {
       id: isStr(e.id) ? e.id : gen(),
       date: e.date,
+      // Tanda M: "Nombre" obligatorio. Si el respaldo no lo trae, cae a la descripción
+      // completa y, si tampoco hay, a la categoría — nunca vacío.
+      nombre: (isStr(e.nombre) && e.nombre.trim()) ? e.nombre : (desc.trim() || cat || 'Gasto'),
       amount: e.amount,
-      category: isStr(e.category) ? e.category : 'Varios',
+      category: cat,
       method: isStr(e.method) ? e.method : 'Efectivo',
-      description: isStr(e.description) ? e.description : '',
+      description: desc,
       tipo: (e.tipo === 'Fijo' || e.tipo === 'Casual') ? e.tipo : 'Casual',
       debtId: isStr(e.debtId) ? e.debtId : null
     };
@@ -5203,12 +5329,15 @@ function migrateBackup(parsed){
   });
 
   const incomes = arrOf(src.incomes).map(i=>{
+    const desc = isStr(i.description) ? i.description : '';
+    const src2 = isStr(i.source) ? i.source : 'Otros';
     const o = {
       id: isStr(i.id) ? i.id : gen(),
       date: i.date,
-      source: isStr(i.source) ? i.source : 'Otros',
+      nombre: (isStr(i.nombre) && i.nombre.trim()) ? i.nombre : (desc.trim() || src2 || 'Ingreso'),
+      source: src2,
       amount: i.amount,
-      description: isStr(i.description) ? i.description : '',
+      description: desc,
       tipo: (i.tipo === 'Fijo' || i.tipo === 'Casual') ? i.tipo : 'Casual'   // `tipo` no existía en la alfa
     };
     if(i.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = i.fixedEndMonthKey;
@@ -5222,7 +5351,8 @@ function migrateBackup(parsed){
     category: isStr(d.category) ? d.category : 'Varios',
     totalAmount: d.totalAmount,
     numCuotas: d.numCuotas,
-    manualPaidMonthKeys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys.slice() : []
+    manualPaidMonthKeys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys.slice() : [],
+    manualUnpaidMonthKeys: Array.isArray(d.manualUnpaidMonthKeys) ? d.manualUnpaidMonthKeys.slice() : []
   }));
 
   const goals = arrOf(src.goals).map(g=>{
@@ -5418,7 +5548,7 @@ function buildExportWorkbook(fromDate, toDate){
     cursor.setMonth(cursor.getMonth()+1);
   }
   const expenseRows = allExpenseRows.sort((a,b)=>a.date.localeCompare(b.date))
-    .map(e=>({ Fecha:e.date, Monto:e.amount, Categoría:e.category, Método:e.method, Descripción:e.description, Tipo:e.tipo, "¿Es cuota?": e.debtId? "Sí":"No" }));
+    .map(e=>({ Fecha:e.date, Nombre:e.nombre||'', Monto:e.amount, Categoría:e.category, Método:e.method, Descripción:e.description, Tipo:e.tipo, "¿Es cuota?": e.debtId? "Sí":"No" }));
 
   // Ingresos: misma expansión mes por mes que los gastos (incluye ocurrencias de los ingresos Fijos).
   const allIncomeRows = [];
@@ -5434,7 +5564,7 @@ function buildExportWorkbook(fromDate, toDate){
     icursor.setMonth(icursor.getMonth()+1);
   }
   const incomeRows = allIncomeRows.sort((a,b)=>a.date.localeCompare(b.date))
-    .map(i=>({ Fecha:i.date, Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
+    .map(i=>({ Fecha:i.date, Nombre:i.nombre||'', Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
   const debtRows = state.debts.map(d=>({
     Descripción:d.description, "Fecha compra":d.purchaseDate, Categoría:d.category,
     "Monto total":d.totalAmount, "N° cuotas":d.numCuotas, "Monto por cuota": Math.round(d.totalAmount/d.numCuotas),
