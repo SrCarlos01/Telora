@@ -163,6 +163,10 @@ button{font-family:inherit;}
 .balance-carry .bc-k{font-size:12.5px; color:#E7C3CB;}
 .balance-carry .bc-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
 .balance-carry .bc-v.neg{color:#F3D3CE;}
+/* Aviso discreto en meses ANTERIORES al "Mes de inicio de registro" (Tanda L): esos
+   meses siguen navegables pero ya no arrastran saldo hacia el Disponible actual. */
+.balance-carry-note{font-size:11px; color:#E7C3CB; line-height:1.4; margin:-4px 0 14px;}
+:root.hc .balance-carry-note{color:#fff;}
 .balance-row{display:flex; gap:10px;}
 .balance-item{flex:1; min-width:0;}
 .balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
@@ -368,6 +372,43 @@ button{font-family:inherit;}
 .hist-filter-btn:active{transform:scale(0.94);}
 .hist-filter-btn.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
 .hist-filter-btn .icon{width:17px; height:17px;}
+/* Filtro Cuotas / Gastos normales (Tanda L): a la izquierda del embudo. Mismo alto que
+   el embudo y misma estética "on" (burdeos) cuando hay un filtro distinto de "Todos". */
+.hist-kind-select{
+  flex:0 0 auto; height:40px; width:auto; min-width:96px; max-width:44%;
+  border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border);
+  color:var(--gold); font-family:inherit; font-size:13px; padding:0 28px 0 10px; cursor:pointer;
+  text-overflow:ellipsis;
+  appearance:none; -webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 10px center;
+  transition:background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.hist-kind-select:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-kind-select.on{
+  background-color:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23FBEFE9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* Historial: fila compacta de totales del mes navegado (Tanda L). */
+.hist-month-totals{display:flex; gap:8px; margin:0 0 16px;}
+.hist-month-totals .hmt-item{
+  flex:1; min-width:0; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 8px; text-align:center;
+}
+.hist-month-totals .hmt-k{
+  display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--gold-dim); margin-bottom:3px;
+}
+.hist-month-totals .hmt-v{
+  display:block; font-size:14px; font-weight:600; color:var(--cream);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.hist-month-totals .hmt-v.hmt-in{color:var(--mv-ingreso);}
+.hist-month-totals .hmt-v.hmt-out{color:var(--mv-gasto);}
+.hist-month-totals .hmt-v.neg{color:var(--danger);}
+:root.hc .hist-kind-select, :root.hc .hist-month-totals .hmt-item{border-width:2px;}
+:root.hc .hist-month-totals .hmt-k{color:var(--cream);}
 .hist-cat-carousel{
   display:flex; flex-wrap:nowrap; gap:8px; margin-top:10px; padding-bottom:2px;
   overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none;
@@ -1028,6 +1069,7 @@ button:active{ transform:scale(0.97); }
         <span class="bc-k">Saldo mes anterior</span>
         <span class="bc-v" id="rSaldoAnterior">$0</span>
       </p>
+      <p class="balance-carry-note" id="rInicioRegistroNote" style="display:none;">Datos anteriores al mes de inicio — no afectan tu Disponible actual.</p>
       <div class="balance-row">
         <div class="balance-item"><p class="k">Ingresos</p><p class="v" id="rIngresos">$0</p></div>
         <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p></div>
@@ -1044,6 +1086,11 @@ button:active{ transform:scale(0.97); }
 
   <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
+    <div class="hist-month-totals" id="hMonthTotals">
+      <div class="hmt-item"><span class="hmt-k">Ingresos</span><span class="hmt-v hmt-in" id="hmtIngresos">$0</span></div>
+      <div class="hmt-item"><span class="hmt-k">Gastos</span><span class="hmt-v hmt-out" id="hmtGastos">$0</span></div>
+      <div class="hmt-item"><span class="hmt-k">Disponible</span><span class="hmt-v" id="hmtDisponible">$0</span></div>
+    </div>
     <div class="segmented" role="tablist" aria-label="Filtrar historial">
       <button class="active" data-htab="gastos" role="tab" aria-selected="true">Gastos</button>
       <button data-htab="ingresos" role="tab" aria-selected="false">Ingresos</button>
@@ -1060,6 +1107,11 @@ button:active{ transform:scale(0.97); }
           <input type="text" id="hSearchInput" placeholder="Buscar por descripción..." inputmode="search" autocomplete="off" aria-label="Buscar por descripción">
         </div>
         <span class="hist-search-count" id="hSearchCount" style="display:none;"></span>
+        <select class="hist-kind-select" id="hKindSelect" aria-label="Filtrar entre cuotas y gastos normales">
+          <option value="all">Todos</option>
+          <option value="cuotas">Cuotas</option>
+          <option value="normales">Normales</option>
+        </select>
         <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Ordenar" aria-expanded="false">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         </button>
@@ -1351,6 +1403,19 @@ button:active{ transform:scale(0.97); }
       <div class="cfg-group-body">
         <div class="config-list" id="cfgFuentes"></div>
         <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
+      </div>
+    </details>
+
+    <details class="cfg-group">
+      <summary>Mes de inicio de registro <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <p class="sheet-note" style="margin:0 0 12px;">
+          Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.
+        </p>
+        <div class="field" style="margin-bottom:0;">
+          <label for="cfgInicioRegistro">Mes de inicio</label>
+          <select id="cfgInicioRegistro"></select>
+        </div>
       </div>
     </details>
 
@@ -2031,6 +2096,20 @@ let MONEY_CACHE = { flujo:new Map(), saldo:new Map(), base:new Map(), metas:new 
 function resetMoneyCache(){
   MONEY_CACHE = { flujo:new Map(), saldo:new Map(), base:new Map(), metas:new Map(), first:undefined };
 }
+// "Mes de inicio de registro" (Tanda L) — monthKey del mes elegido en Configuración, o
+// null si no está definido. Cuando está definido, la acumulación de la cuenta corriente
+// se resetea a $0 exactamente en ese mes (ver saldoAcumuladoHasta): los meses anteriores
+// siguen navegables y con sus números locales intactos, pero dejan de empujar saldo hacia
+// adelante. Sin definir -> comportamiento de siempre, sin ningún cambio.
+function mesInicioRegistroMk(){
+  const v = state.config && state.config.mesInicioRegistro;
+  if(typeof v !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})$/.exec(v);
+  if(!m) return null;
+  const y = +m[1], mo = +m[2] - 1;
+  if(mo < 0 || mo > 11) return null;
+  return y * 12 + mo;
+}
 function primerMesConDatos(){
   if(MONEY_CACHE.first !== undefined) return MONEY_CACHE.first;
   let mk = null;
@@ -2105,7 +2184,13 @@ function saldoAcumuladoHasta(refDate){
   let total = 0;
   if(first !== null){
     const endMk = mk - 1;
-    const startMk = Math.max(first, endMk - 600);   // tope defensivo
+    let startMk = Math.max(first, endMk - 600);   // tope defensivo
+    // "Mes de inicio de registro" (Tanda L): desde ese mes en adelante la acumulación
+    // arranca de $0 en él (endMk < startMk -> el bucle no corre). Los meses ANTERIORES
+    // al de referencia (mk < inicioMk) NO entran a esta rama, así conservan su acumulado
+    // local de siempre. Sin mes de referencia -> inicioMk === null -> nada cambia.
+    const inicioMk = mesInicioRegistroMk();
+    if(inicioMk !== null && mk >= inicioMk) startMk = Math.max(startMk, inicioMk);
     for(let k = startMk; k <= endMk; k++){
       total += flujoNetoDelMes(new Date(Math.floor(k / 12), k % 12, 1));
     }
@@ -3604,6 +3689,22 @@ function cuotasPendientesDelMes(refDate){
 function mesTieneCuotasActivas(refDate){
   return state.debts.some(d=> cuotaInfoForMonth(d, refDate) !== null);
 }
+// Totales de un mes tal como los muestra el Resumen: Ingresos, Gastos (normales),
+// Cuotas, Metas, arrastre de la cuenta corriente y las DOS versiones del Disponible
+// (principal = solo cuotas ya pagadas; "con cuotas pendientes" = todas las cuotas).
+// Fuente única: lo consumen renderResumen() y la fila de totales del Historial, para no
+// duplicar la fórmula.
+function resumenTotalesDelMes(refDate){
+  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
+  const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
+  let cuotas = 0;
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  const aportesMetas = totalAportesMetasDelMes(refDate);
+  const saldoAnterior = saldoAcumuladoHasta(refDate);
+  const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
+  const dispLibre = dispConPendientes + cuotasPendientesDelMes(refDate);
+  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, dispConPendientes, dispLibre };
+}
 
 /* ==================== CUOTAS: filas VIRTUALES en el Historial ==================== */
 // Salvedad del Día 4: una compra a cuotas solo tiene UNA fila real, en su mes de origen
@@ -3686,31 +3787,26 @@ function openCuotaProyeccion(debtId){
 /* ==================== RENDER: RESUMEN ==================== */
 function renderResumen(){
   const monthExpenses = getExpensesForMonth(currentDate);
-  const monthIncomes = getIncomesForMonth(currentDate);
   const normalExpenses = monthExpenses.filter(e=>!e.debtId);
 
-  const totalIngresos = monthIncomes.reduce((s,i)=>s+i.amount,0);
-  const totalGastos = normalExpenses.reduce((s,e)=>s+e.amount,0);
+  // Totales del mes — fórmula única compartida con la fila de totales del Historial.
+  //  · dispConPendientes = cálculo de SIEMPRE (resta TODAS las cuotas del mes); cifra secundaria.
+  //  · dispLibre = cifra principal (de las cuotas solo resta las ya pagadas).
+  const T = resumenTotalesDelMes(currentDate);
+  const totalIngresos = T.ingresos;
+  const totalGastos = T.gastos;
+  const totalCuotas = T.cuotas;
+  const totalAportesMetas = T.aportesMetas;
+  const saldoAnterior = T.saldoAnterior;
+  const dispConPendientes = T.dispConPendientes;
+  const dispLibre = T.dispLibre;
 
-  let totalCuotas = 0;
+  // Cuotas por categoría (para el desglose "Gasto por categoría" de más abajo).
   const cuotasPorCategoria = {};
   state.debts.forEach(d=>{
     const info = cuotaInfoForMonth(d, currentDate);
-    if(info){ totalCuotas += info.monto; cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto; }
+    if(info) cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto;
   });
-
-  // Metas del mes (manuales reales + automáticos virtuales que caben — Día 11) y
-  // arrastre de la cuenta corriente.
-  const totalAportesMetas = totalAportesMetasDelMes(currentDate);
-  const saldoAnterior = saldoAcumuladoHasta(currentDate);
-  // "Disponible con cuotas pendientes" — cálculo de SIEMPRE, intacto: resta TODAS las
-  // cuotas del mes (pagadas o no). Pasa a ser la cifra secundaria.
-  const dispConPendientes = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalAportesMetas;
-  // "Disponible" (cifra principal, plata libre hoy) — de las cuotas del mes solo resta
-  // las ya pagadas (por fecha real de hoy o marcadas a mano). Equivale al de siempre
-  // más las cuotas que aún están pendientes.
-  const cuotasPendientes = cuotasPendientesDelMes(currentDate);
-  const dispLibre = dispConPendientes + cuotasPendientes;
 
   // Conteo animado (0 -> valor) de Ingresos / Gastos / Disponible: solo al cambiar de
   // mes o al abrir el Resumen, no en cada re-render (p. ej. tras guardar un gasto).
@@ -3749,6 +3845,15 @@ function renderResumen(){
     carryRow.style.display = '';
   } else {
     carryRow.style.display = 'none';
+  }
+
+  // Aviso discreto en meses ANTERIORES al "Mes de inicio de registro": esos meses no
+  // arrastran saldo hacia el Disponible actual. Desde el mes de inicio en adelante NO
+  // se muestra; tampoco si no hay mes de inicio definido.
+  const inicioNote = document.getElementById('rInicioRegistroNote');
+  if(inicioNote){
+    const inicioMk = mesInicioRegistroMk();
+    inicioNote.style.display = (inicioMk !== null && monthKey(currentDate) < inicioMk) ? '' : 'none';
   }
 
   const catTotals = {};
@@ -4074,20 +4179,32 @@ let hSortMode = 'fecha-desc';
 let hSearchText = '';               // texto normalizado (minúsculas, sin espacios en extremos)
 let hFilterCats = new Set();        // categorías seleccionadas (selección múltiple); vacío = "Todas"
 let hFilterPanelOpen = false;       // panel del embudo (ordenar) desplegado
+let hKindFilter = 'all';            // 'all' | 'cuotas' | 'normales' — filtro Cuotas / Gastos normales (Tanda L)
 
-// ¿Hay búsqueda o filtro de categoría activo? (define si se muestra el contador).
-// El orden NO cuenta como filtro.
+// ¿Hay búsqueda, filtro de categoría o filtro de tipo activo? (define si se muestra el
+// contador). El orden NO cuenta como filtro.
 function histFiltrosActivos(){
-  return !!hSearchText || hFilterCats.size > 0;
+  return !!hSearchText || hFilterCats.size > 0 || hKindFilter !== 'all';
 }
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
+}
+// Filtro Cuotas / Gastos normales. "Cuota" = fila virtual de cuota o fila de origen de
+// una compra a crédito (tiene debtId). "Normal" = cualquier otro gasto (fijo o casual
+// sin debtId). Se combina en AND con la búsqueda de texto, las categorías y el orden.
+function histRowEsCuota(row){
+  return !!(row && (row.isVirtualCuota || row.debtId));
+}
+function histPasaKind(row){
+  if(hKindFilter === 'all') return true;
+  return hKindFilter === 'cuotas' ? histRowEsCuota(row) : !histRowEsCuota(row);
 }
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
 // Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
 function histPasaGasto(e){
   if(!histMatchTexto(e.description)) return false;
   if(hFilterCats.size > 0 && !hFilterCats.has(e.category)) return false;
+  if(!histPasaKind(e)) return false;
   return true;
 }
 // Filtro para un ingreso: busca en descripción + fuente. La categoría no aplica a
@@ -4181,6 +4298,19 @@ function renderHistSearchControls(){
     car.dataset.key = '';
   }
 
+  // --- Filtro Cuotas / Gastos normales ---
+  // Solo tiene sentido donde hay gastos: pestañas "Gastos" y "Todo". En "Ingresos" se
+  // oculta (y hKindFilter ya vuelve a 'all' al cambiar de pestaña).
+  const kindSel = document.getElementById('hKindSelect');
+  if(kindSel){
+    const kindAplica = hTab !== 'ingresos';
+    kindSel.style.display = kindAplica ? '' : 'none';
+    if(kindAplica){
+      if(kindSel.value !== hKindFilter) kindSel.value = hKindFilter;
+      kindSel.classList.toggle('on', hKindFilter !== 'all');
+    }
+  }
+
   // --- Botón embudo (ordenar) + panel ---
   // El ordenamiento siempre está disponible, así que el botón se muestra siempre.
   const fbtn = document.getElementById('hFilterBtn');
@@ -4213,6 +4343,13 @@ function renderHistSearchControls(){
       renderHistorial();
     });
   }
+  const kindSel = document.getElementById('hKindSelect');
+  if(kindSel){
+    kindSel.addEventListener('change', ()=>{
+      hKindFilter = kindSel.value;
+      renderHistorial();
+    });
+  }
   document.querySelectorAll('#hSortOptsList input[name="hSortOpt"]').forEach(r=>{
     r.addEventListener('change', ()=>{
       if(r.checked){ hSortMode = r.value; renderHistorial(); }
@@ -4239,13 +4376,29 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
       x.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     // Al cambiar de pestaña, las categorías disponibles cambian: se reinicia el filtro
-    // por categoría y se cierra el panel (la búsqueda por texto y el orden se conservan).
-    hFilterCats.clear(); hFilterPanelOpen = false;
+    // por categoría, el filtro Cuotas/Gastos normales y se cierra el panel (la búsqueda
+    // por texto y el orden se conservan).
+    hFilterCats.clear(); hFilterPanelOpen = false; hKindFilter = 'all';
     renderHistorial();
   });
 });
 // ¿El botón "Detalle" está activado? (por defecto sí; se persiste en state.config)
 function historialDetalleOn(){ return !state.config || state.config.historialDetalle !== false; }
+// Fila compacta de totales del mes navegado en el Historial (Tanda L). Ingresos y Gastos
+// con sus tokens de color; Disponible = la cifra principal del Resumen. Mismos cálculos
+// (resumenTotalesDelMes), sin fórmula paralela.
+function renderHistMonthTotals(){
+  const T = resumenTotalesDelMes(currentDate);
+  const put = (id, val, neg)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.textContent = money(val);
+    el.classList.toggle('neg', !!neg && val < 0);
+  };
+  put('hmtIngresos', T.ingresos, false);
+  put('hmtGastos', T.gastos, false);
+  put('hmtDisponible', T.dispLibre, true);
+}
 function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
@@ -4253,6 +4406,7 @@ function renderHistorial(){
   const tgBtn = document.getElementById('tgHistorial');
   syncHistDetalleBtn();
   renderHistSearchControls();
+  renderHistMonthTotals();
 
   const detalleOn = historialDetalleOn();
   const expCls = detalleOn ? ' expanded' : '';
@@ -4384,6 +4538,7 @@ function renderHistorialTodo(box){
   })).filter(g=>{
     if(!histMatchTexto(g.name)) return false;
     if(hFilterCats.size > 0 && !hFilterCats.has(g.category)) return false;
+    if(!histPasaKind(g)) return false;
     return true;
   });
   const ingresos = getIncomesForMonth(currentDate).map(i=>({
@@ -4392,6 +4547,7 @@ function renderHistorialTodo(box){
   })).filter(i=>{
     if(!histMatchTexto((i.description || '') + ' ' + (i.source || ''))) return false;
     if(hFilterCats.size > 0) return false;
+    if(hKindFilter !== 'all') return false;   // Cuotas / Gastos normales: los ingresos no son ninguno
     return true;
   });
   // Filas virtuales de cuota (meses posteriores al de la compra): participan igual que
@@ -4403,6 +4559,7 @@ function renderHistorialTodo(box){
   })).filter(c=>{
     if(!histMatchTexto(c.name)) return false;
     if(hFilterCats.size > 0 && !hFilterCats.has(c.category)) return false;
+    if(!histPasaKind(c)) return false;
     return true;
   });
 
@@ -4655,11 +4812,56 @@ function renderConfig(){
   renderConfigList('categorias','cfgCategorias');
   renderConfigList('metodos','cfgMetodos');
   renderConfigList('fuentes','cfgFuentes');
+  renderInicioRegistroRow();
   renderPaletteRow();
   renderFontScaleRow();
   renderAltoContrasteRow();
   renderReadOnlyRow();
 }
+/* ==================== MES DE INICIO DE REGISTRO (Tanda L) ==================== */
+// Guarda "YYYY-MM" en state.config.mesInicioRegistro (o lo borra si es "Sin definir").
+// Es una configuración normal, como la paleta: cambiarla recalcula todo en el próximo
+// render (renderAll), sin recargar y sin confirmación especial.
+function mesInicioRegistroStr(){
+  const v = state.config && state.config.mesInicioRegistro;
+  return (typeof v === 'string' && /^\d{4}-\d{2}$/.test(v)) ? v : '';
+}
+function renderInicioRegistroRow(){
+  const sel = document.getElementById('cfgInicioRegistro');
+  if(!sel) return;
+  const hoyMk = monthKey(mesActualReal());
+  const first = primerMesConDatos();
+  const startMk = Math.min(first != null ? first : hoyMk, hoyMk - 36);
+  const cur = mesInicioRegistroStr();
+  let opts = '<option value="">Sin definir (acumular desde el primer dato)</option>';
+  for(let k = hoyMk; k >= startMk; k--){
+    const y = Math.floor(k / 12), mo = ((k % 12) + 12) % 12;
+    opts += `<option value="${y}-${String(mo + 1).padStart(2, '0')}">${MESES[mo]} ${y}</option>`;
+  }
+  sel.innerHTML = opts;
+  sel.value = cur;
+  // Si el valor guardado quedó fuera del rango generado, lo re-inserta para no perderlo.
+  if(cur && sel.value !== cur){
+    const [y, mo] = cur.split('-').map(Number);
+    const o = document.createElement('option');
+    o.value = cur;
+    o.textContent = `${MESES[mo - 1]} ${y}`;
+    sel.appendChild(o);
+    sel.value = cur;
+  }
+}
+(function initInicioRegistro(){
+  const sel = document.getElementById('cfgInicioRegistro');
+  if(!sel) return;
+  sel.addEventListener('change', ()=>{
+    const v = sel.value;
+    if(v) state.config.mesInicioRegistro = v;
+    else delete state.config.mesInicioRegistro;
+    saveState();
+    renderInicioRegistroRow();
+    renderAll();   // recalcula la cuenta corriente y el Disponible de todos los meses
+  });
+})();
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
   const isCat = key === 'categorias';
@@ -4938,7 +5140,7 @@ function validConfigShape(c){
   if(c === null || typeof c !== 'object' || Array.isArray(c)) return false;
   const optStrArr = a => a === undefined || (Array.isArray(a) && a.every(isStr));
   return optStrArr(c.categorias) && optStrArr(c.metodos) && optStrArr(c.fuentes)
-    && optPlainObj(c.categoriaIconos);
+    && optPlainObj(c.categoriaIconos) && optStr(c.mesInicioRegistro);
 }
 // Devuelve null si el respaldo es aceptable (aunque le falten campos/secciones), o un
 // mensaje de error si está genuinamente corrupto.
@@ -4980,6 +5182,10 @@ function migrateBackup(parsed){
   if(!isBool(config.altoContraste)) config.altoContraste = false;
   if(!isBool(config.readOnly)) config.readOnly = false;
   if(!isBool(config.historialDetalle)) config.historialDetalle = false;
+  // "Mes de inicio de registro" (Tanda L): conserva un "YYYY-MM" válido; cualquier otra
+  // cosa (ausente, formato viejo, tipo incorrecto) -> sin definir.
+  if(!(isStr(config.mesInicioRegistro) && /^\d{4}-\d{2}$/.test(config.mesInicioRegistro)))
+    delete config.mesInicioRegistro;
 
   const expenses = arrOf(src.expenses).map(e=>{
     const o = {
