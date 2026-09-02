@@ -65,8 +65,15 @@ html,body{
 }
 /* Escala toda la tipografía/UI de forma proporcional (contenedores incluidos, así
    los textos largos nunca desbordan sus tarjetas). Aplica a #app y a los sheets,
-   que cuelgan de <body> por separado. */
-#app, .sheet-overlay{ zoom: var(--font-scale, 1); }
+   que cuelgan de <body> por separado.
+   Tanda N: el zoom de los sheets se pone en .sheet (el panel interior), NO en
+   .sheet-overlay. El overlay es position:fixed y en iOS Safari el `zoom` sobre un
+   elemento fixed —sobre todo si contiene un hijo con overflow, como .sheet— se
+   ignora o rompe el layout (bug conocido de WebKit; en Chrome/Blink sí funciona).
+   .sheet está en flujo normal (position:static), igual que #app, y sí responde al
+   zoom en todos los motores. La compensación de max-height va más abajo, en .sheet. */
+#app{ zoom: var(--font-scale, 1); }
+.sheet{ zoom: var(--font-scale, 1); }
 h1,h2,h3,.serif{font-family:ui-serif,Georgia,"Iowan Old Style","Times New Roman",serif;}
 button{font-family:inherit;}
 ::-webkit-scrollbar{display:none;}
@@ -564,7 +571,11 @@ button{font-family:inherit;}
      window.innerHeight, que sí refleja el alto visible en todos los casos. El 88vh
      queda de fallback antes de que corra el JS / navegadores sin custom properties. */
   max-height:88vh;
-  max-height:calc(var(--app-vh, 88vh) - env(safe-area-inset-top) - 20px);
+  /* Tanda N: al mover el `zoom` del tamaño de letra a .sheet (ver comentario en
+     `#app / .sheet`), el zoom también escala este max-height. Se divide por
+     --font-scale para que el alto RENDERIZADO siga siendo el alto visible real
+     (a font-scale=1 la división es /1: idéntico al comportamiento anterior). */
+  max-height:calc((var(--app-vh, 88vh) - env(safe-area-inset-top) - 20px) / var(--font-scale, 1));
   overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
   touch-action:pan-y;
 }
