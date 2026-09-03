@@ -8,6 +8,10 @@
 *.json text
 *.md   text
 
+# Librería de terceros autohospedada (SheetJS): minificada y vendida tal cual.
+# Sin normalización de EOL ni diff de texto, para que quede byte a byte como el original.
+xlsx.full.min.js binary
+
 # Documentos de Office: binarios, sin conversión de EOL ni diff de texto.
 *.docx binary
 *.xlsx binary

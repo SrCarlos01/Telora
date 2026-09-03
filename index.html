@@ -18,7 +18,12 @@
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%235C1F2E'/%3E%3Ctext x='90' y='118' font-family='Georgia,serif' font-size='104' font-weight='700' fill='%23C9A66B' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- XLSX autohospedada (Tanda Q · pto 5). Antes se cargaba desde cdnjs: rompía el
+     uso offline, metía un punto único de falla de terceros y hacía una petición a un
+     servidor externo en cada apertura. Ahora es un archivo local. Versión 0.20.3:
+     corrige CVE-2023-30533 (prototype pollution, afecta <0.19.3) y CVE-2024-22363
+     (ReDoS en el parser de formatos, afecta <0.20.2), ambas presentes en la 0.18.5. -->
+<script src="./xlsx.full.min.js"></script>
 
 <style>
 :root{
@@ -121,6 +126,48 @@ button{font-family:inherit;}
 }
 .readonly-banner .icon{width:14px; height:14px; flex-shrink:0;}
 :root.hc .readonly-banner{border-width:2px; color:var(--cream);}
+
+/* ---------- AVISOS DE PROTECCIÓN DE DATOS (Tanda Q · ptos 3, 4 y 6) ----------
+   Barras discretas y descartables bajo el encabezado: recordatorio de respaldo,
+   invitación a instalar la app y aviso de versión nueva del Service Worker. */
+.notice-bar{
+  display:flex; align-items:center; gap:10px; justify-content:space-between;
+  margin:0 20px 8px; padding:10px 12px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+}
+.notice-bar[hidden]{display:none;}
+.notice-bar-txt{display:flex; flex-direction:column; gap:1px; min-width:0;}
+.notice-bar-txt strong{font-size:12.5px; color:var(--cream); font-weight:600;}
+.notice-bar-txt span{font-size:11.5px; color:var(--cream-dim); line-height:1.4;}
+.notice-bar-actions{display:flex; align-items:center; gap:6px; flex-shrink:0;}
+.notice-bar .nb-primary,.notice-bar .nb-ghost{
+  font-family:inherit; font-size:12px; padding:6px 10px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border); background:transparent; color:var(--cream-dim); white-space:nowrap;
+}
+.notice-bar .nb-primary{background:var(--gold); border-color:var(--gold); color:#1c1310; font-weight:600;}
+:root.hc .notice-bar{border-width:2px;}
+:root.hc .notice-bar-txt span{color:var(--cream);}
+
+/* Aviso BLOQUEANTE de fallo de guardado (Tanda Q · pto 1). No usa .sheet-overlay a
+   propósito: así no hereda el cierre al tocar el fondo. Solo se cierra con su botón. */
+.blocker-overlay{
+  position:fixed; inset:0; z-index:120; display:none;
+  align-items:center; justify-content:center; padding:24px;
+  background:rgba(10,6,5,0.82); backdrop-filter:blur(3px);
+}
+.blocker-overlay.open{display:flex;}
+.blocker-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  max-width:400px; width:100%; padding:24px 22px calc(20px + env(safe-area-inset-bottom));
+  text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+.blocker-icon{color:var(--danger); line-height:0;}
+.blocker-icon .icon{width:34px; height:34px;}
+.blocker-card h2{font-size:19px; font-weight:600; margin:10px 0 10px; color:var(--cream);}
+.blocker-body{font-size:13.5px; line-height:1.55; color:var(--cream-dim); margin:0 0 18px;}
+:root.hc .blocker-body{color:var(--cream);}
+:root.hc .blocker-overlay{background:rgba(0,0,0,0.9);}
+
 /* nota dentro de un formulario bloqueado (gasto/ingreso en modo solo lectura) */
 .readonly-note{
   display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--gold);
@@ -1072,6 +1119,41 @@ button:active{ transform:scale(0.97); }
     <span>Modo solo lectura activo</span>
   </div>
 
+  <!-- Tanda Q · pto 4: recordatorio de respaldo semanal (posponible, no bloqueante) -->
+  <div class="notice-bar" id="backupReminder" hidden>
+    <div class="notice-bar-txt">
+      <strong>Respalda tus datos</strong>
+      <span>Pasó más de una semana desde el último respaldo.</span>
+    </div>
+    <div class="notice-bar-actions">
+      <button type="button" class="nb-primary" id="brDownload">Descargar</button>
+      <button type="button" class="nb-ghost" id="brSnooze">Ahora no</button>
+    </div>
+  </div>
+
+  <!-- Tanda Q · pto 3: invitación a instalar (solo si la app corre en el navegador) -->
+  <div class="notice-bar" id="installBanner" hidden>
+    <div class="notice-bar-txt">
+      <strong>Instala MisFinanzas</strong>
+      <span id="installBannerHint"></span>
+    </div>
+    <div class="notice-bar-actions">
+      <button type="button" class="nb-ghost" id="ibDismiss">Entendido</button>
+    </div>
+  </div>
+
+  <!-- Tanda Q · pto 6: hay una versión nueva precacheada lista para activar -->
+  <div class="notice-bar" id="updateBanner" hidden>
+    <div class="notice-bar-txt">
+      <strong>Versión nueva disponible</strong>
+      <span>Actualiza para tener los últimos cambios.</span>
+    </div>
+    <div class="notice-bar-actions">
+      <button type="button" class="nb-primary" id="ubApply">Actualizar</button>
+      <button type="button" class="nb-ghost" id="ubLater">Después</button>
+    </div>
+  </div>
+
   <div class="month-select">
     <button id="prevMonth" aria-label="Mes anterior"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
     <span class="month-label" id="monthLabel">Agosto 2026</span>
@@ -1488,6 +1570,7 @@ button:active{ transform:scale(0.97); }
         <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
         <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
         <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
       </div>
     </details>
 
@@ -1553,6 +1636,19 @@ button:active{ transform:scale(0.97); }
     <button class="btn-primary" id="btnBackupShare" style="display:none;">Compartir</button>
     <button class="btn-ghost" id="btnBackupDownload" style="margin-top:8px;">Descargar</button>
     <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<!-- BLOQUEANTE: el último cambio no se pudo guardar en el almacenamiento (Tanda Q · pto 1) -->
+<div class="blocker-overlay" id="dlgSaveError">
+  <div class="blocker-card" role="alertdialog" aria-modal="true" aria-labelledby="saveErrTitle" aria-describedby="saveErrBody">
+    <div class="blocker-icon">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <h2 id="saveErrTitle">No se pudo guardar tu último cambio</h2>
+    <p id="saveErrBody" class="blocker-body"></p>
+    <button class="btn-primary" id="btnSaveErrBackup">Descargar respaldo ahora</button>
+    <button class="btn-ghost" id="btnSaveErrDismiss">Entendido, cerrar</button>
   </div>
 </div>
 
@@ -1713,7 +1809,11 @@ function catIcon(cat, extraClass){
 }
 
 function loadState(){
-  let s = localStorage.getItem('misfinanzas_data');
+  // Lectura defensiva (Tanda Q): si el navegador bloquea el acceso a localStorage
+  // (algunos modos privados / permisos restringidos lanzan al solo tocarlo), la app
+  // arranca igual con el estado por defecto en vez de romperse en el primer render.
+  let s = null;
+  try{ s = localStorage.getItem('misfinanzas_data'); }catch(_){ s = null; }
   if(s){
     const parsed = JSON.parse(s);
     if(parsed.config && !parsed.config.categoriaIconos) parsed.config.categoriaIconos = {};   // íconos por categoría
@@ -1770,9 +1870,63 @@ function loadState(){
   }
   return { config: {...DEFAULTS, categoriaIconos: {}}, expenses: [], incomes: [], debts: [], goals: [] };
 }
-function saveState(){ localStorage.setItem('misfinanzas_data', JSON.stringify(state)); }
+/* ==================== GUARDADO BLINDADO (Tanda Q · pto 1) ====================
+   saveState() puede fallar: cuota excedida (QuotaExceededError), modo privado o
+   almacenamiento bloqueado. Antes era una sola línea sin try/catch: la excepción
+   se propagaba DESPUÉS de haber mutado `state` en memoria, el flujo se cortaba y
+   la app se veía correcta hasta recargar. Ahora:
+     - la escritura va dentro de try/catch;
+     - se conserva el último JSON bueno para revertir `state` en memoria si falla;
+     - se muestra un aviso BLOQUEANTE (no un toast) con descarga inmediata del
+       respaldo — que incluye el cambio que no se pudo guardar;
+     - el texto distingue "cuota llena" de "almacenamiento bloqueado" porque la
+       acción que debe tomar el usuario es distinta. */
+let __lastGoodStateJSON = null;
+
+function classifyStorageError(e){
+  const name = (e && e.name) || '';
+  const code = e && e.code;
+  // QuotaExceededError (code 22) / NS_ERROR_DOM_QUOTA_REACHED (code 1014, Firefox).
+  if(name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
+     || code === 22 || code === 1014){
+    return 'cuota';
+  }
+  return 'bloqueado';   // SecurityError, modo privado, permisos, etc.
+}
+
+function saveState(){
+  let json;
+  try{ json = JSON.stringify(state); }
+  catch(_){ return false; }   // ciclo en el estado: no debería ocurrir
+  try{
+    localStorage.setItem('misfinanzas_data', json);
+    __lastGoodStateJSON = json;
+    return true;
+  }catch(e){
+    // Revertir la mutación en memoria: la app no debe mostrar datos que no se guardaron.
+    if(__lastGoodStateJSON != null){
+      try{ state = JSON.parse(__lastGoodStateJSON); renderAll(); }catch(_){}
+    }
+    // `json` (pre-reversión) es el estado que SÍ queríamos guardar: lo ofrecemos como respaldo.
+    try{ showSaveErrorDialog(classifyStorageError(e), json); }catch(_){}
+    return false;
+  }
+}
+// Guardado silencioso: mismo intento de escritura pero sin aviso bloqueante ni
+// reversión. Para procesos internos (marcar fecha de respaldo, snooze) donde un
+// fallo no debe abrir el diálogo — el diálogo ya salió, o saldrá, por otra vía.
+function saveStateQuiet(){
+  try{
+    const json = JSON.stringify(state);
+    localStorage.setItem('misfinanzas_data', json);
+    __lastGoodStateJSON = json;
+    return true;
+  }catch(_){ return false; }
+}
 
 let state = loadState();
+// Semilla para poder revertir el primer cambio si su guardado falla.
+try{ __lastGoodStateJSON = JSON.stringify(state); }catch(_){ __lastGoodStateJSON = null; }
 let currentDate = new Date();
 currentDate.setDate(1);
 // Mes real de hoy (día 1). La pestaña Metas NO usa el selector de mes: todos sus
@@ -5070,6 +5224,28 @@ function renderConfig(){
   renderFontScaleRow();
   renderAltoContrasteRow();
   renderReadOnlyRow();
+  renderStorageInfoRow();
+}
+/* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
+   Línea informativa dentro de Configuración → Respaldo de datos. Se alimenta de lo
+   que registró storageShield() (persistencia y uso/cuota) y de la fecha del último
+   respaldo. Si no hay ningún dato disponible, la línea queda oculta. */
+function renderStorageInfoRow(){
+  const el = document.getElementById('cfgStorageInfo');
+  if(!el) return;
+  const parts = [];
+  const p = state.config && state.config.persistConcedido;
+  if(p === true)       parts.push('Almacenamiento persistente: concedido');
+  else if(p === false) parts.push('Almacenamiento persistente: no concedido');
+  const s = state.__storage;
+  if(s && s.quota){
+    const mb = n => (n / 1048576).toFixed(1) + ' MB';
+    parts.push('Uso: ' + mb(s.usage) + ' de ' + mb(s.quota) + ' (' + Math.round(s.ratio * 100) + '%)');
+  }
+  const last = state.config && state.config.ultimoRespaldo;
+  if(last) parts.push('Último respaldo: ' + new Date(last).toLocaleDateString('es-CL'));
+  el.textContent = parts.join(' · ');
+  el.style.display = parts.length ? '' : 'none';
 }
 /* ==================== MES DE INICIO DE REGISTRO (Tanda L) ==================== */
 // Guarda "YYYY-MM" en state.config.mesInicioRegistro (o lo borra si es "Sin definir").
@@ -5301,6 +5477,69 @@ function backupSummaryLine(){
   ].join(' · ');
 }
 
+// Descarga efectiva de un respaldo ya construido (blob/filename). Centralizada para
+// que TODOS los caminos que generan un respaldo — manual, recordatorio semanal y el
+// aviso bloqueante de fallo de guardado — registren la fecha del último respaldo.
+function triggerBackupDownload(backup){
+  if(!backup) backup = buildBackupFile();
+  const url = URL.createObjectURL(backup.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = backup.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  markBackupDone();
+}
+// Registra que se acaba de generar un respaldo (Tanda Q · pto 4). Actualiza la fecha
+// para el recordatorio semanal y limpia cualquier "posponer" pendiente. Usa guardado
+// silencioso: si el almacenamiento está fallando, el aviso bloqueante ya se encargó.
+function markBackupDone(){
+  if(!state.config) state.config = {};
+  state.config.ultimoRespaldo = Date.now();
+  delete state.config.respaldoSnooze;
+  saveStateQuiet();
+  const rem = document.getElementById('backupReminder');
+  if(rem) rem.hidden = true;
+  try{ renderStorageInfoRow(); }catch(_){}
+}
+
+/* ---- Aviso BLOQUEANTE de fallo de guardado (Tanda Q · pto 1) ----
+   `attemptedJSON` es el estado que se intentó guardar (con el cambio que se perdió):
+   el respaldo que se ofrece descargar lo incluye, para que nada se pierda de verdad. */
+function showSaveErrorDialog(kind, attemptedJSON){
+  const ov   = document.getElementById('dlgSaveError');
+  const body = document.getElementById('saveErrBody');
+  if(!ov || !body) return;
+  if(kind === 'cuota'){
+    body.textContent = 'El almacenamiento de este navegador está lleno, así que el último cambio no quedó guardado. Descarga un respaldo ahora para no perderlo; después libera espacio (borra datos de sitios que no uses) o instala la app en tu pantalla de inicio y vuelve a abrirla.';
+  } else {
+    body.textContent = 'Este navegador está bloqueando el almacenamiento (suele pasar en una ventana privada o de incógnito, o con permisos restringidos). El último cambio no quedó guardado y se perderá al cerrar la pestaña. Descarga un respaldo ahora y abre la app en una ventana normal.';
+  }
+  document.getElementById('btnSaveErrBackup').onclick = ()=>{
+    try{
+      let payload = attemptedJSON;
+      try{ payload = JSON.stringify(JSON.parse(attemptedJSON), null, 2); }catch(_){}
+      const blob = new Blob([payload], {type:'application/json'});
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MisFinanzas_respaldo_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      markBackupDone();
+      showToast('Respaldo descargado. Guárdalo en un lugar seguro.', 'success', 5000);
+    }catch(_){
+      showToast('No se pudo generar el respaldo. Prueba Configuración → Respaldo de datos.', 'error', 6000);
+    }
+  };
+  document.getElementById('btnSaveErrDismiss').onclick = ()=>{ ov.classList.remove('open'); };
+  ov.classList.add('open');
+}
+
 /* ---- Tarjeta previa: resumen del contenido + Compartir (nativo, con archivo) / Descargar ---- */
 let pendingBackup = null;
 document.getElementById('btnBackupData').onclick = ()=>{
@@ -5317,6 +5556,7 @@ document.getElementById('btnBackupShare').onclick = async ()=>{
   if(!pendingBackup || !pendingBackup.file) return;
   try{
     await navigator.share({ files:[pendingBackup.file], title:'Respaldo de MisFinanzas' });
+    markBackupDone();   // Tanda Q · pto 4: compartir también cuenta como respaldo hecho
   }catch(err){
     if(err && err.name === 'AbortError') return;   // el usuario cerró el share sheet: no es un error
     console.warn('No se pudo compartir el respaldo:', err);
@@ -5324,15 +5564,7 @@ document.getElementById('btnBackupShare').onclick = async ()=>{
   }
 };
 document.getElementById('btnBackupDownload').onclick = ()=>{
-  if(!pendingBackup) pendingBackup = buildBackupFile();
-  const url = URL.createObjectURL(pendingBackup.blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = pendingBackup.filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  triggerBackupDownload(pendingBackup || buildBackupFile());
   showToast('Respaldo descargado.', 'success');
 };
 
@@ -6342,6 +6574,142 @@ function renderAll(){
   if(currentScreen==='metas') renderMetas();
 }
 renderAll();
+
+/* ====================================================================================
+   TANDA Q · BLINDAJE DE DATOS — inicialización
+   Todo lo de abajo degrada en silencio: si una API no existe, no hace nada y no
+   registra error. Ningún punto cambia un número que la app muestre hoy.
+   ==================================================================================== */
+const DIA_MS = 86400000;
+
+/* ---- pto 2: almacenamiento persistente + vigilancia de cuota ---- */
+(function storageShield(){
+  let ns;
+  try{ ns = navigator.storage; }catch(_){ ns = null; }
+  if(!ns) return;
+
+  // Persistencia: no insistir en cada arranque si ya está concedida.
+  try{
+    if(typeof ns.persisted === 'function'){
+      ns.persisted().then(already=>{
+        if(already){ if(state.config) state.config.persistConcedido = true; try{ renderStorageInfoRow(); }catch(_){} return; }
+        if(typeof ns.persist === 'function'){
+          ns.persist().then(granted=>{
+            if(state.config) state.config.persistConcedido = !!granted;
+            try{ renderStorageInfoRow(); }catch(_){}
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
+    }
+  }catch(_){}
+
+  // Uso vs. cuota: aviso NO bloqueante si se supera el 80%.
+  try{
+    if(typeof ns.estimate === 'function'){
+      ns.estimate().then(est=>{
+        if(!est || !est.quota) return;
+        const ratio = est.usage / est.quota;
+        state.__storage = { usage: est.usage, quota: est.quota, ratio };
+        try{ renderStorageInfoRow(); }catch(_){}
+        if(ratio > 0.8){
+          showToast('El almacenamiento del navegador está casi lleno (' + Math.round(ratio*100) + '%). Descarga un respaldo para no perder datos.', 'error', 7000);
+        }
+      }).catch(()=>{});
+    }
+  }catch(_){}
+})();
+
+/* ---- ptos 3 y 4: banners discretos (recordatorio de respaldo + instalar app) ---- */
+function appIsInstalled(){
+  try{
+    if(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+  }catch(_){}
+  return navigator.standalone === true;   // Safari iOS
+}
+function isIOSDevice(){
+  const ua = navigator.userAgent || '';
+  return /iphone|ipad|ipod/i.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS se hace pasar por Mac
+}
+(function initDataShieldBanners(){
+  // pto 4 · recordatorio de respaldo semanal
+  const rem = document.getElementById('backupReminder');
+  if(rem){
+    const last   = (state.config && state.config.ultimoRespaldo) || 0;
+    const snooze = (state.config && state.config.respaldoSnooze) || 0;
+    const hayDatos = state.expenses.length || state.incomes.length || state.debts.length || (state.goals||[]).length;
+    const venceLast   = (Date.now() - last)   > 7 * DIA_MS;   // más de 7 días sin respaldar
+    const venceSnooze = (Date.now() - snooze) > 2 * DIA_MS;   // "ahora no" pospone 2 días
+    if(hayDatos && venceLast && venceSnooze){
+      rem.hidden = false;
+      document.getElementById('brDownload').onclick = ()=>{
+        triggerBackupDownload(buildBackupFile());
+        showToast('Respaldo descargado.', 'success');
+      };
+      document.getElementById('brSnooze').onclick = ()=>{
+        if(!state.config) state.config = {};
+        state.config.respaldoSnooze = Date.now();
+        saveStateQuiet();
+        rem.hidden = true;
+      };
+    }
+  }
+
+  // pto 3 · invitación a instalar (solo si la app corre en el navegador)
+  const ib = document.getElementById('installBanner');
+  if(ib && !appIsInstalled()){
+    let dismissedAt = 0;
+    try{ dismissedAt = parseInt(localStorage.getItem('misfinanzas_install_dismissed') || '0', 10) || 0; }catch(_){}
+    if((Date.now() - dismissedAt) > 7 * DIA_MS){
+      document.getElementById('installBannerHint').textContent = isIOSDevice()
+        ? 'En Safari: toca Compartir y luego “Agregar a inicio”. Instalada, tus datos no se borran a los 7 días.'
+        : 'En Chrome: menú ⋮ y luego “Agregar a pantalla de inicio”. Instalarla protege tus datos.';
+      ib.hidden = false;
+      document.getElementById('ibDismiss').onclick = ()=>{
+        try{ localStorage.setItem('misfinanzas_install_dismissed', String(Date.now())); }catch(_){}
+        ib.hidden = true;
+      };
+    }
+  }
+})();
+
+/* ---- pto 6: Service Worker (precache + cache-first con revalidación) ---- */
+function showUpdateBanner(worker){
+  const b = document.getElementById('updateBanner');
+  if(!b) return;
+  b.hidden = false;
+  document.getElementById('ubApply').onclick = ()=>{
+    b.hidden = true;
+    try{ worker.postMessage({ type:'SKIP_WAITING' }); }
+    catch(_){ window.location.reload(); }
+  };
+  document.getElementById('ubLater').onclick = ()=>{ b.hidden = true; };
+}
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('./sw.js').then(reg=>{
+      // Una versión nueva ya quedó "esperando" en una carga anterior.
+      if(reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+      reg.addEventListener('updatefound', ()=>{
+        const nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener('statechange', ()=>{
+          // 'installed' + hay controlador => es una ACTUALIZACIÓN, no la primera instalación.
+          if(nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(nw);
+        });
+      });
+    }).catch(()=>{ /* silencioso: la app funciona igual sin SW */ });
+
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(reloading) return;
+      if(!hadController) return;   // no recargar en la toma de control de la primera visita
+      reloading = true;
+      window.location.reload();
+    });
+  });
+}
 </script>
 </body>
 </html>
