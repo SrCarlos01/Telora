@@ -3928,12 +3928,15 @@ function renderResumen(){
   // todavía NO están confirmadas como pagadas (cuotasPendientesDelMes, ya existente). NO es
   // una segunda versión del Disponible; no se toca la cifra principal ni su fórmula. Se
   // oculta cuando llega a $0 (mismo criterio display:none que antes usaba "no aplica").
+  // Se muestra como cifra negativa (signo "−" + color rojo/rosado de .bp-v.neg), igual que
+  // el resto de las cifras negativas de la tarjeta: es plata que falta por confirmar como
+  // pagada. cuotasPend siempre es > 0 aquí, así que el signo "−" no es condicional.
   const pendRow = document.getElementById('rDisponiblePendRow');
   const cuotasPend = cuotasPendientesDelMes(currentDate);
   if(Math.round(cuotasPend) > 0){
     const pEl = document.getElementById('rDisponiblePend');
-    pEl.textContent = money(cuotasPend);
-    pEl.classList.remove('neg');
+    pEl.textContent = '−' + money(cuotasPend);
+    pEl.classList.add('neg');
     pendRow.style.display = '';
   } else {
     pendRow.style.display = 'none';
