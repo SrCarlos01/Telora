@@ -1076,7 +1076,7 @@ button:active{ transform:scale(0.97); }
       <p class="label">Disponible este mes</p>
       <p class="amount" id="rDisponible">$0</p>
       <p class="balance-pend" id="rDisponiblePendRow" style="display:none;">
-        <span class="bp-k">Con cuotas pendientes</span>
+        <span class="bp-k">Cuotas pendientes</span>
         <span class="bp-v" id="rDisponiblePend">$0</span>
       </p>
       <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
@@ -3788,10 +3788,6 @@ function cuotasPendientesDelMes(refDate){
   });
   return total;
 }
-// ¿El mes tiene alguna cuota activa (de cualquier deuda)?
-function mesTieneCuotasActivas(refDate){
-  return state.debts.some(d=> cuotaInfoForMonth(d, refDate) !== null);
-}
 // Totales de un mes tal como los muestra el Resumen: Ingresos, Gastos (normales),
 // Cuotas, Metas, arrastre de la cuenta corriente y las DOS versiones del Disponible
 // (principal = solo cuotas ya pagadas; "con cuotas pendientes" = todas las cuotas).
@@ -3894,15 +3890,14 @@ function renderResumen(){
   const normalExpenses = monthExpenses.filter(e=>!e.debtId);
 
   // Totales del mes — fórmula única compartida con la fila de totales del Historial.
-  //  · dispConPendientes = cálculo de SIEMPRE (resta TODAS las cuotas del mes); cifra secundaria.
-  //  · dispLibre = cifra principal (de las cuotas solo resta las ya pagadas).
+  //  · dispLibre = cifra principal de "Disponible este mes" (de las cuotas solo resta las
+  //    ya pagadas). La línea secundaria ya NO muestra otro Disponible: ver "Cuotas pendientes".
   const T = resumenTotalesDelMes(currentDate);
   const totalIngresos = T.ingresos;
   const totalGastos = T.gastos;
   const totalCuotas = T.cuotas;
   const totalAportesMetas = T.aportesMetas;
   const saldoAnterior = T.saldoAnterior;
-  const dispConPendientes = T.dispConPendientes;
   const dispLibre = T.dispLibre;
 
   // Cuotas por categoría (para el desglose "Gasto por categoría" de más abajo).
@@ -3929,12 +3924,16 @@ function renderResumen(){
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
-  // "Con cuotas pendientes": solo si el mes tiene alguna cuota activa.
+  // "Cuotas pendientes": dato informativo simple — monto total de cuotas de este mes que
+  // todavía NO están confirmadas como pagadas (cuotasPendientesDelMes, ya existente). NO es
+  // una segunda versión del Disponible; no se toca la cifra principal ni su fórmula. Se
+  // oculta cuando llega a $0 (mismo criterio display:none que antes usaba "no aplica").
   const pendRow = document.getElementById('rDisponiblePendRow');
-  if(mesTieneCuotasActivas(currentDate)){
+  const cuotasPend = cuotasPendientesDelMes(currentDate);
+  if(Math.round(cuotasPend) > 0){
     const pEl = document.getElementById('rDisponiblePend');
-    pEl.textContent = money(dispConPendientes);
-    pEl.classList.toggle('neg', dispConPendientes < 0);
+    pEl.textContent = money(cuotasPend);
+    pEl.classList.remove('neg');
     pendRow.style.display = '';
   } else {
     pendRow.style.display = 'none';
