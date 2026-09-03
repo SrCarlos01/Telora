@@ -262,6 +262,9 @@ button{font-family:inherit;}
 .progress-fill{height:100%; background:var(--gold); border-radius:6px; transition:width .3s ease;}
 .debt-foot{display:flex; justify-content:space-between; font-size:13px; color:var(--cream-dim);}
 .debt-foot b{color:var(--cream);}
+/* Fecha de compra en la tarjeta de deuda (Tanda P · punto 4) */
+.debt-purchase-date{font-size:12.5px; color:var(--cream-dim); margin:8px 0 0;}
+.debt-purchase-date b{color:var(--cream); font-weight:600;}
 .debt-action{
   width:100%; margin-top:12px; background:var(--surface-3); border:1px solid var(--border);
   color:var(--gold); border-radius:var(--radius-sm); padding:10px; font-size:13px; font-weight:500;
@@ -1730,9 +1733,9 @@ function loadState(){
         i.nombre = desc || (typeof i.source === 'string' && i.source) || 'Ingreso';
       }
     });
-    // Tanda M · punto 1: override manual "esta cuota NO está pagada / trátala como
-    // activa", para revertir de Pagada a Activa incluso cuando la fecha la da por
-    // pagada. No afecta el cálculo del Disponible (ese conserva el supuesto de Tanda J).
+    // manualUnpaidMonthKeys: array legado (Tanda M). Desde Tanda P quedó INERTE — el
+    // criterio único de pago es la confirmación manual (manualPaidMonthKeys). Se sigue
+    // migrando/normalizando el array solo por compatibilidad de datos.
     if(Array.isArray(parsed.debts)) parsed.debts.forEach(d=>{
       if(!Array.isArray(d.manualUnpaidMonthKeys)) d.manualUnpaidMonthKeys = [];
       if(!Array.isArray(d.manualPaidMonthKeys)) d.manualPaidMonthKeys = [];
@@ -3718,13 +3721,15 @@ function debtStatusForMonth(debt, refDate){
 function isManuallyPaid(debt, refDate){
   return (debt.manualPaidMonthKeys||[]).includes(monthKey(refDate));
 }
-// Tanda M · punto 1: override "esta cuota NO está confirmada, trátala como Activa",
-// para revertir de Pagada a Activa incluso cuando la FECHA ya la daba por pagada.
-// SOLO afecta la clasificación Activas/Pagadas de la pestaña Cuotas — el cálculo del
-// Disponible (Tanda J) conserva intacto su supuesto "vencida = pagada".
+// INERTE desde Tanda P (como limpiarCuotaEstado en Tanda O): con el criterio único
+// "solo lo confirmado a mano cuenta", ya no hace falta forzar "trátala como Activa".
+// Se conserva la función y el array manualUnpaidMonthKeys por compatibilidad de datos,
+// pero ninguna lógica activa los lee para decidir nada.
 function isManuallyUnpaid(debt, refDate){
   return (debt.manualUnpaidMonthKeys||[]).includes(monthKey(refDate));
 }
+// INERTE desde Tanda P: cuotaEstadoMes ya no distingue "todas confirmadas" — cada mes
+// se evalúa por su propia confirmación manual. Se deja definida por si vuelve a usarse.
 // ¿El usuario confirmó a mano TODAS las cuotas de esta deuda (una por cada mes de su ciclo)?
 function cuotasTodasConfirmadas(debt){
   if(!(debt.numCuotas > 0)) return false;
@@ -3747,28 +3752,26 @@ function refMesFueraDeVentana(debt, refDate){
   return refMK > graceMK;
 }
 // Estado de una deuda en el mes `refDate` PARA LA PESTAÑA CUOTAS (no para el Disponible).
-// Se basa solo en confirmación manual: la fecha vencida por sí sola nunca marca "pagada
-// de verdad". Devuelve { tab:'activas'|'pagadas'|null, ... }.
+// Tanda P — criterio único: una cuota está "pagada" SOLO si el usuario la confirmó a
+// mano (isManuallyPaid). Sin eso se queda en Activas indefinidamente, sin importar
+// cuánto haya pasado desde el vencimiento. Se elimina la rama "vencida sin confirmar va
+// a Pagadas" y todo el mecanismo de "revertida" (manualUnpaidMonthKeys).
+// Devuelve { tab:'activas'|'pagadas'|null, ... }.
+//   · porConfirmar:true  → está en Activas pero la fecha de vencimiento ya pasó y el
+//     usuario aún no confirmó el pago (para mostrar el aviso "Por confirmar").
 function cuotaEstadoMes(debt, refDate){
   const auto = debtStatusForMonth(debt, refDate);   // 'futura' | 'activa' | 'pagada'
   if(auto === 'futura') return { tab:null, auto };
-  // Tanda O · punto 1: debtStatusForMonth() marca 'pagada' desde el mes siguiente a la
-  // última cuota y se queda así PARA SIEMPRE (sin tope superior). Por eso una deuda de
-  // 1 cuota seguía listándose en la pestaña Cuotas mes tras mes, y sus botones de
-  // acción guardaban marcas manuales huérfanas en meses sin cuota real
-  // (cuotaInfoForMonth === null → esas marcas no movían el Disponible pero tampoco
-  // hacían nada). Pasado el mes de gracia la deuda deja de listarse, igual que una
-  // deuda 'futura'.
+  // Tanda O · punto 1: pasado el mes de gracia la deuda deja de listarse (igual que
+  // una deuda 'futura'). Se mantiene con el criterio simplificado.
   if(auto === 'pagada' && refMesFueraDeVentana(debt, refDate)){
     return { tab:null, auto, fueraDeVentana:true };
   }
-  const paid = isManuallyPaid(debt, refDate);
-  if(paid) return { tab:'pagadas', auto, confirmada:true };
-  if(auto === 'activa') return { tab:'activas', auto, confirmada:false };
-  // auto === 'pagada' (la fecha dio por terminado el ciclo)
-  if(isManuallyUnpaid(debt, refDate)) return { tab:'activas', auto, confirmada:false, revertida:true };
-  if(cuotasTodasConfirmadas(debt)) return { tab:'pagadas', auto, confirmada:true };
-  return { tab:'pagadas', auto, confirmada:false, sinConfirmar:true };
+  if(isManuallyPaid(debt, refDate)) return { tab:'pagadas', auto, confirmada:true };
+  // No confirmada a mano → Activas. "Por confirmar" si la fecha de vencimiento ya pasó
+  // (fin de ciclo por fecha, o día de vencimiento de este mes ya cumplido en tiempo real).
+  const porConfirmar = auto === 'pagada' || cuotaVencidaPorFecha(debt, refDate);
+  return { tab:'activas', auto, confirmada:false, porConfirmar };
 }
 function _cuotaKeyCtx(debtId, refDate){
   if(isReadOnly()){ blockReadOnly(); return null; }
@@ -3779,24 +3782,23 @@ function _cuotaKeyCtx(debtId, refDate){
   return { d, mk: monthKey(refDate) };
 }
 function _rmKey(arr, mk){ const i = arr.indexOf(mk); if(i >= 0) arr.splice(i, 1); }
-// "Marcar como pagada este mes": confirmación manual genuina.
+// "Marcar como pagada este mes": confirmación manual genuina (único criterio de pago
+// desde Tanda P). No hace falta re-render del Resumen aquí: al cambiar a la pestaña
+// Resumen, switchScreen() dispara renderAll() → renderResumen() con recálculo fresco
+// (verificado en vivo — "Cuotas pendientes" y Disponible quedan al día con un solo cambio
+// de pestaña, sin recargar).
 function marcarCuotaPagada(debtId, refDate){
   const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
-  _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
+  _rmKey(c.d.manualUnpaidMonthKeys, c.mk);   // legado inerte: por si quedara alguna
   if(!c.d.manualPaidMonthKeys.includes(c.mk)) c.d.manualPaidMonthKeys.push(c.mk);
   saveState(); renderCuotas();
 }
-// Revertir de Pagada a Activa — sin restricciones (marca reciente, marca antigua o
-// "vencida sin confirmar"). Si la fecha ya daba la cuota por pagada, deja un override
-// explícito para que reaparezca en Activas.
+// "Marcar como pendiente": con el criterio único de Tanda P basta con quitar la
+// confirmación manual — isManuallyPaid pasa a false y cuotaEstadoMes la manda a Activas
+// sola. Ya no se escribe manualUnpaidMonthKeys.
 function marcarCuotaActiva(debtId, refDate){
   const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
   _rmKey(c.d.manualPaidMonthKeys, c.mk);
-  if(debtStatusForMonth(c.d, refDate) === 'pagada'){
-    if(!c.d.manualUnpaidMonthKeys.includes(c.mk)) c.d.manualUnpaidMonthKeys.push(c.mk);
-  } else {
-    _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
-  }
   saveState(); renderCuotas();
 }
 // Quita cualquier marca manual de este mes y vuelve al estado que dicta la fecha.
@@ -3812,19 +3814,27 @@ function limpiarCuotaEstado(debtId, refDate){
    mes y pasa a ser la cifra secundaria "con cuotas pendientes"). Estas funciones solo
    sirven para la cifra principal nueva, que de las cuotas del mes descuenta únicamente
    las ya pagadas. */
-// ¿La cuota de `debt` en el mes `refDate` cuenta como PAGADA hoy?
-//  - marcada manualmente, o
-//  - HOY (fecha real, recalculada en cada render) ya alcanzó su día de vencimiento
-//    (mismo día del mes que la compra original).
-// Si ese mes no tiene cuota activa de este debt -> false (no hay nada que pagar).
-function cuotaPagadaDelMes(debt, refDate){
-  if(!cuotaInfoForMonth(debt, refDate)) return false;
-  if(isManuallyPaid(debt, refDate)) return true;
+// ¿Ya pasó (en tiempo real) el día de vencimiento de la cuota de `debt` para el mes
+// `refDate`? (mismo día del mes que la compra original, recortado al último día si el
+// mes es más corto). Tanda P: este dato YA NO decide si la cuota cuenta como pagada
+// —eso ahora es solo isManuallyPaid— pero se sigue usando para el aviso "Por confirmar"
+// de la pestaña Cuotas (advertencia, no cálculo).
+function cuotaVencidaPorFecha(debt, refDate){
   const diaVenc = new Date(debt.purchaseDate + "T00:00:00").getDate();
   const ultimoDia = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).getDate();
   const venc = new Date(refDate.getFullYear(), refDate.getMonth(), Math.min(diaVenc, ultimoDia));
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   return hoy >= venc;
+}
+// ¿La cuota de `debt` en el mes `refDate` cuenta como PAGADA?
+// Tanda P — criterio único: SOLO si el usuario la confirmó a mano (isManuallyPaid).
+// Una cuota vencida por fecha sin confirmar ya NO cuenta como pagada en ningún cálculo
+// (ni Disponible principal, ni Cuotas pendientes). Se revierte a propósito el supuesto
+// "vencida = pagada" de la Corrección Tanda I / Tanda J.
+// Si ese mes no tiene cuota activa de este debt -> false (no hay nada que pagar).
+function cuotaPagadaDelMes(debt, refDate){
+  if(!cuotaInfoForMonth(debt, refDate)) return false;
+  return isManuallyPaid(debt, refDate);
 }
 // Suma de las cuotas de `refDate` que todavía NO están pagadas.
 function cuotasPendientesDelMes(refDate){
@@ -4362,21 +4372,22 @@ function histFiltrosActivos(){
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
 }
-// Filtro por tipo de pago (Tanda O · punto 3 — 4 opciones). Se combina en AND con la
-// búsqueda de texto, las categorías y el orden.
-//  · "Cuota"   = fila virtual de cuota o fila de ORIGEN de una compra a cuotas (debtId).
-//  · "Contado" = gasto normal (sin debtId) pagado con método != "Crédito".
-//  · "Crédito" = gasto normal (sin debtId) pagado con método "Crédito" pero registrado
-//                como pago único (no genera cuotas).
+// Filtro por tipo de pago (Tanda O · punto 3 — 4 opciones; "Crédito" redefinido en
+// Tanda P · punto 4). Se combina en AND con la búsqueda de texto, las categorías y el orden.
+//  · "Cuotas"  = SUBCONJUNTO específico: fila virtual de cuota o fila de ORIGEN de una
+//                compra a cuotas (debtId).
+//  · "Crédito" = CONJUNTO AMPLIO: todo lo que se pagó con crédito — pagos únicos con
+//                método "Crédito" + todas las filas de cuota (las cuotas son crédito).
+//                "Cuotas" queda como el subconjunto de este.
+//  · "Contado" = todo lo demás (ni cuota ni método "Crédito").
 function histRowEsCuota(row){
   return !!(row && (row.isVirtualCuota || row.debtId));
 }
 function histPasaKind(row){
   if(hKindFilter === 'all') return true;
   if(hKindFilter === 'cuotas') return histRowEsCuota(row);
-  if(histRowEsCuota(row)) return false;                 // "contado"/"credito" excluyen cuotas y orígenes
-  const esCredito = !!(row && row.method === 'Crédito');
-  return hKindFilter === 'credito' ? esCredito : !esCredito;
+  const esCredito = histRowEsCuota(row) || (row && row.method === 'Crédito');
+  return hKindFilter === 'credito' ? !!esCredito : !esCredito;
 }
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
 // Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
@@ -4939,10 +4950,9 @@ function renderCuotas(){
   const box = document.getElementById('cList');
   const refDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
 
-  // Tanda M · punto 1: la clasificación Activas / Pagadas se basa SOLO en confirmación
-  // manual (cuotaEstadoMes), nunca en la fecha vencida por sí sola. Una cuota vencida
-  // sin confirmar sigue apareciendo en "Pagadas" (como en el diseño anterior), pero con
-  // la etiqueta "Sin confirmar" y siempre se puede revertir a Activa.
+  // Tanda P: la clasificación Activas / Pagadas se basa EXCLUSIVAMENTE en la confirmación
+  // manual de ESE mes (cuotaEstadoMes). Una cuota vencida sin confirmar se queda en
+  // Activas con el aviso "Por confirmar" — ya no salta a Pagadas por fecha.
   const filtered = state.debts.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
 
   if(filtered.length===0){
@@ -4964,36 +4974,19 @@ function renderCuotas(){
     // lógica que btnCuotaProyOrigen del detalle de la fila virtual del Historial).
     const tieneOrigen = state.expenses.some(e=> e.debtId === d.id);
 
+    // Tanda P — un solo criterio. Activas: botón "Marcar como pagada este mes" (+ aviso
+    // "Por confirmar" si la fecha de vencimiento ya pasó). Pagadas: siempre confirmada a
+    // mano → "Pago confirmado." + botón único "Marcar como pendiente".
     let actionHtml = '';
-    let estadoBadge = '';
     if(est.tab === 'activas'){
-      if(est.revertida){
-        // Tanda O · punto 6: se deja solo la acción que importa (confirmar el pago
-        // cuando corresponda). Se quitó el botón "Deshacer (volver a Pagadas)".
-        actionHtml = `
-        <p class="debt-manual-note">${icon('tag')} Revertida a activa — la fecha ya la daba por pagada, pero no la confirmaste.</p>
-        <button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
-      } else {
-        actionHtml = `<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
-      }
+      const aviso = est.porConfirmar
+        ? `<p class="debt-manual-note">${icon('alert-triangle')} Por confirmar — la fecha de vencimiento ya pasó, pero no has confirmado el pago.</p>`
+        : '';
+      actionHtml = `${aviso}<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
     } else { // pagadas
-      if(est.auto === 'activa'){
-        // Confirmada a mano en un mes que todavía tiene cuota vigente.
-        actionHtml = `
-        <p class="debt-manual-note">${icon('tag')} Marcada como pagada manualmente</p>
-        <button class="debt-action undo" data-markactiva="${d.id}">Marcar como pendiente</button>`;
-      } else if(est.confirmada){
-        // La fecha cerró el ciclo Y el usuario confirmó a mano todas las cuotas.
-        actionHtml = `
-        <p class="debt-manual-note">${icon('check')} Pago confirmado.</p>
-        <button class="debt-action undo" data-markactiva="${d.id}">Revertir a activa</button>`;
-      } else {
-        // Vencida sin confirmar: aparece en Pagadas, pero claramente etiquetada.
-        estadoBadge = `<span class="cuota-sinconf">Sin confirmar</span>`;
-        actionHtml = `
-        <p class="debt-manual-note">${icon('alert-triangle')} La fecha de vencimiento ya pasó, pero no confirmaste el pago.</p>
-        <button class="debt-action undo" data-markactiva="${d.id}">Revertir a activa</button>`;
-      }
+      actionHtml = `
+      <p class="debt-manual-note">${icon('check')} Pago confirmado.</p>
+      <button class="debt-action undo" data-markactiva="${d.id}">Marcar como pendiente</button>`;
     }
 
     return `
@@ -5001,7 +4994,7 @@ function renderCuotas(){
       <div class="debt-top">
         <div>
           <p class="debt-title">${d.description}</p>
-          <p class="debt-cat">${d.category}${estadoBadge}</p>
+          <p class="debt-cat">${d.category}</p>
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
       </div>
@@ -5012,6 +5005,7 @@ function renderCuotas(){
           <span>Cuota <b>${cuotaNum} de ${d.numCuotas}</b></span>
           <span>Saldo restante: <b>${money(saldoRestante)}</b></span>
         </div>
+        <p class="debt-purchase-date">Fecha de compra: <b>${fmtDate(d.purchaseDate)}</b></p>
         ${actionHtml}
         ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${d.id}">Ir a la compra original</button>` : ''}
       </div>
