@@ -178,6 +178,11 @@ button{font-family:inherit;}
 .balance-item{flex:1; min-width:0;}
 .balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
 .balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
+/* Desglose "Contado" bajo el mini-total "Gastos" (Tanda O · punto 4): "Gastos" pasa a
+   incluir las cuotas del mes; esta línea chica muestra cuánto de ese total es gasto de
+   contado (sin cuotas). Mismo patrón visual que .balance-carry-note. */
+.balance-item .v-sub{font-size:10.5px; font-weight:400; color:#E7C3CB; margin:2px 0 0; white-space:nowrap; line-height:1.3;}
+:root.hc .balance-item .v-sub{color:#fff;}
 /* Color por tipo de movimiento en los mini-totales del Resumen (Corrección Tanda I).
    Tonos aclarados para que se lean sobre el burdeos de la tarjeta. */
 #rIngresos{color:#A7D18C;}   /* ingreso → verde  */
@@ -1086,7 +1091,7 @@ button:active{ transform:scale(0.97); }
       <p class="balance-carry-note" id="rInicioRegistroNote" style="display:none;">Datos anteriores al mes de inicio — no afectan tu Disponible actual.</p>
       <div class="balance-row">
         <div class="balance-item"><p class="k">Ingresos</p><p class="v" id="rIngresos">$0</p></div>
-        <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p></div>
+        <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p><p class="v-sub" id="rGastosContado" style="display:none;"></p></div>
         <div class="balance-item"><p class="k">Cuotas</p><p class="v" id="rCuotas">$0</p></div>
         <div class="balance-item"><p class="k">Metas</p><p class="v" id="rMetas">$0</p></div>
       </div>
@@ -1122,10 +1127,11 @@ button:active{ transform:scale(0.97); }
           <input type="text" id="hSearchInput" placeholder="Buscar por nombre..." inputmode="search" autocomplete="off" aria-label="Buscar por nombre">
         </div>
         <span class="hist-search-count" id="hSearchCount" style="display:none;"></span>
-        <select class="hist-kind-select" id="hKindSelect" aria-label="Filtrar entre cuotas y gastos normales">
+        <select class="hist-kind-select" id="hKindSelect" aria-label="Filtrar por tipo de pago">
           <option value="all">Todos</option>
           <option value="cuotas">Cuotas</option>
-          <option value="normales">Normales</option>
+          <option value="contado">Contado</option>
+          <option value="credito">Crédito</option>
         </select>
         <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Ordenar" aria-expanded="false">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -1729,6 +1735,25 @@ function loadState(){
     // pagada. No afecta el cálculo del Disponible (ese conserva el supuesto de Tanda J).
     if(Array.isArray(parsed.debts)) parsed.debts.forEach(d=>{
       if(!Array.isArray(d.manualUnpaidMonthKeys)) d.manualUnpaidMonthKeys = [];
+      if(!Array.isArray(d.manualPaidMonthKeys)) d.manualPaidMonthKeys = [];
+      // Tanda O · punto 1: purga de marcas manuales huérfanas. Por poder accionar una
+      // deuda "pagada" indefinidamente (debtStatusForMonth sin tope superior), quedaron
+      // guardadas marcas en meses sin cuota real. No afectaban el Disponible
+      // (cuotaInfoForMonth === null), pero ensuciaban la pestaña Cuotas. Se conservan
+      // solo las marcas dentro de la ventana real: manualPaid en los meses de las
+      // cuotas 1..N y en el mes de gracia (N+1); manualUnpaid solo en el mes de gracia.
+      if(d.purchaseDate && d.numCuotas > 0){
+        const addMK = n => {
+          const x = new Date(d.purchaseDate + "T00:00:00");
+          x.setMonth(x.getMonth() + n);
+          return x.getFullYear() * 12 + x.getMonth();
+        };
+        const paidValidos = [];
+        for(let i = 1; i <= d.numCuotas + 1; i++) paidValidos.push(addMK(i));
+        const graceMK = addMK(d.numCuotas + 1);
+        d.manualPaidMonthKeys   = d.manualPaidMonthKeys.filter(k=> paidValidos.includes(k));
+        d.manualUnpaidMonthKeys = d.manualUnpaidMonthKeys.filter(k=> k === graceMK);
+      }
     });
     if(!Array.isArray(parsed.goals)) parsed.goals = [];   // migración: metas de ahorro (Día 5)
     parsed.goals.forEach(g=>{                              // migración: campos nuevos de meta (Días 4-9)
@@ -3709,12 +3734,34 @@ function cuotasTodasConfirmadas(debt){
   }
   return true;
 }
+// ¿`refDate` cae MÁS ALLÁ del mes de gracia de esta deuda? (Tanda O · punto 1)
+// Mes de gracia = un mes después de la última cuota: el primer mes en que
+// debtStatusForMonth() devuelve 'pagada', y donde todavía corresponde confirmar o
+// revertir la última cuota (el caso "sin confirmar"). Desde el mes SIGUIENTE a ese
+// ya no hay ninguna cuota real que accionar.
+function refMesFueraDeVentana(debt, refDate){
+  if(!(debt.numCuotas > 0) || !debt.purchaseDate) return false;
+  const grace = addMonths(debt.purchaseDate, debt.numCuotas + 1);
+  const graceMK = grace.getFullYear()*12 + grace.getMonth();
+  const refMK = refDate.getFullYear()*12 + refDate.getMonth();
+  return refMK > graceMK;
+}
 // Estado de una deuda en el mes `refDate` PARA LA PESTAÑA CUOTAS (no para el Disponible).
 // Se basa solo en confirmación manual: la fecha vencida por sí sola nunca marca "pagada
 // de verdad". Devuelve { tab:'activas'|'pagadas'|null, ... }.
 function cuotaEstadoMes(debt, refDate){
   const auto = debtStatusForMonth(debt, refDate);   // 'futura' | 'activa' | 'pagada'
   if(auto === 'futura') return { tab:null, auto };
+  // Tanda O · punto 1: debtStatusForMonth() marca 'pagada' desde el mes siguiente a la
+  // última cuota y se queda así PARA SIEMPRE (sin tope superior). Por eso una deuda de
+  // 1 cuota seguía listándose en la pestaña Cuotas mes tras mes, y sus botones de
+  // acción guardaban marcas manuales huérfanas en meses sin cuota real
+  // (cuotaInfoForMonth === null → esas marcas no movían el Disponible pero tampoco
+  // hacían nada). Pasado el mes de gracia la deuda deja de listarse, igual que una
+  // deuda 'futura'.
+  if(auto === 'pagada' && refMesFueraDeVentana(debt, refDate)){
+    return { tab:null, auto, fueraDeVentana:true };
+  }
   const paid = isManuallyPaid(debt, refDate);
   if(paid) return { tab:'pagadas', auto, confirmada:true };
   if(auto === 'activa') return { tab:'activas', auto, confirmada:false };
@@ -3894,7 +3941,12 @@ function renderResumen(){
   //    ya pagadas). La línea secundaria ya NO muestra otro Disponible: ver "Cuotas pendientes".
   const T = resumenTotalesDelMes(currentDate);
   const totalIngresos = T.ingresos;
-  const totalGastos = T.gastos;
+  // Tanda O · punto 4: "Gastos" pasa a ser gastos de contado + cuotas del mes (el
+  // crédito es un gasto real, solo diferido en el tiempo). SOLO cambia la presentación:
+  // dispLibre / dispConPendientes / cuotasPendientes NO se tocan — el Disponible ya
+  // restaba gastos y cuotas por separado, este cambio solo los agrupa visualmente.
+  const gastosContado = T.gastos;                 // gasto normal, sin cuotas
+  const totalGastos = T.gastos + T.cuotas;        // mini-stat "Gastos" (contado + cuotas)
   const totalCuotas = T.cuotas;
   const totalAportesMetas = T.aportesMetas;
   const saldoAnterior = T.saldoAnterior;
@@ -3923,6 +3975,19 @@ function renderResumen(){
   setTotal('rGastos', totalGastos);
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
+
+  // Línea chica "Contado $X" bajo "Gastos": visible solo cuando hay cuotas este mes (si
+  // no, "Gastos" ya es igual a "Contado" y la línea sobraría). La caja "Cuotas" de al
+  // lado sigue mostrando el monto de cuotas puro: entre ambas queda cubierto el desglose.
+  const contadoEl = document.getElementById('rGastosContado');
+  if(contadoEl){
+    if(Math.round(totalCuotas) > 0){
+      contadoEl.textContent = 'Contado ' + money(gastosContado);
+      contadoEl.style.display = '';
+    } else {
+      contadoEl.style.display = 'none';
+    }
+  }
 
   // "Cuotas pendientes": dato informativo simple — monto total de cuotas de este mes que
   // todavía NO están confirmadas como pagadas (cuotasPendientesDelMes, ya existente). NO es
@@ -4173,7 +4238,9 @@ function renderInsights(){
   };
   let cmpBody =
     cmpRow('Ingresos', data.ingresos, prevData.ingresos, true, 'mv-ingreso') +
-    cmpRow('Gastos', data.gastos, prevData.gastos, false, 'mv-gasto') +
+    // Tanda O · punto 4: "Gastos" = contado + cuotas, igual que el mini-stat del
+    // balance-card. data.disponible NO se toca (resta gastos y cuotas por separado).
+    cmpRow('Gastos', data.gastos + data.cuotas, prevData.gastos + prevData.cuotas, false, 'mv-gasto') +
     cmpRow('Disponible', data.disponible, prevData.disponible, true) +
     cmpRow('Aporte total a metas', data.aportesMetas, prevData.aportesMetas, true, 'mv-aporte');
   if(!prevTiene){
@@ -4285,7 +4352,7 @@ let hSortMode = 'fecha-desc';
 let hSearchText = '';               // texto normalizado (minúsculas, sin espacios en extremos)
 let hFilterCats = new Set();        // categorías seleccionadas (selección múltiple); vacío = "Todas"
 let hFilterPanelOpen = false;       // panel del embudo (ordenar) desplegado
-let hKindFilter = 'all';            // 'all' | 'cuotas' | 'normales' — filtro Cuotas / Gastos normales (Tanda L)
+let hKindFilter = 'all';            // 'all' | 'cuotas' | 'contado' | 'credito' — filtro por tipo de pago (Tanda L; 4 opciones en Tanda O · punto 3)
 
 // ¿Hay búsqueda, filtro de categoría o filtro de tipo activo? (define si se muestra el
 // contador). El orden NO cuenta como filtro.
@@ -4295,15 +4362,21 @@ function histFiltrosActivos(){
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
 }
-// Filtro Cuotas / Gastos normales. "Cuota" = fila virtual de cuota o fila de origen de
-// una compra a crédito (tiene debtId). "Normal" = cualquier otro gasto (fijo o casual
-// sin debtId). Se combina en AND con la búsqueda de texto, las categorías y el orden.
+// Filtro por tipo de pago (Tanda O · punto 3 — 4 opciones). Se combina en AND con la
+// búsqueda de texto, las categorías y el orden.
+//  · "Cuota"   = fila virtual de cuota o fila de ORIGEN de una compra a cuotas (debtId).
+//  · "Contado" = gasto normal (sin debtId) pagado con método != "Crédito".
+//  · "Crédito" = gasto normal (sin debtId) pagado con método "Crédito" pero registrado
+//                como pago único (no genera cuotas).
 function histRowEsCuota(row){
   return !!(row && (row.isVirtualCuota || row.debtId));
 }
 function histPasaKind(row){
   if(hKindFilter === 'all') return true;
-  return hKindFilter === 'cuotas' ? histRowEsCuota(row) : !histRowEsCuota(row);
+  if(hKindFilter === 'cuotas') return histRowEsCuota(row);
+  if(histRowEsCuota(row)) return false;                 // "contado"/"credito" excluyen cuotas y orígenes
+  const esCredito = !!(row && row.method === 'Crédito');
+  return hKindFilter === 'credito' ? esCredito : !esCredito;
 }
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
 // Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
@@ -4490,16 +4563,48 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
 });
 // ¿El botón "Detalle" está activado? (por defecto sí; se persiste en state.config)
 function historialDetalleOn(){ return !state.config || state.config.historialDetalle !== false; }
-// Totales del mes navegado en el Historial (Tanda L + M). Mismos cálculos
-// (resumenTotalesDelMes), sin fórmula paralela. Tanda M: qué se muestra depende de la
-// pestaña de filtro activa — Gastos: solo "Total gasto"; Ingresos: solo "Total ingresos";
-// Todo: ambos. El "Disponible" ya no vive aquí (vive en Resumen).
+// Totales del mes navegado en el Historial. Tanda O · punto 2: se calculan sobre la
+// MISMA lista filtrada que se ve en pantalla (búsqueda + categorías + Cuotas/Contado/
+// Crédito), no sobre el mes completo. Criterio de monto idéntico al del Disponible:
+//  · gasto normal (sin debtId)            -> monto completo
+//  · fila virtual de cuota                 -> la cuota de ese mes
+//  · fila de ORIGEN de una compra a cuotas -> $0 (su impacto del mes es la cuota, que
+//    ya se cuenta como fila virtual en los meses siguientes; la compra entera no baja
+//    el Disponible de este mes)
+// En vista de gráfico (barra/torta) la búsqueda no filtra la lista: ahí se muestran los
+// totales del mes completo (resumenTotalesDelMes), sin fórmula paralela.
+function histTotalesVisibles(){
+  let gastos = 0, ingresos = 0;
+  if(hTab !== 'ingresos'){
+    getExpensesForMonth(currentDate).forEach(e=>{
+      if(!histPasaGasto(e)) return;
+      if(e.debtId) return;                 // fila de origen: $0 de impacto este mes
+      gastos += e.amount;
+    });
+    cuotasVirtualesHistorial(currentDate).forEach(c=>{
+      if(histPasaGasto(c)) gastos += c.amount;
+    });
+  }
+  if(hTab !== 'gastos'){
+    getIncomesForMonth(currentDate).forEach(i=>{
+      if(histPasaIngreso(i)) ingresos += i.amount;
+    });
+  }
+  return { gastos, ingresos };
+}
 function renderHistMonthTotals(){
-  const T = resumenTotalesDelMes(currentDate);
+  const enLista = hTab === 'todo' || chartView.historial === 'lista';
+  let gastos, ingresos;
+  if(enLista){
+    ({ gastos, ingresos } = histTotalesVisibles());
+  } else {
+    const T = resumenTotalesDelMes(currentDate);
+    gastos = T.gastos; ingresos = T.ingresos;
+  }
   const gEl = document.getElementById('hmtGastos');
   const iEl = document.getElementById('hmtIngresos');
-  if(gEl) gEl.textContent = money(T.gastos);
-  if(iEl) iEl.textContent = money(T.ingresos);
+  if(gEl) gEl.textContent = money(gastos);
+  if(iEl) iEl.textContent = money(ingresos);
   const gItem = document.getElementById('hmtGastosItem');
   const iItem = document.getElementById('hmtIngresosItem');
   const showG = hTab === 'gastos' || hTab === 'todo';
@@ -4855,15 +4960,19 @@ function renderCuotas(){
     if(info){ cuotaNum = info.cuotaNum; saldoRestante = info.saldoRestante; }
     else { cuotaNum = d.numCuotas; saldoRestante = 0; }
     const pct = Math.round((cuotaNum/d.numCuotas)*100);
+    // Tanda O · punto 7: salto a la compra de origen desde la tarjeta de deuda (misma
+    // lógica que btnCuotaProyOrigen del detalle de la fila virtual del Historial).
+    const tieneOrigen = state.expenses.some(e=> e.debtId === d.id);
 
     let actionHtml = '';
     let estadoBadge = '';
     if(est.tab === 'activas'){
       if(est.revertida){
+        // Tanda O · punto 6: se deja solo la acción que importa (confirmar el pago
+        // cuando corresponda). Se quitó el botón "Deshacer (volver a Pagadas)".
         actionHtml = `
         <p class="debt-manual-note">${icon('tag')} Revertida a activa — la fecha ya la daba por pagada, pero no la confirmaste.</p>
-        <button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>
-        <button class="debt-action undo" data-markclear="${d.id}">Deshacer (volver a Pagadas)</button>`;
+        <button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
       } else {
         actionHtml = `<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
       }
@@ -4876,7 +4985,7 @@ function renderCuotas(){
       } else if(est.confirmada){
         // La fecha cerró el ciclo Y el usuario confirmó a mano todas las cuotas.
         actionHtml = `
-        <p class="debt-manual-note">${icon('check')} Confirmaste el pago de todas las cuotas.</p>
+        <p class="debt-manual-note">${icon('check')} Pago confirmado.</p>
         <button class="debt-action undo" data-markactiva="${d.id}">Revertir a activa</button>`;
       } else {
         // Vencida sin confirmar: aparece en Pagadas, pero claramente etiquetada.
@@ -4904,6 +5013,7 @@ function renderCuotas(){
           <span>Saldo restante: <b>${money(saldoRestante)}</b></span>
         </div>
         ${actionHtml}
+        ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${d.id}">Ir a la compra original</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -4938,6 +5048,21 @@ function renderCuotas(){
   });
   box.querySelectorAll('[data-markclear]').forEach(el=>{
     el.addEventListener('click', (ev)=>{ ev.stopPropagation(); limpiarCuotaEstado(el.dataset.markclear, refDate); });
+  });
+  // Tanda O · punto 7: "Ir a la compra original" — salta al gasto de origen en su mes
+  // y abre su formulario. Misma lógica que btnCuotaProyOrigen (openCuotaProyeccion).
+  box.querySelectorAll('[data-cuotaorigen]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      const debt = state.debts.find(x=> x.id === el.dataset.cuotaorigen);
+      if(!debt) return;
+      const originExp = state.expenses.find(e=> e.debtId === debt.id);
+      if(!originExp) return;
+      const [py, pm] = debt.purchaseDate.split('-').map(Number);
+      currentDate.setFullYear(py, pm-1, 1);
+      renderAll();
+      openGastoForm(originExp.id);
+    });
   });
 }
 
