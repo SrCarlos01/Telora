@@ -221,14 +221,14 @@ button{font-family:inherit;}
    meses siguen navegables pero ya no arrastran saldo hacia el Disponible actual. */
 .balance-carry-note{font-size:11px; color:#E7C3CB; line-height:1.4; margin:-4px 0 14px;}
 :root.hc .balance-carry-note{color:#fff;}
-.balance-row{display:flex; gap:10px;}
+.balance-row{display:flex; gap:10px; align-items:flex-start;}
 .balance-item{flex:1; min-width:0;}
 .balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
 .balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
 /* Desglose "Contado" bajo el mini-total "Gastos" (Tanda O · punto 4): "Gastos" pasa a
    incluir las cuotas del mes; esta línea chica muestra cuánto de ese total es gasto de
    contado (sin cuotas). Mismo patrón visual que .balance-carry-note. */
-.balance-item .v-sub{font-size:10.5px; font-weight:400; color:#E7C3CB; margin:2px 0 0; white-space:nowrap; line-height:1.3;}
+.balance-item .v-sub{font-size:10px; font-weight:400; color:#E7C3CB; margin:2px 0 0; white-space:normal; line-height:1.25; overflow-wrap:anywhere;}
 :root.hc .balance-item .v-sub{color:#fff;}
 /* Color por tipo de movimiento en los mini-totales del Resumen (Corrección Tanda I).
    Tonos aclarados para que se lean sobre el burdeos de la tarjeta. */
@@ -237,6 +237,61 @@ button{font-family:inherit;}
 #rCuotas{color:#E6A56B;}     /* cuota   → naranjo*/
 #rMetas{color:#E8CE7E;}      /* aporte  → amarillo */
 :root.hc #rIngresos, :root.hc #rGastos, :root.hc #rCuotas, :root.hc #rMetas{color:#fff;}
+
+/* ---------- TANDA R · cabecera de la balance-card + dona de gastos ---------- */
+.balance-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.balance-head-main{ flex:1; min-width:0; }
+.balance-head-main .amount{ margin-bottom:0; }
+.balance-dona{ flex-shrink:0; width:98px; text-align:center; }
+.balance-dona-svg{ width:98px; height:98px; }
+.balance-dona-svg svg{ display:block; width:100%; height:100%; overflow:visible; }
+.balance-dona-tip{ font-size:10px; line-height:1.35; color:#E7C3CB; margin:3px 0 0; min-height:27px; }
+:root.hc .balance-dona-tip{ color:#fff; }
+.dona-centro-val{ font-family:ui-serif,Georgia,serif; font-size:12px; fill:#FBEFE9; }
+.dona-seg{ cursor:pointer; transition:opacity .12s ease; }
+.dona-seg.dim{ opacity:.32; }
+/* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes · desglose) */
+.balance-ctx{ margin-top:12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14); }
+.balance-ctx:empty{ display:none; padding:0; border:0; }
+.balance-card .balance-ctx .balance-carry{ margin:0 0 6px; padding:0; border:0; }
+.balance-card .balance-ctx .balance-pend{ margin:0 0 6px; }
+.bc-k-link{ background:none; border:0; padding:0; margin:0; font:inherit; font-size:12.5px;
+  color:#E7C3CB; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.bc-k-link:active{ color:#FBEFE9; }
+:root.hc .bc-k-link{ color:#fff; }
+.bp-tag{ font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
+  border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:1px 4px; margin-left:3px; white-space:nowrap; }
+:root.hc .bp-tag{ color:#fff; border-color:#fff; }
+.balance-desglose{ font-size:11px; line-height:1.55; color:#E7C3CB; margin:6px 0 0; }
+:root.hc .balance-desglose{ color:#fff; }
+.balance-desglose .bd-eq{ color:#FBEFE9; font-weight:600; white-space:nowrap; }
+.balance-desglose.bd-bug{ color:#F3D3CE; font-weight:600; }
+/* Botón + panel "Detalle": bloques apilados con Top 3 por indicador */
+.balance-detalle-btn{
+  display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+  margin-top:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16);
+  color:#FBEFE9; border-radius:10px; padding:9px 12px; font-size:12.5px; font-family:inherit;
+  cursor:pointer; transition:background .15s ease, transform .12s ease;
+}
+.balance-detalle-btn:active{ transform:scale(0.98); }
+.balance-detalle-btn .icon{ width:14px; height:14px; transition:transform .2s ease; }
+.balance-detalle-btn[aria-expanded="true"] .icon{ transform:rotate(180deg); }
+:root.hc .balance-detalle-btn{ border-width:2px; }
+.balance-detalle{ max-height:0; overflow:hidden; opacity:0; transition:max-height .3s ease, opacity .2s ease; }
+.balance-detalle.open{ max-height:1600px; opacity:1; margin-top:12px; }
+.bd-block{ background:rgba(0,0,0,0.16); border:1px solid rgba(255,255,255,0.12);
+  border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.bd-block:last-child{ margin-bottom:0; }
+.bd-block-title{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#E7C3CB; margin:0 0 8px; }
+:root.hc .bd-block-title{ color:#fff; }
+.bd-row{ display:flex; align-items:baseline; gap:8px; font-size:12px; color:#FBEFE9; padding:4px 0; }
+.bd-row + .bd-row{ border-top:1px solid rgba(255,255,255,0.08); }
+.bd-row .bd-name{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bd-row .bd-monto{ font-weight:600; white-space:nowrap; }
+.bd-row .bd-pct{ font-size:10.5px; color:#E7C3CB; white-space:nowrap; min-width:32px; text-align:right; }
+:root.hc .bd-row .bd-pct{ color:#fff; }
+.bd-empty{ font-size:11px; color:#E7C3CB; margin:0; }
+:root.hc .bd-empty{ color:#fff; }
 
 .section-title{
   font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
@@ -249,6 +304,7 @@ button{font-family:inherit;}
 }
 .cat-row:active{transform:scale(0.985); background:var(--surface-3);}
 .cat-row .left{display:flex; align-items:center; gap:10px;}
+.cat-row .cat-sw{width:10px; height:10px; border-radius:3px; flex-shrink:0;}   /* Tanda R: leyenda de la dona */
 .cat-row .name{font-size:15px; color:#EADFD2;}
 .cat-row .val{font-size:15px; font-weight:600; color:var(--cream);}
 .cat-icon{color:var(--gold); width:19px; height:19px;}
@@ -1163,23 +1219,39 @@ button:active{ transform:scale(0.97); }
   <!-- RESUMEN -->
   <div class="screen active" id="screen-resumen">
     <div class="balance-card">
-      <p class="label">Disponible este mes</p>
-      <p class="amount" id="rDisponible">$0</p>
-      <p class="balance-pend" id="rDisponiblePendRow" style="display:none;">
-        <span class="bp-k">Cuotas pendientes</span>
-        <span class="bp-v" id="rDisponiblePend">$0</span>
-      </p>
-      <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
-        <span class="bc-k">Saldo mes anterior</span>
-        <span class="bc-v" id="rSaldoAnterior">$0</span>
-      </p>
-      <p class="balance-carry-note" id="rInicioRegistroNote" style="display:none;">Datos anteriores al mes de inicio — no afectan tu Disponible actual.</p>
+      <div class="balance-head">
+        <div class="balance-head-main">
+          <p class="label">Disponible este mes</p>
+          <p class="amount" id="rDisponible">$0</p>
+        </div>
+        <div class="balance-dona" id="rDonaWrap" style="display:none;">
+          <div class="balance-dona-svg" id="rDona"></div>
+          <p class="balance-dona-tip" id="rDonaTip">Toca un segmento</p>
+        </div>
+      </div>
+      <!-- Bloque de contexto de la cifra grande (Tanda R · ptos 1 y 2):
+           Saldo mes anterior (tocable → Historial mes anterior) · Cuotas pendientes
+           (informativo, NO descontado) · desglose auditable derivado de desgloseDisponible(). -->
+      <div class="balance-ctx" id="rCtx">
+        <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
+          <button type="button" class="bc-k bc-k-link" id="rSaldoAnteriorLink">Saldo mes anterior</button>
+          <span class="bc-v" id="rSaldoAnterior">$0</span>
+        </p>
+        <p class="balance-pend" id="rDisponiblePendRow" style="display:none;">
+          <span class="bp-k">Cuotas pendientes <span class="bp-tag">no descontado</span></span>
+          <span class="bp-v" id="rDisponiblePend">$0</span>
+        </p>
+        <p class="balance-desglose" id="rDesglose" style="display:none;"></p>
+        <p class="balance-carry-note" id="rInicioRegistroNote" style="display:none;">Datos anteriores al mes de inicio — no afectan tu Disponible actual.</p>
+      </div>
       <div class="balance-row">
         <div class="balance-item"><p class="k">Ingresos</p><p class="v" id="rIngresos">$0</p></div>
         <div class="balance-item"><p class="k">Gastos</p><p class="v" id="rGastos">$0</p><p class="v-sub" id="rGastosContado" style="display:none;"></p></div>
-        <div class="balance-item"><p class="k">Cuotas</p><p class="v" id="rCuotas">$0</p></div>
+        <div class="balance-item"><p class="k">Cuotas</p><p class="v" id="rCuotas">$0</p><p class="v-sub" id="rCuotasPagadas"></p></div>
         <div class="balance-item"><p class="k">Metas</p><p class="v" id="rMetas">$0</p></div>
       </div>
+      <button type="button" class="balance-detalle-btn" id="tgResumenDetalle" aria-expanded="false"></button>
+      <div class="balance-detalle" id="rDetalle"></div>
     </div>
     <button class="chart-toggle" id="tgResumen"></button>
     <p class="section-title">Gasto por categoría</p>
@@ -3937,30 +4009,31 @@ function _cuotaKeyCtx(debtId, refDate){
 }
 function _rmKey(arr, mk){ const i = arr.indexOf(mk); if(i >= 0) arr.splice(i, 1); }
 // "Marcar como pagada este mes": confirmación manual genuina (único criterio de pago
-// desde Tanda P). No hace falta re-render del Resumen aquí: al cambiar a la pestaña
-// Resumen, switchScreen() dispara renderAll() → renderResumen() con recálculo fresco
-// (verificado en vivo — "Cuotas pendientes" y Disponible quedan al día con un solo cambio
-// de pestaña, sin recargar).
+// desde Tanda P). Tanda R · pto 8: se llama renderAll() (no solo renderCuotas), que
+// invalida MONEY_CACHE y recalcula la cuenta corriente desde cero — así el Resumen
+// (Disponible, "Pagadas", desglose, comparación) queda al día de inmediato, sin
+// depender del round-trip de pestaña. "Gastos", "Cuotas" y la dona son devengado y NO
+// cambian. Al marcar como pendiente todo vuelve exactamente al valor anterior.
 function marcarCuotaPagada(debtId, refDate){
   const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
   _rmKey(c.d.manualUnpaidMonthKeys, c.mk);   // legado inerte: por si quedara alguna
   if(!c.d.manualPaidMonthKeys.includes(c.mk)) c.d.manualPaidMonthKeys.push(c.mk);
-  saveState(); renderCuotas();
+  saveState(); renderAll();
 }
 // "Marcar como pendiente": con el criterio único de Tanda P basta con quitar la
 // confirmación manual — isManuallyPaid pasa a false y cuotaEstadoMes la manda a Activas
-// sola. Ya no se escribe manualUnpaidMonthKeys.
+// sola. Ya no se escribe manualUnpaidMonthKeys. renderAll() por el pto 8 de Tanda R.
 function marcarCuotaActiva(debtId, refDate){
   const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
   _rmKey(c.d.manualPaidMonthKeys, c.mk);
-  saveState(); renderCuotas();
+  saveState(); renderAll();
 }
 // Quita cualquier marca manual de este mes y vuelve al estado que dicta la fecha.
 function limpiarCuotaEstado(debtId, refDate){
   const c = _cuotaKeyCtx(debtId, refDate); if(!c) return;
   _rmKey(c.d.manualPaidMonthKeys, c.mk);
   _rmKey(c.d.manualUnpaidMonthKeys, c.mk);
-  saveState(); renderCuotas();
+  saveState(); renderAll();
 }
 
 /* ==================== DISPONIBLE DUAL: cuotas pagadas vs. pendientes (Corrección Tanda I) ====================
@@ -4014,6 +4087,51 @@ function resumenTotalesDelMes(refDate){
   const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
   const dispLibre = dispConPendientes + cuotasPendientesDelMes(refDate);
   return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, dispConPendientes, dispLibre };
+}
+
+/* ==================== TANDA R · DESGLOSE AUDITABLE DEL DISPONIBLE (pto 1) ====================
+   Deriva los términos REALES de la cifra grande "Disponible este mes" (= T.dispLibre)
+   recorriendo la misma fórmula de resumenTotalesDelMes(): NO se escribe a mano.
+   dispLibre = saldoAnterior + ingresos − gastoContado − cuotasPagadas − aportesMetas
+   (de las cuotas del mes descuenta SOLO las confirmadas como pagadas; las pendientes
+   se reincorporan y por eso NO son término del desglose — son dato informativo aparte).
+   · Omite automáticamente los términos en $0 (hoy Ingresos y Metas).
+   · Si Σ(términos) ≠ dispLibre se marca `cuadra:false` para reportarlo como bug, no maquillarlo. */
+function desgloseDisponible(refDate){
+  const T = resumenTotalesDelMes(refDate);
+  const cuotasPagadas = T.cuotas - cuotasPendientesDelMes(refDate);
+  const raw = [
+    { clave:'saldoAnterior', label:'saldo anterior', signo:+1, monto: T.saldoAnterior },
+    { clave:'ingresos',      label:'ingresos',       signo:+1, monto: T.ingresos },
+    { clave:'gastoContado',  label:'contado',        signo:-1, monto: T.gastos },
+    { clave:'cuotasPagadas', label:'cuotas pagadas', signo:-1, monto: cuotasPagadas },
+    { clave:'metas',         label:'metas',          signo:-1, monto: T.aportesMetas }
+  ];
+  const terminos = raw.filter(t=> Math.round(t.monto) !== 0);
+  const suma = terminos.reduce((s,t)=> s + t.signo * t.monto, 0);
+  return { terminos, suma, disponible: T.dispLibre, cuadra: Math.round(suma) === Math.round(T.dispLibre) };
+}
+
+/* ==================== TANDA R · DONA DE GASTOS POR CATEGORÍA (pto 3) ====================
+   TOP 5 categorías + un segmento "Otros" que agrupa el resto. El total DEBE ser el mismo
+   del indicador "Gastos" = contado + TODAS las cuotas del mes (devengado): por eso no
+   cambia al confirmar una cuota como pagada. Los colores se asignan por ranking global
+   (índice 0-4 del top; las categorías fuera del top comparten el color del segmento
+   "Otros", índice 5) para que la lista "Gasto por categoría" funcione como leyenda. */
+function donaResumenData(refDate){
+  const T = resumenTotalesDelMes(refDate);
+  const totalGastos = T.gastos + T.cuotas;
+  const ct = {};
+  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
+  const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
+  const colorDeCat = {};
+  orden.forEach(([cat], i)=>{ colorDeCat[cat] = SLICE_COLORS[Math.min(i, 5)]; });
+  const segs = orden.slice(0, 5).map(([cat,val])=> ({ label:cat, value:val, color: colorDeCat[cat] }));
+  const restoVal = orden.slice(5).reduce((s,[,v])=> s + v, 0);
+  if(Math.round(restoVal) > 0) segs.push({ label:'Otros', value:restoVal, color: SLICE_COLORS[5], esOtros:true });
+  const suma = segs.reduce((s,x)=> s + x.value, 0);
+  return { segs, total: totalGastos, colorDeCat, suma, cuadra: Math.round(suma) === Math.round(totalGastos) };
 }
 
 /* ==================== CUOTAS: filas VIRTUALES en el Historial ==================== */
@@ -4140,6 +4258,13 @@ function renderResumen(){
   document.getElementById('rCuotas').textContent = money(totalCuotas);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
+  // Tanda R · pto 4: "Pagadas $X" bajo el indicador Cuotas — mismo tratamiento visual
+  // que "Contado $X" bajo Gastos (.v-sub). Siempre visible, incluso $0: es la pieza que
+  // hace seguible a mano el desglose del Disponible (pto 1).
+  const cuotasPagadas = totalCuotas - cuotasPendientesDelMes(currentDate);
+  const pagadasEl = document.getElementById('rCuotasPagadas');
+  if(pagadasEl) pagadasEl.textContent = 'Pagadas ' + money(cuotasPagadas);
+
   // Línea chica "Contado $X" bajo "Gastos": visible solo cuando hay cuotas este mes (si
   // no, "Gastos" ya es igual a "Contado" y la línea sobraría). La caja "Cuotas" de al
   // lado sigue mostrando el monto de cuotas puro: entre ambas queda cubierto el desglose.
@@ -4182,6 +4307,30 @@ function renderResumen(){
     carryRow.style.display = 'none';
   }
 
+  // Tanda R · pto 1: desglose auditable de la cifra grande, derivado de
+  // desgloseDisponible() — recorre los términos REALES de la fórmula, omite los que
+  // están en $0 (hoy Ingresos y Metas) y, si la suma no da exactamente el Disponible,
+  // muestra el descuadre como error en vez de maquillarlo.
+  const dsgEl = document.getElementById('rDesglose');
+  if(dsgEl){
+    const dsg = desgloseDisponible(currentDate);
+    if(!dsg.cuadra){
+      dsgEl.className = 'balance-desglose bd-bug';
+      dsgEl.textContent = `⚠ El desglose no cuadra: suma ${money(dsg.suma)} vs. Disponible ${money(dsg.disponible)}. Reporta este error.`;
+      dsgEl.style.display = '';
+    } else if(dsg.terminos.length === 0){
+      dsgEl.style.display = 'none';
+    } else {
+      dsgEl.className = 'balance-desglose';
+      const parts = dsg.terminos.map((t,i)=>{
+        if(i === 0) return (t.monto < 0 ? '−' : '') + money(Math.abs(t.monto)) + ' ' + t.label;
+        return (t.signo < 0 ? ' − ' : ' + ') + money(Math.abs(t.monto)) + ' ' + t.label;
+      });
+      dsgEl.innerHTML = parts.join('') + ` <span class="bd-eq">= ${money(dsg.disponible)}</span>`;
+      dsgEl.style.display = '';
+    }
+  }
+
   // Aviso discreto en meses ANTERIORES al "Mes de inicio de registro": esos meses no
   // arrastran saldo hacia el Disponible actual. Desde el mes de inicio en adelante NO
   // se muestra; tampoco si no hay mes de inicio definido.
@@ -4189,6 +4338,14 @@ function renderResumen(){
   if(inicioNote){
     const inicioMk = mesInicioRegistroMk();
     inicioNote.style.display = (inicioMk !== null && monthKey(currentDate) < inicioMk) ? '' : 'none';
+  }
+
+  // Tanda R: el bloque de contexto (con su borde inferior) solo se muestra si alguna de
+  // sus líneas está visible — evita un separador colgando en meses sin contexto.
+  const ctxEl = document.getElementById('rCtx');
+  if(ctxEl){
+    const algo = [carryRow, pendRow, dsgEl, inicioNote].some(el=> el && el.style.display !== 'none');
+    ctxEl.style.display = algo ? '' : 'none';
   }
 
   const catTotals = {};
@@ -4200,6 +4357,10 @@ function renderResumen(){
   const box = document.getElementById('rCategorias');
   const chartBox = document.getElementById('rChart');
   syncChartToggle('resumen');
+  // Tanda R · pto 3: colores por categoría — mismo mapa que usa la dona, para que la
+  // lista funcione como su leyenda (las categorías fuera del top 5 comparten el color
+  // del segmento "Otros").
+  const dona = donaResumenData(currentDate);
   if(rows.length===0){
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = `<div class="empty-state">${icon('frown')}<p>Todavía no hay gastos registrados este mes.</p></div>`;
@@ -4212,7 +4373,7 @@ function renderResumen(){
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = rows.map(([cat,val])=>`
       <div class="cat-row" data-cat="${cat}">
-        <div class="left">${catIcon(cat, 'cat-icon')}<span class="name">${cat}</span></div>
+        <div class="left"><span class="cat-sw" style="background:${dona.colorDeCat[cat] || 'var(--cream-dim)'}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${cat}</span></div>
         <span class="val">${money(val)}</span>
       </div>`).join('');
     box.querySelectorAll('[data-cat]').forEach(el=>{
@@ -4220,7 +4381,121 @@ function renderResumen(){
     });
   }
 
+  renderDonaResumen(dona);
+  renderResumenDetalle();
   renderInsights();
+}
+
+/* ==================== TANDA R · RENDER DE LA DONA DE GASTOS (pto 3) ====================
+   Dona SVG dibujada a mano (sin librerías). Sin etiquetas dentro de los segmentos: el
+   monto total va al centro. Al tocar un segmento se muestra categoría · monto · % bajo
+   la dona. Si no hay gastos, no se dibuja: estado vacío breve. */
+function renderDonaResumen(dona){
+  const wrap = document.getElementById('rDonaWrap');
+  const host = document.getElementById('rDona');
+  const tip = document.getElementById('rDonaTip');
+  if(!wrap || !host || !tip) return;
+  const d = dona || donaResumenData(currentDate);
+  if(!d.segs.length || Math.round(d.total) <= 0){
+    wrap.style.display = 'none';
+    host.innerHTML = '';
+    return;
+  }
+  wrap.style.display = '';
+  const size = 98, cx = size/2, cy = size/2, r = size/2 - 2, rin = r * 0.58;
+  let ang = -Math.PI/2;
+  const segs = d.segs.map(s=>{
+    const frac = s.value / d.total;
+    const pct = Math.round(frac * 100);
+    const a0 = ang, a1 = ang + frac * Math.PI * 2; ang = a1;
+    const attrs = `class="dona-seg" data-cat="${s.label}" data-monto="${Math.round(s.value)}" data-pct="${pct}"`;
+    if(frac >= 0.9995){
+      return `<circle cx="${cx}" cy="${cy}" r="${((r+rin)/2).toFixed(2)}" fill="none" stroke="${s.color}" stroke-width="${(r-rin).toFixed(2)}" ${attrs}></circle>`;
+    }
+    const xo0=(cx+r*Math.cos(a0)).toFixed(2), yo0=(cy+r*Math.sin(a0)).toFixed(2);
+    const xo1=(cx+r*Math.cos(a1)).toFixed(2), yo1=(cy+r*Math.sin(a1)).toFixed(2);
+    const xi1=(cx+rin*Math.cos(a1)).toFixed(2), yi1=(cy+rin*Math.sin(a1)).toFixed(2);
+    const xi0=(cx+rin*Math.cos(a0)).toFixed(2), yi0=(cy+rin*Math.sin(a0)).toFixed(2);
+    const large = (a1 - a0) > Math.PI ? 1 : 0;
+    return `<path d="M${xo0},${yo0} A${r},${r} 0 ${large} 1 ${xo1},${yo1} L${xi1},${yi1} A${rin},${rin} 0 ${large} 0 ${xi0},${yi0} Z" fill="${s.color}" ${attrs}></path>`;
+  }).join('');
+  const centro = `<text x="${cx}" y="${cy+3}" text-anchor="middle" class="dona-centro-val">${money(d.total)}</text>`;
+  host.innerHTML = `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gasto por categoría, total ${money(d.total)}">${segs}${centro}</svg>`;
+
+  tip.textContent = d.cuadra ? 'Toca un segmento' : `⚠ La dona suma ${money(d.suma)}, no ${money(d.total)}`;
+  const els = host.querySelectorAll('.dona-seg');
+  els.forEach(el=>{
+    el.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      const yaSel = el.classList.contains('sel');
+      els.forEach(x=>{ x.classList.remove('sel','dim'); });
+      if(yaSel){ tip.textContent = d.cuadra ? 'Toca un segmento' : tip.textContent; return; }
+      els.forEach(x=>{ if(x !== el) x.classList.add('dim'); });
+      el.classList.add('sel');
+      tip.textContent = `${el.dataset.cat} · ${money(+el.dataset.monto)} · ${el.dataset.pct}%`;
+    });
+  });
+}
+
+/* ==================== TANDA R · PANEL "DETALLE": Top 3 por indicador (pto 5) ====================
+   Un botón al pie de la balance-card despliega bloques APILADOS (no columnas): Ingresos,
+   Gastos, Cuotas, Metas. Cada línea: nombre · monto · % SOBRE EL PROPIO INDICADOR (el
+   encabezado lo dice). Colapsado por defecto; el estado se recuerda en state.config
+   (igual que el "Detalle" del Historial). Si un indicador está en $0, el bloque muestra
+   un texto de vacío en vez de omitirse. La animación de despliegue es una transición CSS
+   de max-height, que el bloque global prefers-reduced-motion ya neutraliza. */
+function resumenDetalleAbierto(){ return !!(state.config && state.config.resumenDetalle); }
+function topIndicadorRows(entries, total){
+  return entries.filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]).slice(0, 3)
+    .map(([nombre, monto])=> ({ nombre, monto, pct: total > 0 ? Math.round(monto / total * 100) : 0 }));
+}
+function renderResumenDetalle(){
+  const host = document.getElementById('rDetalle');
+  const btn = document.getElementById('tgResumenDetalle');
+  if(!host || !btn) return;
+  const abierto = resumenDetalleAbierto();
+  btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  btn.innerHTML = `${icon('chevron-down')}<span>Detalle</span>`;
+  host.classList.toggle('open', abierto);
+
+  const refDate = currentDate;
+  const T = resumenTotalesDelMes(refDate);
+  const mk = monthKey(refDate);
+
+  const ingByFuente = {};
+  getIncomesForMonth(refDate).forEach(i=>{ const k = i.source || 'Sin fuente'; ingByFuente[k] = (ingByFuente[k]||0) + i.amount; });
+
+  const gastoByCat = {};
+  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> gastoByCat[e.category] = (gastoByCat[e.category]||0) + e.amount);
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) gastoByCat[d.category] = (gastoByCat[d.category]||0) + info.monto; });
+
+  const cuotaByDeuda = {};
+  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info){ const k = d.description || 'Compra a cuotas'; cuotaByDeuda[k] = (cuotaByDeuda[k]||0) + info.monto; } });
+
+  const metaByGoal = {};
+  const pausadasAuto = calcularEstadoAportesDelMes(refDate);
+  state.goals.forEach(g=>{
+    if(!goalNotCutOff(g, refDate)) return;
+    let m = 0;
+    (g.aportes||[]).forEach(a=>{ if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) m += a.monto; });
+    const va = aporteAutomaticoVirtualParaMes(g, refDate);
+    if(va && !pausadasAuto.has(g.id)) m += va.monto;
+    if(m > 0){ const k = g.name || 'Meta'; metaByGoal[k] = (metaByGoal[k]||0) + m; }
+  });
+
+  const bloques = [
+    { titulo:'Ingresos', ref:'ingresos', total:T.ingresos,            rows: topIndicadorRows(Object.entries(ingByFuente), T.ingresos),            vacio:'Sin ingresos este mes.' },
+    { titulo:'Gastos',   ref:'gastos',   total:T.gastos + T.cuotas,   rows: topIndicadorRows(Object.entries(gastoByCat), T.gastos + T.cuotas),   vacio:'Sin gastos este mes.' },
+    { titulo:'Cuotas',   ref:'cuotas',   total:T.cuotas,              rows: topIndicadorRows(Object.entries(cuotaByDeuda), T.cuotas),            vacio:'Sin cuotas este mes.' },
+    { titulo:'Metas',    ref:'metas',    total:T.aportesMetas,        rows: topIndicadorRows(Object.entries(metaByGoal), T.aportesMetas),        vacio:'Sin aportes a metas este mes.' }
+  ];
+
+  host.innerHTML = bloques.map(b=>{
+    const head = `<p class="bd-block-title">${b.titulo} · Top 3 (% sobre ${b.ref})</p>`;
+    if(!b.rows.length) return `<div class="bd-block">${head}<p class="bd-empty">${b.vacio}</p></div>`;
+    const rws = b.rows.map(r=>`<div class="bd-row"><span class="bd-name">${r.nombre}</span><span class="bd-monto">${money(r.monto)}</span><span class="bd-pct">${r.pct}%</span></div>`).join('');
+    return `<div class="bd-block">${head}${rws}</div>`;
+  }).join('');
 }
 
 /* ==================== RESUMEN: INSIGHTS FINANCIEROS (reglas, sin IA) ==================== */
@@ -4242,11 +4517,15 @@ function insightsMesData(refDate){
   const aportesMetas = totalAportesMetasDelMes(refDate);
   const saldoAnterior = saldoAcumuladoHasta(refDate);
   const disponible = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
+  // Tanda R · pto 6: mismo criterio que la cifra grande del Resumen (resumenTotalesDelMes
+  // → dispLibre): de las cuotas del mes descuenta SOLO las confirmadas como pagadas. Se
+  // reincorporan las pendientes. La comparación mes a mes usa este valor para ambos meses.
+  const disponibleLibre = disponible + cuotasPendientesDelMes(refDate);
   const catTotals = {};
   normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
   Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
   const gastoTotal = Object.values(catTotals).reduce((s,v)=> s + v, 0);
-  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, disponible, catTotals, gastoTotal };
+  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, disponible, disponibleLibre, catTotals, gastoTotal };
 }
 // ¿El mes tiene algún movimiento propio? (define si se puede comparar contra él).
 function mesTieneMovimientos(refDate){
@@ -4405,7 +4684,11 @@ function renderInsights(){
     // Tanda O · punto 4: "Gastos" = contado + cuotas, igual que el mini-stat del
     // balance-card. data.disponible NO se toca (resta gastos y cuotas por separado).
     cmpRow('Gastos', data.gastos + data.cuotas, prevData.gastos + prevData.cuotas, false, 'mv-gasto') +
-    cmpRow('Disponible', data.disponible, prevData.disponible, true) +
+    // Tanda R · pto 6: usa disponibleLibre (mismo criterio que la cifra grande del
+    // Resumen: cuotas solo restadas si están pagadas) para AMBOS meses. Antes usaba
+    // data.disponible, que descontaba las cuotas sin confirmar y daba una cifra
+    // distinta a la de la tarjeta principal en la misma pantalla.
+    cmpRow('Disponible', data.disponibleLibre, prevData.disponibleLibre, true) +
     cmpRow('Aporte total a metas', data.aportesMetas, prevData.aportesMetas, true, 'mv-aporte');
   if(!prevTiene){
     cmpBody += `<p class="insight-nodata">Aún no hay datos del mes anterior para comparar.</p>`;
@@ -6314,6 +6597,30 @@ function syncHistDetalleBtn(){
     state.config.historialDetalle = !historialDetalleOn();
     saveState();
     renderHistorial();
+  });
+})();
+
+/* Tanda R · pto 5: botón "Detalle" de la balance-card del Resumen — mismo patrón que el
+   del Historial (estado persistido en state.config). Solo re-renderiza el panel para no
+   reiniciar el conteo animado de los totales. */
+(function initResumenDetalleBtn(){
+  const btn = document.getElementById('tgResumenDetalle');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    if(!state.config) state.config = {};
+    state.config.resumenDetalle = !resumenDetalleAbierto();
+    saveState();
+    renderResumenDetalle();
+  });
+})();
+
+/* Tanda R · pto 2: "Saldo mes anterior" es tocable y lleva al Historial del mes anterior. */
+(function initSaldoAnteriorLink(){
+  const btn = document.getElementById('rSaldoAnteriorLink');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    currentDate.setMonth(currentDate.getMonth() - 1, 1);
+    switchScreen('historial');
   });
 })();
 
