@@ -205,25 +205,24 @@ button{font-family:inherit;}
    "Saldo mes anterior" y "Cuotas pendientes" con sintaxis pareja: nombre · monto ·
    etiqueta AL FINAL. Misma píldora, mismo tamaño y misma alineación vertical en las
    dos. En 375 px con montos de 7 cifras la etiqueta baja sola a una 2ª línea alineada
-   a la derecha (flex-wrap dentro de .bx-end); el monto nunca se recorta. */
-.bx-line{display:flex; align-items:baseline; gap:8px; margin:0 0 6px;}
+   a la derecha (flex-wrap dentro de .bx-end); el monto nunca se recorta.
+   Tanda R4 · pto 2: margin-bottom reducido (6px → 3px) para que las dos líneas se lean
+   como un par compacto — ver también .balance-ctx (margin-top) más abajo. */
+.bx-line{display:flex; align-items:baseline; gap:8px; margin:0 0 3px;}
 .bx-line .bx-k{font-size:12.5px; color:#E7C3CB; flex-shrink:0;}
 .bx-line .bx-end{margin-left:auto; min-width:0; display:flex; flex-wrap:wrap;
   align-items:baseline; justify-content:flex-end; gap:4px 6px;}
 .bx-line .bx-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
 .bx-line .bx-v.neg{color:#F3D3CE;}
-.bx-k-link{background:none; border:0; padding:0; margin:0; font:inherit; font-size:12.5px;
-  color:#E7C3CB; text-decoration:underline; text-underline-offset:2px; cursor:pointer; flex-shrink:0;}
-.bx-k-link:active{color:#FBEFE9;}
 .bx-tag{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
   border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:1px 4px; white-space:nowrap;}
-:root.hc .bx-line .bx-k, :root.hc .bx-k-link, :root.hc .bx-line .bx-v, :root.hc .bx-tag{color:#fff;}
+:root.hc .bx-line .bx-k, :root.hc .bx-line .bx-v, :root.hc .bx-tag{color:#fff;}
 :root.hc .bx-line .bx-v.neg{color:#FFC9C0;}
 :root.hc .bx-tag{border-color:#fff;}
 /* Tanda R3 — en meses CERRADOS "Cuotas pendientes" es una nota informativa atenuada:
    esas cuotas ya cuentan como gasto del mes. Sin píldora, sin monto, sin rojo — el
    pto 2 pide respetar este formato y no devolverlo a alerta. */
-.bx-line.bx-cerrado{display:block; margin:0 0 6px;}
+.bx-line.bx-cerrado{display:block; margin:0 0 3px;}
 .bx-line.bx-cerrado .bx-k{font-size:11px; font-weight:400; color:#E7C3CB; line-height:1.45;}
 .bx-line.bx-cerrado .bx-end{display:none;}
 :root.hc .bx-line.bx-cerrado .bx-k{color:#fff;}
@@ -231,9 +230,15 @@ button{font-family:inherit;}
    meses siguen navegables pero ya no arrastran saldo hacia el Disponible actual. */
 .balance-carry-note{font-size:11px; color:#E7C3CB; line-height:1.4; margin:-4px 0 14px;}
 :root.hc .balance-carry-note{color:#fff;}
-.balance-row{display:flex; gap:10px; align-items:flex-start;}
+/* Tanda R4 · pto 3: separación del divisor superior (antes pegada) + labels más
+   grandes y en negrita. Los montos (.v) no cambian — siguen siendo lo más prominente
+   de la fila, el label solo deja de leerse como texto secundario apagado.
+   gap 10px→6px y letter-spacing -0.2px: a font-scale 1.3 (accesibilidad, "Muy grande")
+   "Ingresos" en negrita alcanzaba a desbordar su columna por unos px — verificado con
+   los 3 tamaños de letra del sistema; con este ajuste ya no ocurre en ninguno. */
+.balance-row{display:flex; gap:6px; align-items:flex-start; margin-top:14px;}
 .balance-item{flex:1; min-width:0;}
-.balance-item .k{font-size:12px; color:#E7C3CB; margin:0 0 3px;}
+.balance-item .k{font-size:12.5px; font-weight:700; letter-spacing:-0.2px; color:#E7C3CB; margin:0 0 3px;}
 .balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
 /* Desglose "Contado" bajo el mini-total "Gastos" (Tanda O · punto 4): "Gastos" pasa a
    incluir las cuotas del mes; esta línea chica muestra cuánto de ese total es gasto de
@@ -260,10 +265,12 @@ button{font-family:inherit;}
 .dona-centro-val{ font-family:ui-serif,Georgia,serif; font-size:12px; fill:#FBEFE9; }
 .dona-seg{ cursor:pointer; transition:opacity .12s ease; }
 .dona-seg.dim{ opacity:.32; }
-/* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes) */
-.balance-ctx{ margin-top:12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14); }
+/* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes).
+   Tanda R4 · pto 2: margin-top reducido (12px → 4px) para acercar el bloque al enlace
+   "¿De dónde sale?" — juntos se leen como una sola unidad visual compacta. */
+.balance-ctx{ margin-top:4px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14); }
 .balance-ctx:empty{ display:none; padding:0; border:0; }
-.balance-card .balance-ctx .bx-line{ margin:0 0 6px; padding:0; border:0; }
+.balance-card .balance-ctx .bx-line{ margin:0 0 3px; padding:0; border:0; }
 .balance-card .balance-ctx .bx-line:last-child{ margin-bottom:0; }
 /* Tanda R2 · pto 4 — enlace discreto bajo la cifra grande que abre la hoja
    "¿De dónde sale?" (auditoría, no acción principal: texto pequeño + subrayado). */
@@ -1090,12 +1097,30 @@ button:active{ transform:scale(0.97); }
 .insight-semaforo .sem-dot.sem-rojo.on{background:#ec3b3b;}
 :root.hc .insight-semaforo .sem-dot{opacity:0.5; border:1px solid var(--cream-dim);}
 :root.hc .insight-semaforo .sem-dot.on{opacity:1; border-color:var(--cream);}
-/* b) Frase resumen — una sola línea */
+/* b) Frase resumen — normalmente una sola línea. Tanda R4 · pto 4: el guardarraíl de
+   ingresos sin registrar agrega un botón "Registrar ingreso" bajo el texto, así que
+   pasó de <p> a <div> con un <p> interno (el margin del párrafo se resetea abajo). */
 .insight-frase{
   font-size:14px; color:var(--cream); line-height:1.5; margin:0 0 14px;
   padding:11px 13px; background:var(--surface-2); border:1px solid var(--border);
   border-left:3px solid var(--gold); border-radius:var(--radius-sm);
 }
+.insight-frase > p{ margin:0; }
+.insight-frase-cta > p{ margin:0 0 10px; }
+.insight-frase-btn{
+  display:inline-flex; align-items:center; justify-content:center; width:100%;
+  background:var(--gold); color:#1c1310; border:0; border-radius:8px; padding:9px 12px;
+  font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+}
+.insight-frase-btn:active{ transform:scale(0.98); }
+/* Tanda R4 · pto 4.3: píldora "estimado" junto a "Disponible proyectado" cuando la
+   cifra incorpora el ingreso estimado del guardarraíl — no es una proyección firme. */
+.insight-proy-est-tag{
+  font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:var(--cream-dim);
+  border:1px solid var(--border); border-radius:6px; padding:1px 4px; margin-left:5px;
+  vertical-align:middle; font-weight:400;
+}
+:root.hc .insight-proy-est-tag{ color:var(--cream); }
 /* bloques c/d/e */
 .insight-block{
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
@@ -1140,12 +1165,14 @@ button:active{ transform:scale(0.97); }
 .insight-var-row.up{color:var(--danger);}
 .insight-var-row.down{color:var(--success);}
 .insight-var-row > span:last-child{font-weight:600; white-space:nowrap;}
-/* e) proyección de fin de mes */
+/* e) proyección de fin de mes. Tanda R4 · pto 4.3: flex-wrap + white-space:nowrap en el
+   monto — con la píldora "ESTIMADO" el label puede ocupar 2 líneas a 375px, y sin esto
+   el monto podía partirse entre el signo "−" y la cifra en vez de bajar entero. */
 .insight-proy-main{
-  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+  display:flex; align-items:baseline; justify-content:space-between; gap:6px 10px; flex-wrap:wrap;
   font-size:13.5px; color:var(--cream); margin-bottom:6px;
 }
-.insight-proy-main b{font-family:ui-serif,Georgia,serif; font-size:20px; color:var(--success);}
+.insight-proy-main b{font-family:ui-serif,Georgia,serif; font-size:20px; color:var(--success); white-space:nowrap;}
 .insight-proy-main.neg b{color:var(--danger);}
 .insight-proy-detail{font-size:11.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 10px;}
 :root.hc .insight-proy-detail{color:var(--cream);}
@@ -1268,14 +1295,14 @@ button:active{ transform:scale(0.97); }
           <p class="balance-dona-tip" id="rDonaTip">Toca un segmento</p>
         </div>
       </div>
-      <!-- Bloque de contexto de la cifra grande (Tanda R2 · ptos 2 y 3): dos líneas con
-           sintaxis pareja — nombre · monto · etiqueta AL FINAL. "Saldo mes anterior"
-           tocable (→ Historial mes anterior) con etiqueta INCLUIDO; "Cuotas pendientes"
-           informativa con etiqueta NO DESCONTADO. El desglose en línea se movió a la
-           hoja "¿De dónde sale?". -->
+      <!-- Bloque de contexto de la cifra grande (Tanda R2 · ptos 2 y 3, ajustado en R4 · pto 1):
+           dos líneas con sintaxis pareja — nombre · monto · etiqueta AL FINAL. "Saldo mes
+           anterior" ya NO es tocable (Tanda R4 · pto 1: sin enlace a Historial); "Cuotas
+           pendientes" informativa con etiqueta NO DESCONTADO. El desglose en línea se movió a
+           la hoja "¿De dónde sale?". -->
       <div class="balance-ctx" id="rCtx">
         <p class="bx-line" id="rSaldoAnteriorRow" style="display:none;">
-          <button type="button" class="bx-k bx-k-link" id="rSaldoAnteriorLink">Saldo mes anterior</button>
+          <span class="bx-k" id="rSaldoAnteriorLink">Saldo mes anterior</span>
           <span class="bx-end">
             <span class="bx-v" id="rSaldoAnterior">$0</span>
             <span class="bx-tag">Incluido</span>
@@ -4616,6 +4643,38 @@ function mesTieneMovimientos(refDate){
   if(totalAportesMetasDelMes(refDate) > 0) return true;
   return false;
 }
+// Tanda R4 · pto 4: guardarraíl de la proyección. Cuando el mes visto no tiene NINGÚN
+// ingreso registrado, busca hasta 3 meses ANTERIORES con ingresos (respetando el mismo
+// límite "Mes de inicio de registro" que ya usa R3 pto 4, vía mesInicioRegistroMk) y
+// devuelve su mediana como ingreso estimado. null si no hay ningún mes anterior con
+// ingresos (usuario nuevo / sin historial). No lee ni altera resumenTotalesDelMes() ni
+// desgloseDisponible(): solo alimenta proyeccionFinDeMes() más abajo.
+function mesesConIngresosAnteriores(refDate, maxCount){
+  const primerMk = primerMesConDatos();
+  if(primerMk === null) return [];
+  const inicioMk = mesInicioRegistroMk();
+  const lowerBound = inicioMk !== null ? Math.max(inicioMk, primerMk) : primerMk;
+  const mkRef = monthKey(refDate);
+  const out = [];
+  for(let k = mkRef - 1; k >= lowerBound && out.length < maxCount; k--){
+    const d = new Date(Math.floor(k / 12), k % 12, 1);
+    const ing = getIncomesForMonth(d).reduce((s,i)=> s + i.amount, 0);
+    if(Math.round(ing) > 0) out.push({ mk:k, date:d, ingresos:ing });
+  }
+  return out;   // más reciente primero
+}
+function medianaValores(arr){
+  const s = [...arr].sort((a,b)=> a - b);
+  const n = s.length, mid = Math.floor(n / 2);
+  return n % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+// esHabitual=true con 3 meses de historial ("tu ingreso habitual"); con 1-2 meses el
+// dato existe pero no es un patrón todavía ("según [mes]" — ver renderInsights).
+function ingresoEstimadoInfo(refDate){
+  const meses = mesesConIngresosAnteriores(refDate, 3);
+  if(!meses.length) return null;
+  return { meses, estimado: medianaValores(meses.map(m=> m.ingresos)), esHabitual: meses.length === 3 };
+}
 // e) Proyección de fin de mes. Dos partes: (1) fijos/cuotas restantes conocidos con
 // certeza; (2) gasto variable estimado = promedio diario de gasto NO fijo / NO cuota
 // extrapolado a los días que quedan. Total = ya realizado + restante conocido + estimado.
@@ -4654,14 +4713,26 @@ function proyeccionFinDeMes(refDate){
   const promedioDiario = diasTranscurridos > 0 ? variableOcurrido / diasTranscurridos : 0;
   const variableEstimado = promedioDiario * diasRestantes;
   const proyGastos = gastosRealizados + fijosCuotasRestantes + variableEstimado;
+
+  // Tanda R4 · pto 4: sin ingresos registrados este mes, la proyección asume la mediana
+  // de hasta 3 meses anteriores con ingresos en vez de $0 — evita un "sobregasto"
+  // fantasma que solo refleja que el ingreso del mes aún no se registró. ingresoEstimado
+  // queda en null si no hay ningún mes anterior con ingresos (nada que estimar).
+  let ingresosProy = data.ingresos;
+  let ingresoEstimado = null;
+  if(Math.round(data.ingresos) === 0){
+    ingresoEstimado = ingresoEstimadoInfo(refDate);
+    if(ingresoEstimado) ingresosProy = ingresoEstimado.estimado;
+  }
   // Ingresos y aportes a metas ya vienen proyectados al mes completo (fijos + automáticos).
-  const dispProyectado = data.saldoAnterior + data.ingresos - proyGastos - data.aportesMetas;
+  const dispProyectado = data.saldoAnterior + ingresosProy - proyGastos - data.aportesMetas;
 
   return {
     diasTranscurridos, diasRestantes, diasEnMes,
     gastosRealizados, fijosCuotasRestantes, variableEstimado, promedioDiario,
     proyGastos, dispProyectado,
-    ingresos: data.ingresos, aportesMetas: data.aportesMetas, saldoAnterior: data.saldoAnterior
+    ingresos: data.ingresos, ingresosProy, ingresoEstimado,
+    aportesMetas: data.aportesMetas, saldoAnterior: data.saldoAnterior
   };
 }
 // Variación por categoría entre dos meses (curr vs prev). pct = null si no existía antes.
@@ -4733,18 +4804,36 @@ function renderInsights(){
   const semDot = c => `<span class="sem-dot ${c}${c === semEstado ? ' on' : ''}"></span>`;
   const semHtml = `<div class="insight-semaforo" role="img" aria-label="Salud financiera: ${semTxt}">${semDot('sem-verde')}${semDot('sem-ambar')}${semDot('sem-rojo')}</div>`;
 
-  // ---- b) Frase resumen del mes (prioridad: sobregasto > mayor aumento > neutro) ----
+  // ---- b) Frase resumen del mes ----
+  // Tanda R4 · pto 4: guardarraíl ANTES que las otras ramas. Mes sin ningún ingreso
+  // registrado: con historial se avisa con el ingreso estimado (mismo `disp` que ya
+  // incorporó proyeccionFinDeMes()); sin historial (usuario nuevo) se invita a
+  // registrar el primer ingreso en vez de mostrar cualquier proyección de sobregasto.
+  const sinIngresosDelMes = Math.round(data.ingresos) === 0;
   const varCats = variacionCategorias(data.catTotals, prevData.catTotals);
   const topAumento = varCats.filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
-  let frase;
-  if(disp < 0){
+  let frase, fraseCTA = false;
+  const mesActualNombre = MESES[currentDate.getMonth()].toLowerCase();
+  if(sinIngresosDelMes && proy.ingresoEstimado){
+    const info = proy.ingresoEstimado;
+    const fraseIngreso = info.esHabitual
+      ? `Con tu ingreso habitual (~${money(info.estimado)})`
+      : `Según ${MESES[info.meses[0].date.getMonth()].toLowerCase()} (~${money(info.estimado)})`;
+    frase = `Todavía no registras ingresos de ${mesActualNombre}. ${fraseIngreso}, cerrarías el mes en ${signedMoney(disp)} (estimado).`;
+    fraseCTA = true;
+  } else if(sinIngresosDelMes && !proy.ingresoEstimado){
+    frase = `Todavía no registras ingresos de ${mesActualNombre}, y tampoco hay ingresos anteriores para estimar uno. Registra el primero para ver proyecciones.`;
+    fraseCTA = true;
+  } else if(disp < 0){
     frase = `Proyección de sobregasto: cerrarías el mes en ${signedMoney(disp)}.`;
   } else if(prevTiene && topAumento){
     frase = `${topAumento.cat} es la categoría que más subió este mes: +${money(topAumento.delta)} respecto al mes anterior.`;
   } else {
     frase = 'Vas bien encaminado este mes.';
   }
-  const fraseHtml = `<p class="insight-frase">${frase}</p>`;
+  const fraseHtml = `<div class="insight-frase${fraseCTA ? ' insight-frase-cta' : ''}"><p>${frase}</p>${
+    fraseCTA ? `<button type="button" class="insight-frase-btn" id="insightRegistrarIngresoBtn">Registrar ingreso</button>` : ''
+  }</div>`;
 
   // ---- c) Comparación mes a mes ----
   const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
@@ -4813,10 +4902,17 @@ function renderInsights(){
       </div>`;
     }).join('')
   ) : `<p class="insight-ok">Ninguna categoría en alerta este mes.</p>`;
+  // Tanda R4 · pto 4.3: mismo ingreso estimado que la frase (proy.ingresoEstimado),
+  // no un cálculo aparte — así el titular y este bloque siempre muestran la MISMA
+  // cifra de cierre (disp = proy.dispProyectado, ya calculado con el estimado).
+  const ingEst = proy.ingresoEstimado;
+  const ingEstDesc = ingEst
+    ? (ingEst.esHabitual ? 'tu ingreso habitual' : 'según ' + MESES[ingEst.meses[0].date.getMonth()].toLowerCase())
+    : '';
   const proyHtml = `<div class="insight-block">
     <p class="insight-block-title">Proyección de fin de mes</p>
     <div class="insight-proy-main${disp < 0 ? ' neg' : ''}">
-      <span>Disponible proyectado</span><b>${signedMoney(disp)}</b>
+      <span>Disponible proyectado${ingEst ? ' <span class="insight-proy-est-tag">estimado</span>' : ''}</span><b>${signedMoney(disp)}</b>
     </div>
     <p class="insight-proy-detail">
       Gasto proyectado ${money(proy.proyGastos)} = ${money(proy.gastosRealizados)} ya realizado
@@ -4824,12 +4920,16 @@ function renderInsights(){
       + ${money(proy.variableEstimado)} de gasto variable estimado
       ${proy.diasRestantes > 0 ? `· ${proy.diasRestantes === 1 ? 'queda 1 día' : 'quedan ' + proy.diasRestantes + ' días'} del mes` : '· mes cerrado'}.
     </p>
+    ${ingEst ? `<p class="insight-proy-detail">Incluye un ingreso estimado de ${money(ingEst.estimado)} (${ingEstDesc}) — todavía no registras ingresos de ${mesActualNombre}.</p>` : ''}
     ${alertasHtml}
   </div>`;
 
   box.innerHTML =
     `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
     semHtml + fraseHtml + cmpHtml + varHtml + proyHtml;
+
+  const registrarBtn = box.querySelector('#insightRegistrarIngresoBtn');
+  if(registrarBtn) registrarBtn.addEventListener('click', ()=> openIngresoForm(null));
 
   // Semáforo: un único pulso cuando el estado pasa a rojo (entrar, no en cada render).
   if(!prefersReducedMotion() && semEstado === 'sem-rojo' && lastSemEstado && lastSemEstado !== 'sem-rojo'){
@@ -6698,16 +6798,6 @@ function syncHistDetalleBtn(){
     state.config.resumenDetalle = !resumenDetalleAbierto();
     saveState();
     renderResumenDetalle();
-  });
-})();
-
-/* Tanda R · pto 2: "Saldo mes anterior" es tocable y lleva al Historial del mes anterior. */
-(function initSaldoAnteriorLink(){
-  const btn = document.getElementById('rSaldoAnteriorLink');
-  if(!btn) return;
-  btn.addEventListener('click', ()=>{
-    currentDate.setMonth(currentDate.getMonth() - 1, 1);
-    switchScreen('historial');
   });
 })();
 
