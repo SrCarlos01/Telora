@@ -201,28 +201,32 @@ button{font-family:inherit;}
 .balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
 .balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9;}
 .amount.neg{color:#F3D3CE;}
-/* "Disponible con cuotas pendientes" (Corrección Tanda I): referencia secundaria bajo
-   la cifra principal. Visible solo si el mes tiene cuotas activas. */
-.balance-pend{display:flex; align-items:baseline; gap:8px; margin:-8px 0 14px;}
-.balance-pend .bp-k{font-size:12px; color:#E7C3CB;}
-.balance-pend .bp-v{font-size:13px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
-.balance-pend .bp-v.neg{color:#F3D3CE;}
-:root.hc .balance-pend .bp-k, :root.hc .balance-pend .bp-v{color:#fff;}
-:root.hc .balance-pend .bp-v.neg{color:#FFC9C0;}
-/* Tanda R3 — en meses CERRADOS la línea pasa a ser una nota informativa atenuada:
-   las cuotas sin confirmar de ese mes ya cuentan como gasto, no falta descontarlas. */
-.balance-pend.bp-cerrado{display:block; margin:0 0 6px;}
-.balance-pend.bp-cerrado .bp-k{font-size:11px; font-weight:400; color:#E7C3CB; line-height:1.45;}
-.balance-pend.bp-cerrado .bp-v, .balance-pend.bp-cerrado .bp-tag{display:none;}
-:root.hc .balance-pend.bp-cerrado .bp-k{color:#fff;}
-/* Saldo mes anterior (cuenta corriente) — visible solo si != $0 */
-.balance-carry{
-  display:flex; align-items:baseline; justify-content:space-between; gap:10px;
-  margin:0 0 14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14);
-}
-.balance-carry .bc-k{font-size:12.5px; color:#E7C3CB;}
-.balance-carry .bc-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
-.balance-carry .bc-v.neg{color:#F3D3CE;}
+/* ---------- TANDA R2 · líneas de contexto de la cifra grande (ptos 2 y 3) ----------
+   "Saldo mes anterior" y "Cuotas pendientes" con sintaxis pareja: nombre · monto ·
+   etiqueta AL FINAL. Misma píldora, mismo tamaño y misma alineación vertical en las
+   dos. En 375 px con montos de 7 cifras la etiqueta baja sola a una 2ª línea alineada
+   a la derecha (flex-wrap dentro de .bx-end); el monto nunca se recorta. */
+.bx-line{display:flex; align-items:baseline; gap:8px; margin:0 0 6px;}
+.bx-line .bx-k{font-size:12.5px; color:#E7C3CB; flex-shrink:0;}
+.bx-line .bx-end{margin-left:auto; min-width:0; display:flex; flex-wrap:wrap;
+  align-items:baseline; justify-content:flex-end; gap:4px 6px;}
+.bx-line .bx-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
+.bx-line .bx-v.neg{color:#F3D3CE;}
+.bx-k-link{background:none; border:0; padding:0; margin:0; font:inherit; font-size:12.5px;
+  color:#E7C3CB; text-decoration:underline; text-underline-offset:2px; cursor:pointer; flex-shrink:0;}
+.bx-k-link:active{color:#FBEFE9;}
+.bx-tag{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
+  border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:1px 4px; white-space:nowrap;}
+:root.hc .bx-line .bx-k, :root.hc .bx-k-link, :root.hc .bx-line .bx-v, :root.hc .bx-tag{color:#fff;}
+:root.hc .bx-line .bx-v.neg{color:#FFC9C0;}
+:root.hc .bx-tag{border-color:#fff;}
+/* Tanda R3 — en meses CERRADOS "Cuotas pendientes" es una nota informativa atenuada:
+   esas cuotas ya cuentan como gasto del mes. Sin píldora, sin monto, sin rojo — el
+   pto 2 pide respetar este formato y no devolverlo a alerta. */
+.bx-line.bx-cerrado{display:block; margin:0 0 6px;}
+.bx-line.bx-cerrado .bx-k{font-size:11px; font-weight:400; color:#E7C3CB; line-height:1.45;}
+.bx-line.bx-cerrado .bx-end{display:none;}
+:root.hc .bx-line.bx-cerrado .bx-k{color:#fff;}
 /* Aviso discreto en meses ANTERIORES al "Mes de inicio de registro" (Tanda L): esos
    meses siguen navegables pero ya no arrastran saldo hacia el Disponible actual. */
 .balance-carry-note{font-size:11px; color:#E7C3CB; line-height:1.4; margin:-4px 0 14px;}
@@ -256,22 +260,37 @@ button{font-family:inherit;}
 .dona-centro-val{ font-family:ui-serif,Georgia,serif; font-size:12px; fill:#FBEFE9; }
 .dona-seg{ cursor:pointer; transition:opacity .12s ease; }
 .dona-seg.dim{ opacity:.32; }
-/* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes · desglose) */
+/* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes) */
 .balance-ctx{ margin-top:12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.14); }
 .balance-ctx:empty{ display:none; padding:0; border:0; }
-.balance-card .balance-ctx .balance-carry{ margin:0 0 6px; padding:0; border:0; }
-.balance-card .balance-ctx .balance-pend{ margin:0 0 6px; }
-.bc-k-link{ background:none; border:0; padding:0; margin:0; font:inherit; font-size:12.5px;
-  color:#E7C3CB; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
-.bc-k-link:active{ color:#FBEFE9; }
-:root.hc .bc-k-link{ color:#fff; }
-.bp-tag{ font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
-  border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:1px 4px; margin-left:3px; white-space:nowrap; }
-:root.hc .bp-tag{ color:#fff; border-color:#fff; }
-.balance-desglose{ font-size:11px; line-height:1.55; color:#E7C3CB; margin:6px 0 0; }
-:root.hc .balance-desglose{ color:#fff; }
-.balance-desglose .bd-eq{ color:#FBEFE9; font-weight:600; white-space:nowrap; }
-.balance-desglose.bd-bug{ color:#F3D3CE; font-weight:600; }
+.balance-card .balance-ctx .bx-line{ margin:0 0 6px; padding:0; border:0; }
+.balance-card .balance-ctx .bx-line:last-child{ margin-bottom:0; }
+/* Tanda R2 · pto 4 — enlace discreto bajo la cifra grande que abre la hoja
+   "¿De dónde sale?" (auditoría, no acción principal: texto pequeño + subrayado). */
+.balance-origen-link{ display:inline-flex; align-items:center; gap:3px; background:none;
+  border:0; padding:0; margin:9px 0 0; font:inherit; font-size:11.5px; color:#E7C3CB;
+  text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.balance-origen-link:active{ color:#FBEFE9; }
+:root.hc .balance-origen-link{ color:#fff; }
+/* Hoja "¿De dónde sale?" (Tanda R2 · pto 4). Tabla de 3 columnas: nombre | signo | monto.
+   Los signos comparten columna propia y los montos van a la derecha, para poder seguir
+   la suma con el dedo. Línea divisoria antes del total; total destacado. */
+.dd-tabla{ margin-top:2px; }
+.dd-row{ display:grid; grid-template-columns:1fr auto auto; align-items:baseline;
+  column-gap:8px; padding:8px 0; font-size:14px; color:var(--cream); }
+.dd-row + .dd-row{ border-top:1px solid var(--border); }
+.dd-row .dd-k{ min-width:0; color:var(--cream-dim); }
+.dd-row .dd-sg{ width:.9em; text-align:center; color:var(--cream-dim); }
+.dd-row .dd-v{ text-align:right; font-weight:600; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.dd-sep{ border:0; border-top:1px solid var(--cream-dim); opacity:.55; margin:8px 0 0; }
+.dd-row.dd-total{ padding-top:10px; }
+.dd-row.dd-total .dd-k{ color:var(--cream); font-weight:700; text-transform:uppercase;
+  letter-spacing:.04em; font-size:12px; }
+.dd-row.dd-total .dd-v{ font-size:17px; font-weight:700; color:var(--gold); }
+.dd-descuadre{ color:var(--danger); font-weight:600; font-size:12.5px; line-height:1.5; margin:12px 0 0; }
+.dd-ayuda{ color:var(--cream-dim); font-size:12.5px; line-height:1.5; margin:14px 0 0; }
+:root.hc .dd-row .dd-k, :root.hc .dd-row .dd-sg, :root.hc .dd-ayuda{ color:var(--cream); }
+:root.hc .dd-row.dd-total .dd-v{ color:var(--gold); }
 /* Botón + panel "Detalle": bloques apilados con Top 3 por indicador */
 .balance-detalle-btn{
   display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
@@ -1045,9 +1064,9 @@ button:active{ transform:scale(0.97); }
 :root.hc .progress-fill{ background:var(--gold); }
 :root.hc .balance-card{ background:var(--burgundy-dim); border:2px solid var(--border); }
 :root.hc .balance-card .label, :root.hc .balance-card .amount, :root.hc .balance-item .k,
-:root.hc .balance-item .v, :root.hc .balance-carry .bc-k, :root.hc .balance-carry .bc-v{ color:#fff; }
-:root.hc .balance-card .amount.neg, :root.hc .balance-carry .bc-v.neg{ color:#FFC9C0; }
-:root.hc .balance-carry{ border-bottom-color:rgba(255,255,255,0.5); }
+:root.hc .balance-item .v{ color:#fff; }
+:root.hc .balance-card .amount.neg{ color:#FFC9C0; }
+:root.hc .balance-ctx{ border-bottom-color:rgba(255,255,255,0.5); }
 :root.hc .aportar-warn{ background:transparent; border-width:2px; color:var(--gold); }
 :root.hc .goal-card.paused{ background:var(--surface-2); }
 :root.hc .premium-badge{ background:var(--gold); color:#000; }
@@ -1240,27 +1259,35 @@ button:active{ transform:scale(0.97); }
     <div class="balance-card">
       <div class="balance-head">
         <div class="balance-head-main">
-          <p class="label">Disponible este mes</p>
+          <p class="label">Disponible</p>
           <p class="amount" id="rDisponible">$0</p>
+          <button type="button" class="balance-origen-link" id="rDondeLink" aria-haspopup="dialog">¿De dónde sale?</button>
         </div>
         <div class="balance-dona" id="rDonaWrap" style="display:none;">
           <div class="balance-dona-svg" id="rDona"></div>
           <p class="balance-dona-tip" id="rDonaTip">Toca un segmento</p>
         </div>
       </div>
-      <!-- Bloque de contexto de la cifra grande (Tanda R · ptos 1 y 2):
-           Saldo mes anterior (tocable → Historial mes anterior) · Cuotas pendientes
-           (informativo, NO descontado) · desglose auditable derivado de desgloseDisponible(). -->
+      <!-- Bloque de contexto de la cifra grande (Tanda R2 · ptos 2 y 3): dos líneas con
+           sintaxis pareja — nombre · monto · etiqueta AL FINAL. "Saldo mes anterior"
+           tocable (→ Historial mes anterior) con etiqueta INCLUIDO; "Cuotas pendientes"
+           informativa con etiqueta NO DESCONTADO. El desglose en línea se movió a la
+           hoja "¿De dónde sale?". -->
       <div class="balance-ctx" id="rCtx">
-        <p class="balance-carry" id="rSaldoAnteriorRow" style="display:none;">
-          <button type="button" class="bc-k bc-k-link" id="rSaldoAnteriorLink">Saldo mes anterior</button>
-          <span class="bc-v" id="rSaldoAnterior">$0</span>
+        <p class="bx-line" id="rSaldoAnteriorRow" style="display:none;">
+          <button type="button" class="bx-k bx-k-link" id="rSaldoAnteriorLink">Saldo mes anterior</button>
+          <span class="bx-end">
+            <span class="bx-v" id="rSaldoAnterior">$0</span>
+            <span class="bx-tag">Incluido</span>
+          </span>
         </p>
-        <p class="balance-pend" id="rDisponiblePendRow" style="display:none;">
-          <span class="bp-k">Cuotas pendientes <span class="bp-tag">no descontado</span></span>
-          <span class="bp-v" id="rDisponiblePend">$0</span>
+        <p class="bx-line" id="rDisponiblePendRow" style="display:none;">
+          <span class="bx-k" id="rDisponiblePendK">Cuotas pendientes</span>
+          <span class="bx-end">
+            <span class="bx-v" id="rDisponiblePend">$0</span>
+            <span class="bx-tag">No descontado</span>
+          </span>
         </p>
-        <p class="balance-desglose" id="rDesglose" style="display:none;"></p>
         <p class="balance-carry-note" id="rInicioRegistroNote" style="display:none;">Mes anterior a tu inicio de registro.</p>
       </div>
       <div class="balance-row">
@@ -1774,6 +1801,22 @@ button:active{ transform:scale(0.97); }
     <button class="btn-primary" id="btnResumenImgDownload">Descargar</button>
     <button class="btn-ghost" id="btnResumenImgCopy">Copiar al portapapeles</button>
     <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
+<!-- SHEET: "¿De dónde sale?" — auditoría de la cifra grande del Resumen (Tanda R2 · pto 4).
+     Mismo componente de sheet que el resto (handle + cierre por gesto / botón / fondo).
+     Los CINCO términos SIEMPRE, incluidos los $0; orden fijo; total destacado tras
+     una línea divisoria. Descuadre (si lo hubiera) en rojo, sin maquillar. -->
+<div class="sheet-overlay" id="sheetDondeDisponible">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿De dónde sale?</h2>
+    <p class="sheet-note" id="ddSubtitulo"></p>
+    <div class="dd-tabla" id="ddTabla"></div>
+    <p class="dd-descuadre" id="ddDescuadre" style="display:none;"></p>
+    <p class="dd-ayuda" id="ddAyuda" style="display:none;"></p>
+    <button class="btn-ghost" data-close style="margin-top:16px;">Cerrar</button>
   </div>
 </div>
 
@@ -4121,14 +4164,16 @@ function resumenTotalesDelMes(refDate){
 }
 
 /* ==================== TANDA R · DESGLOSE AUDITABLE DEL DISPONIBLE (pto 1) ====================
-   Deriva los términos REALES de la cifra grande "Disponible este mes" (= T.dispLibre)
-   recorriendo la misma fórmula de resumenTotalesDelMes(): NO se escribe a mano.
+   Deriva los términos REALES de la cifra grande "Disponible" (= T.dispLibre) recorriendo
+   la misma fórmula de resumenTotalesDelMes(): NO se escribe a mano.
    dispLibre = saldoAnterior + ingresos − gastoContado − cuotasPagadas − aportesMetas
    (de las cuotas del mes descuenta SOLO las confirmadas como pagadas; las pendientes
    se reincorporan y por eso NO son término del desglose — son dato informativo aparte).
-   · Omite automáticamente los términos en $0 (hoy Ingresos y Metas).
+   · Por defecto omite los términos en $0. La hoja "¿De dónde sale?" (Tanda R2 · pto 4)
+     los quiere TODOS: pasa incluirCeros=true. `suma` y `cuadra` no cambian (sumar $0 no
+     altera nada), así que ese parámetro no afecta a ningún otro consumidor.
    · Si Σ(términos) ≠ dispLibre se marca `cuadra:false` para reportarlo como bug, no maquillarlo. */
-function desgloseDisponible(refDate){
+function desgloseDisponible(refDate, incluirCeros){
   const T = resumenTotalesDelMes(refDate);
   // Mes CERRADO: la cifra grande ya no reincorpora → el término de cuotas es el total
   // del mes ("cuotas del mes"). Mes en curso / futuro: solo las confirmadas ("cuotas
@@ -4143,7 +4188,7 @@ function desgloseDisponible(refDate){
     { ...cuotasTermino, signo:-1 },
     { clave:'metas',         label:'metas',          signo:-1, monto: T.aportesMetas }
   ];
-  const terminos = raw.filter(t=> Math.round(t.monto) !== 0);
+  const terminos = incluirCeros ? raw : raw.filter(t=> Math.round(t.monto) !== 0);
   const suma = terminos.reduce((s,t)=> s + t.signo * t.monto, 0);
   return { terminos, suma, disponible: T.dispLibre, cuadra: Math.round(suma) === Math.round(T.dispLibre) };
 }
@@ -4325,32 +4370,33 @@ function renderResumen(){
     }
   }
 
-  // Línea "Cuotas pendientes" (Tanda R3):
-  //  · mes en curso / futuro con cuotas sin confirmar → "−$X" (rojo): plata que aún puede
-  //    pagarse y que NO está descontada de la cifra grande.
-  //  · mes CERRADO con cuotas sin confirmar → nota informativa atenuada: esas cuotas ya
-  //    cuentan como gasto del mes (la cifra grande dejó de reincorporarlas). Sin signo, sin rojo.
+  // Línea "Cuotas pendientes" (Tanda R3 · formato R2 pto 3):
+  //  · mes en curso / futuro con cuotas sin confirmar → "−$X" (rojo) + píldora NO DESCONTADO
+  //    al final: plata que aún puede pagarse y que NO está descontada de la cifra grande.
+  //  · mes CERRADO con cuotas sin confirmar → nota informativa atenuada (.bx-cerrado): esas
+  //    cuotas ya cuentan como gasto del mes. Sin signo, sin píldora, sin rojo — R3 sin cambios.
   //  · sin cuotas sin confirmar, o mes pre-registro → oculta.
   const pendRow = document.getElementById('rDisponiblePendRow');
   const pEl = document.getElementById('rDisponiblePend');
-  const pkEl = pendRow ? pendRow.querySelector('.bp-k') : null;
+  const pkEl = document.getElementById('rDisponiblePendK');
   if(!esPreRegistro && Math.round(cuotasPend) > 0){
     if(T.cerrado){
       if(pkEl) pkEl.textContent = money(cuotasPend) + ' en cuotas de este mes quedaron sin confirmar — ya cuentan como gasto del mes.';
-      if(pEl) pEl.textContent = '';
-      pendRow.classList.add('bp-cerrado');
+      if(pEl){ pEl.textContent = ''; pEl.classList.remove('neg'); }
+      pendRow.classList.add('bx-cerrado');
     } else {
-      if(pkEl) pkEl.innerHTML = 'Cuotas pendientes <span class="bp-tag">no descontado</span>';
+      if(pkEl) pkEl.textContent = 'Cuotas pendientes';
       if(pEl){ pEl.textContent = '−' + money(cuotasPend); pEl.classList.add('neg'); }
-      pendRow.classList.remove('bp-cerrado');
+      pendRow.classList.remove('bx-cerrado');
     }
     pendRow.style.display = '';
   } else {
     pendRow.style.display = 'none';
-    pendRow.classList.remove('bp-cerrado');
+    pendRow.classList.remove('bx-cerrado');
   }
 
-  // Línea "Saldo mes anterior": oculta en meses pre-registro (pto 4) y cuando es $0.
+  // Línea "Saldo mes anterior": oculta en meses pre-registro (pto 4) y cuando es $0. La
+  // píldora INCLUIDO (al final, estática en el markup) la contrapone a NO DESCONTADO.
   const carryRow = document.getElementById('rSaldoAnteriorRow');
   if(!esPreRegistro && Math.round(saldoAnterior) !== 0){
     const el = document.getElementById('rSaldoAnterior');
@@ -4361,33 +4407,10 @@ function renderResumen(){
     carryRow.style.display = 'none';
   }
 
-  // Tanda R · pto 1 + R3: desglose auditable de la cifra grande. Oculto en meses
-  // pre-registro (referencia un arrastre que el pto 4 pide ignorar). En el resto, derivado
-  // de desgloseDisponible() — con término "cuotas del mes" (todas) en meses cerrados y
-  // "cuotas pagadas" en el mes en curso / futuros.
-  const dsgEl = document.getElementById('rDesglose');
-  if(dsgEl){
-    if(esPreRegistro){
-      dsgEl.style.display = 'none';
-    } else {
-      const dsg = desgloseDisponible(currentDate);
-      if(!dsg.cuadra){
-        dsgEl.className = 'balance-desglose bd-bug';
-        dsgEl.textContent = `⚠ El desglose no cuadra: suma ${money(dsg.suma)} vs. Disponible ${money(dsg.disponible)}. Reporta este error.`;
-        dsgEl.style.display = '';
-      } else if(dsg.terminos.length === 0){
-        dsgEl.style.display = 'none';
-      } else {
-        dsgEl.className = 'balance-desglose';
-        const parts = dsg.terminos.map((t,i)=>{
-          if(i === 0) return (t.monto < 0 ? '−' : '') + money(Math.abs(t.monto)) + ' ' + t.label;
-          return (t.signo < 0 ? ' − ' : ' + ') + money(Math.abs(t.monto)) + ' ' + t.label;
-        });
-        dsgEl.innerHTML = parts.join('') + ` <span class="bd-eq">= ${money(dsg.disponible)}</span>`;
-        dsgEl.style.display = '';
-      }
-    }
-  }
+  // Tanda R2 · pto 4: enlace "¿De dónde sale?" (abre la hoja de auditoría). Oculto en
+  // meses pre-registro — la hoja referencia un arrastre que el pto 4 pide ignorar ahí.
+  const dondeLink = document.getElementById('rDondeLink');
+  if(dondeLink) dondeLink.style.display = esPreRegistro ? 'none' : '';
 
   // Nota breve en meses ANTERIORES al "Mes de inicio de registro" (pto 4): reemplaza a la
   // línea de saldo anterior. Desde el mes de inicio en adelante NO se muestra; tampoco si
@@ -4401,7 +4424,7 @@ function renderResumen(){
   // sus líneas está visible — evita un separador colgando en meses sin contexto.
   const ctxEl = document.getElementById('rCtx');
   if(ctxEl){
-    const algo = [carryRow, pendRow, dsgEl, inicioNote].some(el=> el && el.style.display !== 'none');
+    const algo = [carryRow, pendRow, inicioNote].some(el=> el && el.style.display !== 'none');
     ctxEl.style.display = algo ? '' : 'none';
   }
 
@@ -6686,6 +6709,82 @@ function syncHistDetalleBtn(){
     currentDate.setMonth(currentDate.getMonth() - 1, 1);
     switchScreen('historial');
   });
+})();
+
+/* ==================== TANDA R2 · pto 4 · HOJA "¿DE DÓNDE SALE?" ====================
+   Auditoría de la cifra grande del Resumen. Reemplaza al desglose en línea. Muestra los
+   CINCO términos SIEMPRE (incluidos los $0), en ORDEN FIJO idéntico todos los meses, y
+   el total tras una línea divisoria. Los términos y la suma salen de desgloseDisponible()
+   con incluirCeros=true: aquí NO se calcula nada nuevo. Tras R3, en un mes cerrado el
+   término de cuotas es "Cuotas del mes" (todas); en el mes en curso / futuros es "Cuotas
+   pagadas" (solo las confirmadas). Si la suma no cuadra con el Disponible, se muestra el
+   descuadre en rojo, sin maquillar. */
+const DD_LABELS = {
+  ingresos:'Ingresos', saldoAnterior:'Saldo mes anterior', gastoContado:'Contado',
+  cuotasPagadas:'Cuotas pagadas', cuotasMes:'Cuotas del mes', metas:'Aportes a metas'
+};
+const DD_ORDEN = ['ingresos', 'saldoAnterior', 'gastoContado', 'cuotas', 'metas'];
+function openDondeDisponible(){
+  const refDate = currentDate;
+  const T = resumenTotalesDelMes(refDate);
+  const dsg = desgloseDisponible(refDate, true);              // los CINCO términos, con los $0
+  const inicioMk = mesInicioRegistroMk();
+  const esPreRegistro = inicioMk !== null && monthKey(refDate) < inicioMk;
+
+  document.getElementById('ddSubtitulo').textContent =
+    MESES[refDate.getMonth()] + ' ' + refDate.getFullYear() + ' · los cinco términos que suman tu Disponible.';
+
+  // Reagrupa por clave estable (la de cuotas puede venir como cuotasPagadas o cuotasMes).
+  const porGrupo = {};
+  dsg.terminos.forEach(t=>{
+    const g = (t.clave === 'cuotasPagadas' || t.clave === 'cuotasMes') ? 'cuotas' : t.clave;
+    porGrupo[g] = t;
+  });
+
+  const filas = DD_ORDEN.map(g=>{
+    const t = porGrupo[g];
+    if(!t) return '';
+    const signo = t.signo > 0 ? (t.monto < 0 ? '−' : '+') : '−';
+    return `<div class="dd-row">`
+      + `<span class="dd-k">${DD_LABELS[t.clave] || t.label}</span>`
+      + `<span class="dd-sg">${signo}</span>`
+      + `<span class="dd-v">${money(Math.abs(t.monto))}</span>`
+      + `</div>`;
+  }).join('');
+
+  const total = `<hr class="dd-sep">`
+    + `<div class="dd-row dd-total">`
+    + `<span class="dd-k">Disponible</span>`
+    + `<span class="dd-sg"></span>`
+    + `<span class="dd-v">${money(dsg.disponible)}</span>`
+    + `</div>`;
+
+  document.getElementById('ddTabla').innerHTML = filas + total;
+
+  const descEl = document.getElementById('ddDescuadre');
+  if(dsg.cuadra){
+    descEl.style.display = 'none';
+  } else {
+    descEl.textContent = `⚠ Los cinco términos suman ${money(dsg.suma)}, que no coincide con el Disponible (${money(dsg.disponible)}). Reporta este error.`;
+    descEl.style.display = '';
+  }
+
+  // Línea de ayuda: qué NO entra. Solo en el mes en curso y meses futuros, y solo si hay
+  // cuotas pendientes. En meses cerrados esas cuotas SÍ están contadas → no aplica.
+  const ayudaEl = document.getElementById('ddAyuda');
+  if(!esPreRegistro && !T.cerrado && Math.round(T.cuotasPendientes) > 0){
+    ayudaEl.textContent = `Las cuotas pendientes (${money(T.cuotasPendientes)}) no están descontadas: aún no las confirmas como pagadas.`;
+    ayudaEl.style.display = '';
+  } else {
+    ayudaEl.style.display = 'none';
+  }
+
+  openSheet('sheetDondeDisponible');
+}
+(function initDondeDisponibleLink(){
+  const btn = document.getElementById('rDondeLink');
+  if(!btn) return;
+  btn.addEventListener('click', openDondeDisponible);
 })();
 
 // Torta (sectores) + leyenda. data: [{label, value}]. opts: {fmt, empty, note}
