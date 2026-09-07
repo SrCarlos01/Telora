@@ -1,0 +1,54 @@
+name: Desplegar a GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permisos mínimos que exige actions/deploy-pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un despliegue a la vez. Si llega un push nuevo mientras corre uno viejo,
+# el viejo se cancela: nunca se publica un deploy más antiguo encima de uno nuevo.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Estampar BUILD en sw.js
+        run: |
+          BUILD="${GITHUB_SHA::7}"
+          if grep -q "__BUILD__" sw.js; then
+            sed -i "s/__BUILD__/${BUILD}/g" sw.js
+            echo "sw.js estampado con BUILD=${BUILD}:"
+            grep -n "const BUILD" sw.js
+          else
+            echo "::warning::sw.js no tiene el marcador __BUILD__; se despliega sin estampar."
+          fi
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      # Sube el árbol tal cual (sin Jekyll). actions/upload-pages-artifact@v3
+      # excluye .git y .github por defecto: se publica el mismo conjunto de
+      # archivos que el deploy por rama.
+      - name: Subir artefacto del sitio
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Desplegar
+        id: deployment
+        uses: actions/deploy-pages@v4

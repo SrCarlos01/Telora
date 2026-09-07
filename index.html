@@ -1785,7 +1785,10 @@ button:active{ transform:scale(0.97); }
       </div>
     </details>
 
-    <button class="btn-ghost" data-close style="margin-top:18px;">Cerrar</button>
+    <p class="sheet-note" id="cfgBuildInfo" style="margin:18px 0 0; text-align:center; font-size:11px; opacity:.55;">
+      MisFinanzas · versión <span id="cfgBuildTag">—</span>
+    </p>
+    <button class="btn-ghost" data-close style="margin-top:10px;">Cerrar</button>
   </div>
 </div>
 
@@ -7579,7 +7582,10 @@ function isIOSDevice(){
   }
 })();
 
-/* ---- pto 6: Service Worker (precache + cache-first con revalidación) ---- */
+/* ---- pto 6: Service Worker (precache · HTML network-first · assets cache-first) ----
+   El aviso "Versión nueva disponible" se apoya en que sw.js cambia byte a byte en
+   cada despliegue: GitHub Actions estampa BUILD (marcador __BUILD__) con el commit.
+   NO se llama a skipWaiting salvo cuando el usuario toca "Actualizar". */
 function showUpdateBanner(worker){
   const b = document.getElementById('updateBanner');
   if(!b) return;
@@ -7591,10 +7597,44 @@ function showUpdateBanner(worker){
   };
   document.getElementById('ubLater').onclick = ()=>{ b.hidden = true; };
 }
+
+/* Etiqueta de versión del pie de Configuración. La informa el SW por postMessage;
+   se guarda en localStorage para poder mostrarla también sin conexión. No controla
+   nada: es solo para que un tester pueda citarla al reportar un problema. */
+function pintarBuild(tag){
+  if(!tag) return;
+  const el = document.getElementById('cfgBuildTag');
+  if(el) el.textContent = tag;
+  try{ localStorage.setItem('misfinanzas_build', tag); }catch(_){}
+}
+try{ pintarBuild(localStorage.getItem('misfinanzas_build')); }catch(_){}
+function pedirBuild(){
+  const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+  if(c) c.postMessage({ type:'GET_BUILD' });
+}
+
 if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', e=>{
+    if(e.data && e.data.type === 'BUILD') pintarBuild(e.data.build);
+  });
+
+  /* Chequeo de actualización con freno: como mucho una vez cada 30 min, aunque el
+     usuario entre y salga de la pestaña muchas veces. reg.update() solo re-pide
+     sw.js (~3 KB); no vuelve a bajar el precache salvo que haya un SW nuevo. */
+  let ultimoChequeo = 0;
+  function chequearActualizacion(reg){
+    if(!reg) return;
+    const ahora = Date.now();
+    if(ahora - ultimoChequeo < 30*60*1000) return;
+    ultimoChequeo = ahora;
+    reg.update().catch(()=>{});
+  }
+
   window.addEventListener('load', ()=>{
     const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('./sw.js').then(reg=>{
+    navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(reg=>{
+      reg.update().catch(()=>{});   // chequeo explícito al arrancar
+      ultimoChequeo = Date.now();
       // Una versión nueva ya quedó "esperando" en una carga anterior.
       if(reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
       reg.addEventListener('updatefound', ()=>{
@@ -7605,14 +7645,23 @@ if('serviceWorker' in navigator){
           if(nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(nw);
         });
       });
+      pedirBuild();
     }).catch(()=>{ /* silencioso: la app funciona igual sin SW */ });
 
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      pedirBuild();
       if(reloading) return;
       if(!hadController) return;   // no recargar en la toma de control de la primera visita
       reloading = true;
       window.location.reload();
+    });
+
+    // Al volver del segundo plano: re-chequear (con el freno de 30 min).
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible'){
+        navigator.serviceWorker.ready.then(chequearActualizacion).catch(()=>{});
+      }
     });
   });
 }
