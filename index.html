@@ -208,14 +208,16 @@ button{font-family:inherit;}
 /* ---------- TANDA R2 · líneas de contexto de la cifra grande (ptos 2 y 3) ----------
    "Saldo mes anterior" y "Cuotas pendientes" con sintaxis pareja: nombre · monto ·
    etiqueta AL FINAL. Misma píldora, mismo tamaño y misma alineación vertical en las
-   dos. En 375 px con montos de 7 cifras la etiqueta baja sola a una 2ª línea alineada
-   a la derecha (flex-wrap dentro de .bx-end); el monto nunca se recorta.
+   dos. Si en 375 px con montos de 7 cifras no cabe todo en una línea, la etiqueta baja
+   sola bajo el monto (flex-wrap dentro de .bx-end); el monto nunca se recorta.
    Tanda R4 · pto 2: margin-bottom reducido (6px → 3px) para que las dos líneas se lean
-   como un par compacto — ver también .balance-ctx (margin-top) más abajo. */
-.bx-line{display:flex; align-items:baseline; gap:8px; margin:0 0 3px;}
+   como un par compacto — ver también .balance-ctx (margin-top) más abajo.
+   Tanda V · pto 2: el monto va JUNTO a su etiqueta (sin margin-left:auto que lo
+   empujaba al borde derecho); la separación la da el gap de .bx-line. */
+.bx-line{display:flex; align-items:baseline; gap:6px; margin:0 0 3px; flex-wrap:wrap;}
 .bx-line .bx-k{font-size:12.5px; color:#E7C3CB; flex-shrink:0;}
-.bx-line .bx-end{margin-left:auto; min-width:0; display:flex; flex-wrap:wrap;
-  align-items:baseline; justify-content:flex-end; gap:4px 6px;}
+.bx-line .bx-end{min-width:0; display:flex; flex-wrap:wrap;
+  align-items:baseline; justify-content:flex-start; gap:4px 6px;}
 .bx-line .bx-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
 .bx-line .bx-v.neg{color:#F3D3CE;}
 .bx-tag{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
@@ -1236,6 +1238,25 @@ button:active{ transform:scale(0.97); }
 }
 :root.hc .insight-cuota-libre{border-width:2px;}
 
+/* Tanda V · pto 1: "x" para descartar un insight por el día. El descarte NO es
+   permanente — reaparece a la medianoche local si la condición sigue vigente. La
+   tarjeta lleva position:relative (clase .insight-dismiss) y reserva un hueco a la
+   derecha para que el texto no quede bajo el botón. El semáforo y el título NO se
+   descartan: son el mínimo que queda si el usuario cierra todo. */
+.insight-dismiss{position:relative;}
+.insight-x{
+  position:absolute; top:5px; right:5px; z-index:1;
+  width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+  background:transparent; border:0; border-radius:7px; cursor:pointer;
+  color:var(--cream-dim); font-size:15px; line-height:1; -webkit-tap-highlight-color:transparent;
+}
+.insight-x:active{transform:scale(0.9);}
+:root.hc .insight-x{color:var(--cream);}
+.insight-frase.insight-dismiss > p:first-of-type{padding-right:24px;}
+.insight-cuota-libre.insight-dismiss{padding-right:32px;}
+.insight-block.insight-dismiss > .insight-block-title{padding-right:26px;}
+.insight-todo-descartado{margin-top:6px;}
+
 /* ---------- METAS: racha de cumplimiento del aporte automático ---------- */
 .goal-racha{
   font-size:13px; color:var(--cream); margin:2px 0 8px; padding-bottom:8px;
@@ -2072,6 +2093,15 @@ function loadState(){
       if(!g.aporteAutomatico.tipo) g.aporteAutomatico.tipo = 'monto';           // 'monto' | 'porcentaje'
       if(typeof g.aporteAutomatico.valor !== 'number') g.aporteAutomatico.valor = 0;  // % cuando tipo='porcentaje'
     });
+    // Tanda V · pto 1: insightsDescartados es un bucket de UN día (fecha + ids). Si lo
+    // guardado no es de hoy (o está mal formado), se limpia al cargar — así nunca crece
+    // y un respaldo de otro día no arrastra descartes ajenos al día en curso.
+    if(parsed.config && parsed.config.insightsDescartados){
+      const b = parsed.config.insightsDescartados;
+      if(!b || typeof b !== 'object' || Array.isArray(b) || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)){
+        delete parsed.config.insightsDescartados;
+      }
+    }
     return parsed;
   }
   return { config: {...DEFAULTS, categoriaIconos: {}}, expenses: [], incomes: [], debts: [], goals: [] };
@@ -4955,6 +4985,44 @@ function deudasQueTerminanPronto(){
   return Array.from(porMes.values()).sort((a,b)=> a.mk - b.mk);
 }
 
+/* ==================== TANDA V · pto 1 — DESCARTAR INSIGHTS ====================
+   Cada tarjeta del carrusel de insights lleva una "x". Al tocarla, el insight se
+   oculta por lo que queda del día y reaparece a la MEDIANOCHE LOCAL (no 24 h
+   después) si su condición sigue vigente — no es un descarte permanente.
+
+   Dónde se guarda: state.config.insightsDescartados, junto al resto de
+   preferencias de UI (resumenDetalle, historialDetalle, fontScale…). Estructura:
+       { fecha: "YYYY-MM-DD", ids: ["frase-mes", ...] }
+   Es un bucket de UN solo día: al guardar se reescribe entero con la fecha de hoy,
+   así nunca acumula días anteriores. Al leer, solo cuenta si `fecha` es la de hoy;
+   cualquier bucket de otro día se ignora (y se purga en loadState/migrateBackup).
+   Un respaldo viejo sin el campo funciona igual: se lee como "nada descartado".
+
+   Los ids son ESTABLES y no dependen del texto ni del monto (si dependieran, un
+   cambio de cifra "revive" el insight el mismo día):
+       frase-mes            → frase resumen del mes (cualquiera de sus variantes)
+       cuota-libre-<mk>     → aviso de cuota terminada, uno por mes de término
+       comparacion-mes      → bloque "Comparación con el mes anterior"
+       variacion-categoria  → bloque "Categoría con mayor variación"
+       proyeccion-fin-mes   → bloque "Proyección de fin de mes"
+   El semáforo y el título NO se descartan: son lo que queda si se cierra todo. */
+function fechaHoyLocalISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function insightsDescartadosHoy(){
+  const b = state.config && state.config.insightsDescartados;
+  if(!b || typeof b !== 'object' || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)) return new Set();
+  return new Set(b.ids);
+}
+function descartarInsight(id){
+  const cur = insightsDescartadosHoy();   // ya filtrado a hoy: descarta cualquier resto de días previos
+  cur.add(id);
+  state.config.insightsDescartados = { fecha: fechaHoyLocalISO(), ids: [...cur] };
+  saveState();
+  renderInsights();
+}
+
 function renderInsights(){
   const box = document.getElementById('rInsights');
   if(!box) return;
@@ -4984,6 +5052,8 @@ function renderInsights(){
   const hayAlerta = alertas.length > 0;
   const disp = proy.dispProyectado;
   const nombreMes = d => MESES[d.getMonth()] + ' ' + d.getFullYear();
+  // Tanda V · pto 1: botón "x" que llevan las tarjetas descartables (ver descartarInsight).
+  const xIns = `<button type="button" class="insight-x" aria-label="Descartar por hoy" title="Descartar por hoy">${icon('x')}</button>`;
   // Tanda S · pto 3: el ayudante local "signedMoney" que estaba acá duplicaba money()
   // (mismo resultado: money() ya pone el signo antes del "$"). Se unifica — se llama
   // money() directo en todo este bloque.
@@ -5023,7 +5093,7 @@ function renderInsights(){
   } else {
     frase = 'Vas bien encaminado este mes.';
   }
-  const fraseHtml = `<div class="insight-frase${fraseCTA ? ' insight-frase-cta' : ''}"><p>${frase}</p>${
+  const fraseHtml = `<div class="insight-frase insight-dismiss${fraseCTA ? ' insight-frase-cta' : ''}" data-insight-id="frase-mes">${xIns}<p>${frase}</p>${
     fraseCTA ? `<button type="button" class="insight-frase-btn" id="insightRegistrarIngresoBtn">Registrar ingreso</button>` : ''
   }</div>`;
 
@@ -5032,14 +5102,16 @@ function renderInsights(){
   // vive en fraseHtml) por el mismo espacio: ambos pueden mostrarse a la vez. Si algún
   // día hubiera que elegir uno solo, el guardarraíl iría primero por avisar de un
   // problema real (ingreso sin registrar); esto es una buena noticia, no urgente.
-  const cuotaLibreHtml = deudasQueTerminanPronto().map(g=>{
+  // Un id estable POR MES de término (cuota-libre-<mk>): no depende del monto ni de
+  // cuántas cuotas terminan, así un recálculo de la cifra no lo "revive" el mismo día.
+  const cuotaLibreCards = deudasQueTerminanPronto().map(g=>{
     const mesNom = MESES[g.mk % 12].toLowerCase();
-    return `<div class="insight-cuota-libre">${
+    return { id: 'cuota-libre-' + g.mk, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="cuota-libre-${g.mk}">${xIns}${
       g.count > 1
         ? `En ${mesNom} terminan ${g.count} cuotas y se te liberan ${money(g.total)} al mes.`
         : `En ${mesNom} se te liberan ${money(g.total)} al mes.`
-    }</div>`;
-  }).join('');
+    }</div>` };
+  });
 
   // ---- c) Comparación mes a mes ----
   const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
@@ -5077,7 +5149,7 @@ function renderInsights(){
   } else if(data.aportesMetas > prevData.aportesMetas){
     cmpBody += `<p class="insight-motiv">Aportaste ${money(data.aportesMetas - prevData.aportesMetas)} más a tus metas que el mes pasado. ¡Sigue así!</p>`;
   }
-  const cmpHtml = `<div class="insight-block"><p class="insight-block-title">Comparación con el mes anterior</p>${cmpBody}</div>`;
+  const cmpHtml = `<div class="insight-block insight-dismiss" data-insight-id="comparacion-mes">${xIns}<p class="insight-block-title">Comparación con el mes anterior</p>${cmpBody}</div>`;
 
   // ---- d) Categoría con mayor variación ----
   let varBody;
@@ -5092,7 +5164,7 @@ function renderInsights(){
     if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${dec.cat}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
     varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin cambios de categoría respecto al mes anterior.</p>`;
   }
-  const varHtml = `<div class="insight-block"><p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
+  const varHtml = `<div class="insight-block insight-dismiss" data-insight-id="variacion-categoria">${xIns}<p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
 
   // ---- e) Proyección de fin de mes + categorías en alerta ----
   const alertasHtml = alertas.length ? (
@@ -5115,7 +5187,7 @@ function renderInsights(){
   const ingEstDesc = ingEst
     ? (ingEst.esHabitual ? 'tu ingreso habitual' : 'según ' + MESES[ingEst.meses[0].date.getMonth()].toLowerCase())
     : '';
-  const proyHtml = `<div class="insight-block">
+  const proyHtml = `<div class="insight-block insight-dismiss" data-insight-id="proyeccion-fin-mes">${xIns}
     <p class="insight-block-title">Proyección de fin de mes</p>
     <div class="insight-proy-main${disp < 0 ? ' neg' : ''}">
       <span>Disponible proyectado${ingEst ? ' <span class="insight-proy-est-tag">estimado</span>' : ''}</span><b>${money(disp)}</b>
@@ -5130,9 +5202,32 @@ function renderInsights(){
     ${alertasHtml}
   </div>`;
 
+  // Tanda V · pto 1: tarjetas descartables por el día. El semáforo y el título quedan
+  // siempre — son el mínimo que se ve si el usuario cierra todo (nunca un contenedor
+  // vacío con separadores colgando). Si se descartaron todas, un aviso breve lo explica.
+  const descHoy = insightsDescartadosHoy();
+  const descartables = [
+    { id: 'frase-mes', html: fraseHtml },
+    ...cuotaLibreCards,
+    { id: 'comparacion-mes', html: cmpHtml },
+    { id: 'variacion-categoria', html: varHtml },
+    { id: 'proyeccion-fin-mes', html: proyHtml }
+  ];
+  const visibles = descartables.filter(c=> !descHoy.has(c.id));
+  const cuerpo = visibles.length
+    ? visibles.map(c=> c.html).join('')
+    : `<p class="insight-nodata insight-todo-descartado">Descartaste los insights de hoy. Vuelven mañana.</p>`;
+
   box.innerHTML =
     `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
-    semHtml + fraseHtml + cuotaLibreHtml + cmpHtml + varHtml + proyHtml;
+    semHtml + cuerpo;
+
+  box.querySelectorAll('.insight-x').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const card = btn.closest('[data-insight-id]');
+      if(card && card.dataset.insightId) descartarInsight(card.dataset.insightId);
+    });
+  });
 
   const registrarBtn = box.querySelector('#insightRegistrarIngresoBtn');
   if(registrarBtn) registrarBtn.addEventListener('click', ()=> openIngresoForm(null));
@@ -6345,6 +6440,17 @@ function migrateBackup(parsed){
   // cosa (ausente, formato viejo, tipo incorrecto) -> sin definir.
   if(!(isStr(config.mesInicioRegistro) && /^\d{4}-\d{2}$/.test(config.mesInicioRegistro)))
     delete config.mesInicioRegistro;
+  // insightsDescartados (Tanda V · pto 1): bucket de UN día. Se conserva solo si es de
+  // hoy y está bien formado; si no, se descarta (un respaldo viejo sin el campo, o de
+  // otro día, entra como "nada descartado").
+  {
+    const b = config.insightsDescartados;
+    if(!b || typeof b !== 'object' || Array.isArray(b) || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)){
+      delete config.insightsDescartados;
+    } else {
+      config.insightsDescartados = { fecha: b.fecha, ids: b.ids.filter(x=> typeof x === 'string') };
+    }
+  }
 
   const expenses = arrOf(src.expenses).map(e=>{
     const desc = isStr(e.description) ? e.description : '';
