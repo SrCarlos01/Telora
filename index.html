@@ -934,6 +934,22 @@ button{font-family:inherit;}
 .cfg-icon-btn:active{transform:scale(0.9);}
 .cfg-icon-btn .icon{width:18px; height:18px;}
 .cfg-icon-btn .cat-emoji{font-size:17px;}
+/* Tanda W: fila de Configuración con "Crédito" bloqueado + renombrado inline */
+.config-item.is-locked{flex-direction:column; align-items:flex-start; gap:3px;}
+.cfg-item-lock{font-size:11px; line-height:1.35; color:var(--cream-dim);}
+.config-item .cfg-rename-btn{color:var(--gold); padding:4px; display:flex; align-items:center;}
+.config-item .cfg-rename-btn .icon{width:16px; height:16px;}
+.cfg-rename-edit{display:flex; align-items:center; gap:6px; width:100%;}
+.cfg-rename-edit .cfg-rename-input{
+  flex:1; min-width:0; padding:8px 10px; font-size:16px; font-family:inherit;
+  background:var(--surface-2); border:1px solid var(--gold-dim); border-radius:8px; color:var(--cream);
+}
+.cfg-rename-edit .cfg-rename-input:focus{outline:none; box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.config-item .cfg-rename-edit .cfg-rename-ok{
+  flex-shrink:0; padding:0 14px; font-size:13px; font-weight:600;
+  background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9; border-radius:8px;
+}
+.config-item .cfg-rename-edit .cfg-rename-cancel{flex-shrink:0; color:var(--danger); padding:4px; font-size:15px;}
 
 /* íconos/emoji de categoría en listas */
 .cat-emoji{display:inline-flex; align-items:center; justify-content:center; line-height:1; font-size:18px;}
@@ -1692,6 +1708,33 @@ button:active{ transform:scale(0.97); }
     </p>
     <button class="btn-danger" id="btnConfirmDeleteDebt">Sí, eliminar todo</button>
     <button class="btn-ghost" id="btnCancelConfirmDelete" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: migrar registros antes de eliminar un método/fuente en uso (Tanda W · 1A + migración) -->
+<div class="sheet-overlay" id="sheetCfgMigrar">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="cfgMigrarTitle">Eliminar</h2>
+    <p class="sheet-note" id="cfgMigrarBody"></p>
+    <p class="sheet-note" id="cfgMigrarNotaCuotas" hidden></p>
+    <div class="field">
+      <label for="cfgMigrarDestino">Mover a</label>
+      <select id="cfgMigrarDestino"></select>
+    </div>
+    <button class="btn-danger" id="cfgMigrarConfirm">Mover y eliminar</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: aviso al cambiar el método de un gasto que es compra a cuotas (Tanda W · ajuste 1) -->
+<div class="sheet-overlay" id="sheetGastoMetodoAviso">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Este gasto es una compra a cuotas</h2>
+    <p class="sheet-note" id="gmaTexto"></p>
+    <button class="btn-danger" id="gmaConfirm">Sí, cambiar el método</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
 
@@ -3206,6 +3249,7 @@ function openGastoForm(expenseId){
   // bloqueado por applyReadOnlyLock() más abajo.
   if(!expenseId && isReadOnly()){ blockReadOnly(); return; }
   editingExpenseId = expenseId;
+  confirmarMetodoSinCuotas = false;   // Tanda W: reinicia el ok del aviso de "compra a cuotas"
   fillSelect('gCategoria', state.config.categorias);
   fillSelect('gMetodo', state.config.metodos);
   const today = new Date();
@@ -3277,6 +3321,12 @@ function openGastoForm(expenseId){
   openSheet('sheetGasto');
 }
 
+let confirmarMetodoSinCuotas = false;   // Tanda W: "Sí" del aviso de gasto-a-cuotas con método sin cuotas
+document.getElementById('gmaConfirm').onclick = ()=>{
+  confirmarMetodoSinCuotas = true;
+  closeSheet('sheetGastoMetodoAviso');
+  document.getElementById('btnSaveGasto').onclick();
+};
 document.getElementById('btnSaveGasto').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
@@ -3295,6 +3345,27 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   if(!nombre){ showToast('Ponle un nombre al gasto.', 'error'); fieldError(document.getElementById('gNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('gMonto')); return; }
   if(!categoria){ showToast('Elige una categoría.', 'error'); fieldError(document.getElementById('gCategoria')); return; }
+
+  // Tanda W (hallazgo c): cambiar el método de un gasto que ES compra a cuotas por uno
+  // que NO genera cuotas no se guarda en silencio. Se pide confirmación explícita. La
+  // deuda y sus cuotas se conservan intactas; solo cambia la etiqueta de método.
+  if(editingExpenseId && !esCredito && !confirmarMetodoSinCuotas){
+    const e0 = state.expenses.find(x=>x.id===editingExpenseId);
+    if(e0 && e0.debtId){
+      const debt = state.debts.find(d=>d.id===e0.debtId);
+      const nc = debt ? debt.numCuotas : 0;
+      const montoC = (debt && nc > 0) ? Math.round(debt.totalAmount / nc) : 0;
+      document.getElementById('gmaTexto').textContent =
+        `Estás cambiando su método a «${metodo}», que no genera cuotas. ` +
+        (nc > 0
+          ? `La deuda y sus ${nc === 1 ? '1 cuota' : nc + ' cuotas'} de ${money(montoC)}${nc === 1 ? '' : ' cada una'} se conservan igual`
+          : 'La deuda asociada se conserva igual') +
+        ` — solo cambia la etiqueta de método de este gasto.`;
+      openSheet('sheetGastoMetodoAviso');
+      return;
+    }
+  }
+  confirmarMetodoSinCuotas = false;   // consumido
 
   let nuevoGastoId = null;
   if(editingExpenseId){
@@ -6063,43 +6134,189 @@ function renderInicioRegistroRow(){
     renderAll();   // recalcula la cuenta corriente y el Disponible de todos los meses
   });
 })();
+/* ==================== Tanda W: helpers de listas de Configuración ====================
+   normNombre() normaliza SOLO para comparar (detectar duplicados): minúsculas, sin
+   tildes, espacios internos colapsados, recorte. Lo que se guarda es el texto tal
+   como se escribió (recortado). contarUso() cuenta registros que usan un valor por
+   igualdad exacta de string, que es como se asocian de verdad. */
+function normNombre(s){
+  // NFD + quitar el rango de marcas diacríticas combinantes U+0300–U+036F (tildes, diéresis…).
+  return String(s == null ? '' : s)
+    .trim().replace(/\s+/g, ' ')
+    .toLocaleLowerCase('es')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function contarUso(key, item){
+  if(key === 'metodos') return state.expenses.filter(e=> e.method === item).length;
+  if(key === 'fuentes') return state.incomes.filter(i=> i.source === item).length;
+  if(key === 'categorias') return state.expenses.filter(e=> e.category === item).length;
+  return 0;
+}
+const escAttr = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
+
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
   const isCat = key === 'categorias';
-  box.innerHTML = state.config[key].map((item,idx)=>`
-    <div class="config-item">
+  const renombrable = key === 'metodos' || key === 'fuentes';   // categorías: tanda aparte
+  box.innerHTML = state.config[key].map((item,idx)=>{
+    // 3A: "Crédito" es el disparador de las compras a cuotas; no se puede borrar ni renombrar.
+    const bloqueado = key === 'metodos' && item === 'Crédito';
+    if(bloqueado){
+      return `
+    <div class="config-item is-locked">
+      <span>${item}</span>
+      <small class="cfg-item-lock">Activa las compras a cuotas — no se puede eliminar.</small>
+    </div>`;
+    }
+    return `
+    <div class="config-item" data-cfgitem="${key}:${idx}">
       <span>${item}</span>
       <div class="cfg-item-actions">
         ${isCat ? `<button class="cfg-icon-btn" data-caticon="${idx}" aria-label="Cambiar ícono">${catIcon(item)}</button>` : ''}
-        <button data-remove="${key}:${idx}" aria-label="Eliminar">${icon('x')}</button>
+        ${renombrable ? `<button class="cfg-rename-btn" data-rename="${key}:${idx}" aria-label="Renombrar ${escAttr(item)}">${icon('edit')}</button>` : ''}
+        <button data-remove="${key}:${idx}" aria-label="Eliminar ${escAttr(item)}">${icon('x')}</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+
+  // --- Eliminar (Tanda W · 1A + migración en bloque) ---
   box.querySelectorAll('[data-remove]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(isReadOnly()){ blockReadOnly(); return; }
-      const [k,idx] = btn.dataset.remove.split(':');
-      const removed = state.config[k][parseInt(idx)];
-      state.config[k].splice(parseInt(idx),1);
-      // Al eliminar una categoría, limpia también su ícono personalizado.
-      if(k === 'categorias' && state.config.categoriaIconos) delete state.config.categoriaIconos[removed];
-      haptic(HAPTIC_DELETE);
-      saveState(); renderConfig();
+      const [k,idxStr] = btn.dataset.remove.split(':');
+      const idx = parseInt(idxStr, 10);
+      const item = state.config[k][idx];
+
+      // Categorías conservan el borrado directo de siempre (fuera de alcance de esta tanda).
+      if(k === 'categorias'){
+        state.config[k].splice(idx, 1);
+        if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
+        haptic(HAPTIC_DELETE); saveState(); renderConfig();
+        return;
+      }
+
+      const n = contarUso(k, item);
+      if(n === 0){
+        state.config[k].splice(idx, 1);
+        haptic(HAPTIC_DELETE); saveState(); renderConfig();
+        return;
+      }
+      if(state.config[k].length === 1){
+        showToast(`«${item}» es la única opción de la lista. Agrega otra antes de eliminarla.`, 'error');
+        return;
+      }
+      abrirMigracionConfig(k, idx, item, n);
     });
   });
+
+  // --- Renombrar (Tanda W · pto 4): migra todos los registros que usan el valor ---
+  box.querySelectorAll('[data-rename]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
+      const [k,idxStr] = btn.dataset.rename.split(':');
+      iniciarRenombreConfig(k, parseInt(idxStr, 10), box);
+    });
+  });
+
   box.querySelectorAll('[data-caticon]').forEach(btn=>{
     btn.addEventListener('click', ()=> openCatIcon(state.config.categorias[parseInt(btn.dataset.caticon, 10)]));
   });
 }
+
+/* ---- Renombrado inline de un método o fuente ---- */
+function iniciarRenombreConfig(key, idx, box){
+  const row = box.querySelector(`[data-cfgitem="${key}:${idx}"]`);
+  if(!row || row.querySelector('.cfg-rename-edit')) return;
+  const actual = state.config[key][idx];
+  row.innerHTML = `
+    <div class="cfg-rename-edit">
+      <input type="text" class="cfg-rename-input" value="${escAttr(actual)}" autocomplete="off" aria-label="Nuevo nombre">
+      <button class="small-btn cfg-rename-ok" type="button">Guardar</button>
+      <button class="cfg-rename-cancel" type="button" aria-label="Cancelar">${icon('x')}</button>
+    </div>`;
+  const input = row.querySelector('.cfg-rename-input');
+  input.focus(); input.select();
+  const cancelar = ()=> renderConfig();
+  row.querySelector('.cfg-rename-cancel').addEventListener('click', cancelar);
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){ e.stopPropagation(); cancelar(); }
+    if(e.key === 'Enter'){ e.preventDefault(); row.querySelector('.cfg-rename-ok').click(); }
+  });
+  row.querySelector('.cfg-rename-ok').addEventListener('click', ()=>{
+    const val = input.value.trim().replace(/\s+/g, ' ');
+    if(!val){ fieldError(input); return; }
+    const dup = state.config[key].find((x,i)=> i !== idx && normNombre(x) === normNombre(val));
+    if(dup){ showToast(`Ya existe «${dup}».`, 'error'); fieldError(input); return; }
+    const old = state.config[key][idx];
+    if(old === val){ renderConfig(); return; }
+    state.config[key][idx] = val;
+    const campo = key === 'metodos' ? 'method' : 'source';
+    const arr   = key === 'metodos' ? state.expenses : state.incomes;
+    let c = 0;
+    arr.forEach(r=>{ if(r[campo] === old){ r[campo] = val; c++; } });
+    haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+    showToast(`«${old}» ahora se llama «${val}».${c ? ` ${c} registro${c>1?'s':''} actualizado${c>1?'s':''}.` : ''}`, 'success');
+  });
+}
+
+/* ---- Migración en bloque antes de eliminar un método/fuente en uso ---- */
+let migracionConfigCtx = null;   // { key, idx, item, n }
+function abrirMigracionConfig(key, idx, item, n){
+  migracionConfigCtx = { key, idx, item, n };
+  const esMet = key === 'metodos';
+  const destinos = state.config[key].filter((_,i)=> i !== idx);
+  document.getElementById('cfgMigrarTitle').textContent = `Eliminar «${item}»`;
+  document.getElementById('cfgMigrarBody').textContent =
+    `${n} ${esMet ? (n===1?'gasto usa':'gastos usan') : (n===1?'ingreso usa':'ingresos usan')} «${item}». ` +
+    `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${esMet?'forma de pago':'fuente'}.`;
+  const sel = document.getElementById('cfgMigrarDestino');
+  sel.innerHTML = destinos.map(d=>`<option value="${escAttr(d)}">${d}</option>`).join('');
+  const notaCuotas = document.getElementById('cfgMigrarNotaCuotas');
+  const conDeuda = esMet ? state.expenses.filter(e=> e.method === item && e.debtId).length : 0;
+  if(conDeuda > 0){
+    notaCuotas.textContent = `Nota: ${conDeuda} de ${n===1?'ese gasto es una compra a cuotas' : 'esos gastos ' + (conDeuda===1?'es una compra':'son compras') + ' a cuotas'}; sus cuotas no cambian.`;
+    notaCuotas.hidden = false;
+  } else {
+    notaCuotas.hidden = true;
+  }
+  document.getElementById('cfgMigrarConfirm').textContent =
+    `Mover ${n} ${esMet ? (n===1?'gasto':'gastos') : (n===1?'ingreso':'ingresos')} y eliminar`;
+  openSheet('sheetCfgMigrar', 'cfgMigrarDestino');
+}
+document.getElementById('cfgMigrarConfirm').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!migracionConfigCtx) return;
+  const { key, item } = migracionConfigCtx;
+  const realIdx = state.config[key].indexOf(item);   // re-resolver por valor
+  if(realIdx === -1){ closeSheet('sheetCfgMigrar'); migracionConfigCtx = null; renderConfig(); return; }
+  const dest = document.getElementById('cfgMigrarDestino').value;
+  if(!dest || !state.config[key].includes(dest)){ showToast('Elige una opción de destino.', 'error'); return; }
+  const campo = key === 'metodos' ? 'method' : 'source';
+  const arr   = key === 'metodos' ? state.expenses : state.incomes;
+  let c = 0;
+  arr.forEach(r=>{ if(r[campo] === item){ r[campo] = dest; c++; } });
+  state.config[key].splice(realIdx, 1);
+  migracionConfigCtx = null;
+  haptic(HAPTIC_DELETE); saveState(); renderConfig(); closeSheet('sheetCfgMigrar');
+  showToast(`${c} ${key==='metodos' ? (c===1?'gasto movido':'gastos movidos') : (c===1?'ingreso movido':'ingresos movidos')} a «${dest}». «${item}» eliminada.`, 'success');
+};
+
 document.querySelectorAll('[data-addlist]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(isReadOnly()){ blockReadOnly(); return; }
     const key = btn.dataset.addlist;
     const inputId = key==='categorias'?'newCategoria':key==='metodos'?'newMetodo':'newFuente';
     const input = document.getElementById(inputId);
-    const val = input.value.trim();
-    if(!val) return;
-    if(!state.config[key].includes(val)) state.config[key].push(val);
+    const val = input.value.trim().replace(/\s+/g, ' ');
+    if(!val){ fieldError(input); return; }
+    // Ajuste 4: duplicado ya no es silencioso; normaliza mayúsculas/tildes/espacios.
+    const dup = state.config[key].find(x=> normNombre(x) === normNombre(val));
+    if(dup){
+      showToast(`«${dup}» ya está en la lista.`, 'error');
+      fieldError(input);
+      return;   // no se limpia el campo: el usuario ve qué se rechazó
+    }
+    state.config[key].push(val);
     input.value='';
     saveState(); renderConfig();
   });
@@ -6533,8 +6750,23 @@ function migrateBackup(parsed){
     return o;
   });
 
+  // Tanda W: reconciliación no destructiva. Cualquier método/fuente que usen los
+  // registros pero falte en su lista de config se re-agrega, para que no queden
+  // huérfanos al importar un respaldo internamente inconsistente (p. ej. uno
+  // exportado tras haber borrado "Crédito" con el bug anterior). Lo recuperado se
+  // informa al confirmar la restauración.
+  const recMetodos = [], recFuentes = [];
+  new Set(expenses.map(e=>e.method).filter(isStr)).forEach(m=>{
+    if(!config.metodos.includes(m)){ config.metodos.push(m); recMetodos.push(m); }
+  });
+  new Set(incomes.map(i=>i.source).filter(isStr)).forEach(s=>{
+    if(!config.fuentes.includes(s)){ config.fuentes.push(s); recFuentes.push(s); }
+  });
+  reconciliacionImport = { metodos: recMetodos, fuentes: recFuentes };
+
   return { config, expenses, incomes, debts, goals };
 }
+let reconciliacionImport = null;   // {metodos:[], fuentes:[]} recuperado por la última migrateBackup()
 function fillRestoreCompare(backup){
   const set = (id, cur, nue)=> document.getElementById(id).textContent = `${cur} → ${nue}`;
   set('rcGastos', state.expenses.length, (backup.expenses||[]).length);
@@ -6585,6 +6817,19 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
   }
   closeSheet('sheetConfirmRestore');
   renderAll();
+  // Tanda W: avisa si la reconciliación agregó métodos/fuentes que usaban los registros.
+  if(reconciliacionImport && (reconciliacionImport.metodos.length || reconciliacionImport.fuentes.length)){
+    const linea = (arr, sing, plur)=> arr.length
+      ? `${arr.length} ${arr.length === 1 ? sing : plur} que ${arr.length === 1 ? 'usaba' : 'usaban'} tus registros: ${arr.map(x=>`«${x}»`).join(', ')}`
+      : null;
+    const partes = [
+      linea(reconciliacionImport.metodos, 'método de pago', 'métodos de pago'),
+      linea(reconciliacionImport.fuentes, 'fuente de ingreso', 'fuentes de ingreso')
+    ].filter(Boolean);
+    const total = reconciliacionImport.metodos.length + reconciliacionImport.fuentes.length;
+    showToast((total === 1 ? 'Se recuperó ' : 'Se recuperaron ') + partes.join('; y ') + '. Puedes consolidarlos con «Renombrar» en Configuración.', null, 9000);
+  }
+  reconciliacionImport = null;
 };
 
 /* ==================== COMPARTIR ARCHIVOS (Web Share API, con fallback) ==================== */
