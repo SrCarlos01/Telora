@@ -4229,10 +4229,10 @@ function isManuallyPaid(debt, refDate){
 function isManuallyUnpaid(debt, refDate){
   return (debt.manualUnpaidMonthKeys||[]).includes(monthKey(refDate));
 }
-// Tanda T: vuelve a estar EN USO. cuotaEstadoMes (opción C) la consulta para decidir si
-// una compra ya terminada (sin cuota real este mes) sigue consultable en "Pagadas".
-// Revisa las N cuotas REALES (meses purchaseDate+1 .. purchaseDate+numCuotas) contra
-// manualPaidMonthKeys — nada derivado de saldoRestante (informativo, no clasifica).
+// INERTE. Fue candidato de la opción C en Tanda T; T2 revirtió esa vía. Se conserva
+// como candidato natural para el futuro "No la pagué este mes": revisa las N cuotas
+// REALES (meses purchaseDate+1 .. purchaseDate+numCuotas) contra manualPaidMonthKeys,
+// nada derivado de saldoRestante (informativo, no clasifica). Ninguna lógica activa la lee.
 // ¿El usuario confirmó a mano TODAS las cuotas de esta deuda (una por cada mes de su ciclo)?
 function cuotasTodasConfirmadas(debt){
   if(!(debt.numCuotas > 0)) return false;
@@ -4243,32 +4243,20 @@ function cuotasTodasConfirmadas(debt){
   return true;
 }
 // Estado de una deuda en el mes `refDate` PARA LA PESTAÑA CUOTAS (no para el Disponible).
-// Tanda P — criterio único: una cuota real está "pagada" SOLO si el usuario la confirmó
-// a mano (isManuallyPaid). Sin eso se queda en Activas.
-// Tanda T — opción C para los meses YA sin cuota real (auto === 'pagada'):
-//   · Se elimina el "mes de gracia" (antes refMesFueraDeVentana). Su razón original
-//     —colchón del mecanismo "vencida sin confirmar → Pagadas"— murió en Tanda P, y con
-//     la regla de abajo no cumple ninguna función. Ya no se sintetiza "cuota fantasma".
-//   · Regla única: la deuda queda consultable en "Pagadas" mientras TODAS sus cuotas
-//     reales estén confirmadas (cuotasTodasConfirmadas). Si el ciclo cerró a medias
-//     (alguna cuota sin confirmar), deja de listarse (tab:null) — no se arrastra.
+// Tanda T2 — la pestaña Cuotas es una vista ESTRICTA por mes, sin casos especiales:
+//   · Una deuda se lista en el mes M si y solo si cuotaInfoForMonth(deuda, M) != null
+//     (M cae dentro del ciclo real: purchaseDate+1 .. purchaseDate+numCuotas).
+//   · Dentro de ese mes: 'pagadas' si isManuallyPaid(M), si no 'activas'.
+//   · No hay tercer estado, ni mes de gracia, ni tarjeta de archivo. Una compra
+//     terminada se consulta navegando al mes de su cuota.
 // Devuelve { tab:'activas'|'pagadas'|null, ... }.
 //   · porConfirmar:true → cuota real de este mes cuyo día de vencimiento ya pasó y aún
-//     no se confirma (aviso "Por confirmar").
-//   · completada:true  → compra terminada con todas sus cuotas confirmadas (tarjeta de
-//     archivo en "Pagadas", sin acciones de confirmación).
+//     no se confirma (aviso "Por confirmar" en Activas).
 function cuotaEstadoMes(debt, refDate){
-  const auto = debtStatusForMonth(debt, refDate);   // 'futura' | 'activa' | 'pagada'
-  if(auto === 'futura') return { tab:null, auto };
-  if(auto === 'pagada'){
-    // Mes posterior a la última cuota real: no hay ninguna cuota que confirmar aquí.
-    if(cuotasTodasConfirmadas(debt)) return { tab:'pagadas', auto, confirmada:true, completada:true };
-    return { tab:null, auto, completada:false };
-  }
-  // auto === 'activa': este mes TIENE una cuota real vigente.
-  if(isManuallyPaid(debt, refDate)) return { tab:'pagadas', auto, confirmada:true };
+  if(!cuotaInfoForMonth(debt, refDate)) return { tab:null };
+  if(isManuallyPaid(debt, refDate)) return { tab:'pagadas', confirmada:true };
   const porConfirmar = cuotaVencidaPorFecha(debt, refDate);
-  return { tab:'activas', auto, confirmada:false, porConfirmar };
+  return { tab:'activas', confirmada:false, porConfirmar };
 }
 function _cuotaKeyCtx(debtId, refDate){
   if(isReadOnly()){ blockReadOnly(); return null; }
@@ -5805,30 +5793,25 @@ function renderCuotas(){
   box.innerHTML = filtered.map(d=>{
     const est = cuotaEstadoMes(d, refDate);
     const montoCuota = d.totalAmount/d.numCuotas;
-    // Nº de cuota / saldo. Con cuota real vigente este mes se leen de cuotaInfoForMonth.
-    // Si no hay cuota real (est.completada — compra terminada, opción C de Tanda T) NO se
-    // sintetiza una cuota: la tarjeta se muestra como "Compra pagada" al 100%.
+    // T2: la deuda solo llega aquí si cuotaInfoForMonth != null (cuotaEstadoMes devuelve
+    // tab:null en cualquier mes sin cuota real), así que `info` nunca es null.
     const info = cuotaInfoForMonth(d, refDate);
-    const completada = est.completada === true;
-    const cuotaNum = info ? info.cuotaNum : d.numCuotas;
-    const saldoRestante = info ? info.saldoRestante : 0;
-    const pct = completada ? 100 : Math.round((cuotaNum/d.numCuotas)*100);
+    const cuotaNum = info.cuotaNum;
+    const saldoRestante = info.saldoRestante;
+    const pct = Math.round((cuotaNum/d.numCuotas)*100);
     // Tanda O · punto 7: salto a la compra de origen desde la tarjeta de deuda (misma
     // lógica que btnCuotaProyOrigen del detalle de la fila virtual del Historial).
     const tieneOrigen = state.expenses.some(e=> e.debtId === d.id);
 
-    // Activas: "Marcar como pagada este mes" (+ aviso "Por confirmar" si venció).
-    // Pagadas con cuota real del mes: "Pago confirmado." + "Marcar como pendiente".
-    // Pagadas completada (Tanda T): tarjeta de archivo, sin acciones de confirmación.
+    // Activas: botón "Marcar como pagada este mes" (+ aviso "Por confirmar" si la fecha
+    // de vencimiento ya pasó). Pagadas: "Pago confirmado." + "Marcar como pendiente".
     let actionHtml = '';
     if(est.tab === 'activas'){
       const aviso = est.porConfirmar
         ? `<p class="debt-manual-note">${icon('alert-triangle')} Por confirmar — la fecha de vencimiento ya pasó, pero no has confirmado el pago.</p>`
         : '';
       actionHtml = `${aviso}<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
-    } else if(completada){ // pagadas · compra terminada
-      actionHtml = `<p class="debt-manual-note">${icon('check')} Compra pagada — todas las cuotas están confirmadas.</p>`;
-    } else { // pagadas · cuota real de este mes confirmada a mano
+    } else { // pagadas
       actionHtml = `
       <p class="debt-manual-note">${icon('check')} Pago confirmado.</p>
       <button class="debt-action undo" data-markactiva="${d.id}">Marcar como pendiente</button>`;
@@ -5847,10 +5830,8 @@ function renderCuotas(){
       <button class="row-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       <div class="cuota-expand">
         <div class="debt-foot">
-          ${completada
-            ? `<span>${icon('check')} Compra pagada</span><span><b>${d.numCuotas} de ${d.numCuotas}</b> cuotas</span>`
-            : `<span>Cuota <b>${cuotaNum} de ${d.numCuotas}</b></span>
-          <span>Saldo restante: <b>${money(saldoRestante)}</b></span>`}
+          <span>Cuota <b>${cuotaNum} de ${d.numCuotas}</b></span>
+          <span>Saldo restante: <b>${money(saldoRestante)}</b></span>
         </div>
         <p class="debt-purchase-date">Fecha de compra: <b>${fmtDate(d.purchaseDate)}</b></p>
         ${actionHtml}
