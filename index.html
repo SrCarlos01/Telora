@@ -3101,25 +3101,44 @@ document.getElementById('nextMonth').onclick = nextMonth;
 // Tanda S · pto 1: `focusId` opcional — qué elemento recibe el foco al abrir. Lo usa
 // el sheet de confirmar borrado para que el foco inicial caiga en "Cancelar", no en
 // el botón rojo (así Enter/Espacio por defecto no elimina nada).
+//
+// Tanda X · pto 1: apilado de sheets. Todos comparten `z-index:50` en el CSS, así que
+// cuando uno se abre ENCIMA de otro el que queda visible es el ÚLTIMO en el DOM, no el
+// último en abrirse. #sheetCfgMigrar está antes que #sheetConfig en el marcado: por eso
+// la migración de fuentes/métodos quedaba oculta detrás de Configuración. openSheet()
+// sube el z-index del que se abre encima; closeSheet() lo limpia. El cierre por Escape,
+// fondo o botón [data-close] va SIEMPRE sobre el sheet más arriba (mayor z efectivo),
+// no sobre el último del DOM.
+function sheetZ(el){ return parseInt(el.style.zIndex, 10) || 50; }
+function sheetTopMost(){
+  const abiertos = [...document.querySelectorAll('.sheet-overlay.open')];
+  if(!abiertos.length) return null;
+  return abiertos.reduce((a,b)=> sheetZ(b) >= sheetZ(a) ? b : a);
+}
+function dismissSheet(el){ if(!el) return; el.classList.remove('open'); el.style.zIndex = ''; }
 function openSheet(id, focusId){
-  document.getElementById(id).classList.add('open');
+  const el = document.getElementById(id);
+  const abiertos = [...document.querySelectorAll('.sheet-overlay.open')].filter(o=> o !== el);
+  el.classList.add('open');
+  // Si ya había otro sheet abierto, este se apila un escalón por encima del más alto.
+  // Si es el primero, se limpia cualquier z-index heredado (vuelve a la base 50 del CSS).
+  el.style.zIndex = abiertos.length ? (Math.max(50, ...abiertos.map(sheetZ)) + 1) : '';
   if(window.__syncTogglePressed) window.__syncTogglePressed();   // aria-pressed de los toggles del sheet
   if(focusId){
     // Foco síncrono: el sheet ya pasó a display:flex en la línea de arriba (misma
     // tarea), así que no hace falta esperar un frame para que el elemento sea enfocable.
-    const el = document.getElementById(focusId);
-    if(el) el.focus();
+    const f = document.getElementById(focusId);
+    if(f) f.focus();
   }
 }
-function closeSheet(id){ document.getElementById(id).classList.remove('open'); }
-// Escape cierra el sheet abierto más reciente — mismo efecto que tocar el fondo o el
-// gesto de swipe-down (cancela, nunca confirma). No existía ningún manejo de Escape
-// para los sheets antes de esto; se agrega global para que sea consistente en todos.
+function closeSheet(id){ dismissSheet(document.getElementById(id)); }
+// Escape cierra el sheet de más arriba — mismo efecto que tocar el fondo o el gesto de
+// swipe-down (cancela, nunca confirma). No existía ningún manejo de Escape para los
+// sheets antes de esto; se agrega global para que sea consistente en todos.
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Escape') return;
-  const open = document.querySelectorAll('.sheet-overlay.open');
-  if(!open.length) return;
-  open[open.length - 1].classList.remove('open');
+  const top = sheetTopMost();
+  if(top) dismissSheet(top);
 });
 
 /* ==================== A11Y: toggles y tarjetas de opción ==================== */
@@ -3145,10 +3164,10 @@ document.addEventListener('keydown', e=>{
   window.__syncTogglePressed = syncPressed;
 })();
 document.querySelectorAll('[data-close]').forEach(b=>{
-  b.addEventListener('click', ()=> b.closest('.sheet-overlay').classList.remove('open'));
+  b.addEventListener('click', ()=> dismissSheet(b.closest('.sheet-overlay')));
 });
 document.querySelectorAll('.sheet-overlay').forEach(ov=>{
-  ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
+  ov.addEventListener('click', e=>{ if(e.target===ov) dismissSheet(ov); });
 });
 
 document.getElementById('btnAdd').onclick = ()=>{
@@ -4495,11 +4514,13 @@ function desgloseDisponible(refDate, incluirCeros){
 }
 
 /* ==================== TANDA R · DONA DE GASTOS POR CATEGORÍA (pto 3) ====================
-   TOP 5 categorías + un segmento "Otros" que agrupa el resto. El total DEBE ser el mismo
-   del indicador "Gastos" = contado + TODAS las cuotas del mes (devengado): por eso no
-   cambia al confirmar una cuota como pagada. Los colores se asignan por ranking global
-   (índice 0-4 del top; las categorías fuera del top comparten el color del segmento
-   "Otros", índice 5) para que la lista "Gasto por categoría" funcione como leyenda. */
+   TODAS las categorías con monto > 0 (Tanda X · pto 2: antes eran TOP 5 + un segmento
+   "Otros" que agrupaba el resto). El total DEBE ser el mismo del indicador "Gastos" =
+   contado + TODAS las cuotas del mes (devengado): por eso no cambia al confirmar una
+   cuota como pagada. Los colores se asignan por ranking (categoría más gastadora = color
+   0) vía sliceColor(), que da tonos distintos hasta 12+ categorías; la lista "Gasto por
+   categoría" reusa este mismo mapa `colorDeCat` para funcionar como leyenda. Esto es
+   presentación: ningún monto se agrupa ni se recorta, sólo se dibujan todos los tramos. */
 function donaResumenData(refDate){
   const T = resumenTotalesDelMes(refDate);
   const totalGastos = T.gastos + T.cuotas;
@@ -4508,10 +4529,8 @@ function donaResumenData(refDate){
   state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
   const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
   const colorDeCat = {};
-  orden.forEach(([cat], i)=>{ colorDeCat[cat] = SLICE_COLORS[Math.min(i, 5)]; });
-  const segs = orden.slice(0, 5).map(([cat,val])=> ({ label:cat, value:val, color: colorDeCat[cat] }));
-  const restoVal = orden.slice(5).reduce((s,[,v])=> s + v, 0);
-  if(Math.round(restoVal) > 0) segs.push({ label:'Otros', value:restoVal, color: SLICE_COLORS[5], esOtros:true });
+  orden.forEach(([cat], i)=>{ colorDeCat[cat] = sliceColor(i); });
+  const segs = orden.map(([cat,val])=> ({ label:cat, value:val, color: colorDeCat[cat] }));
   const suma = segs.reduce((s,x)=> s + x.value, 0);
   return { segs, total: totalGastos, colorDeCat, suma, cuadra: Math.round(suma) === Math.round(totalGastos) };
 }
@@ -5654,10 +5673,7 @@ function renderHistorial(){
       if(hTab === 'gastos'){
         renderPieChart(chartBox, gastoPorCategoriaData(currentDate), { empty:'Sin gastos este mes para la torta.' });
       } else {
-        const bySrc = {};
-        getIncomesForMonth(currentDate).forEach(i=> bySrc[i.source] = (bySrc[i.source]||0) + i.amount);
-        const data = Object.entries(bySrc).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
-        renderPieChart(chartBox, data, { empty:'Sin ingresos este mes para la torta.' });
+        renderPieChart(chartBox, ingresoPorFuenteData(currentDate), { empty:'Sin ingresos este mes para la torta.' });
       }
     } else {
       // 'barra': evolución de los últimos 6 meses. Igual que la torta, usa los datos
@@ -7302,6 +7318,21 @@ const CHART_STATES_BY_SCREEN = {
 };
 // Colores de sectores (torta): salen de las CSS custom properties, se ciclan.
 const SLICE_COLORS = ['var(--gold)','var(--burgundy-light)','var(--success)','var(--gold-dim)','var(--danger)','var(--cream-dim)','var(--burgundy)'];
+// Tanda X · pto 2: al quitar el tope "top 5" de la dona del Resumen puede haber hasta
+// 12 categorías (o 12 fuentes en la torta de ingresos). Los 7 tonos de SLICE_COLORS no
+// alcanzan, así que a partir del 8º se generan por rotación de matiz (ángulo áureo)
+// sobre una base cálida coherente con la paleta. El color de un índice dado es siempre
+// el mismo: `sliceColor(3)` no cambia entre renders ni entre meses.
+function sliceColor(i){
+  if(i < SLICE_COLORS.length) return SLICE_COLORS[i];
+  const k = i - SLICE_COLORS.length;
+  // Base en 150° (verde-cian): así los tonos generados no se confunden con los 7 fijos,
+  // que son todos cálidos (oro / burdeos / rojo). Ángulo áureo = máximo reparto entre sí.
+  const hue = Math.round((150 + k * 137.508) % 360);
+  const sat = 55 + (k % 3) * 10;                       // 55 / 65 / 75 %
+  const lig = 62;
+  return `hsl(${hue} ${sat}% ${lig}%)`;
+}
 
 function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 // El botón refleja SIEMPRE el estado ACTUAL (el mismo chartView[screen] que decide
@@ -7435,18 +7466,21 @@ function openDondeDisponible(){
   btn.addEventListener('click', openDondeDisponible);
 })();
 
-// Torta (sectores) + leyenda. data: [{label, value}]. opts: {fmt, empty, note}
+// Torta (sectores) + leyenda. data: [{label, value, color?}]. opts: {fmt, empty, note}
+// Si un dato trae `color` se respeta (Tanda X · pto 3: la torta de ingresos por fuente
+// pasa colores estables por fuente); si no, se cicla SLICE_COLORS por posición.
 function renderPieChart(container, data, opts){
   opts = opts || {};
   const fmt = opts.fmt || (v=> money(v));
   const items = (data||[]).filter(d=> d.value > 0);
   if(!items.length){ container.innerHTML = emptyMsg(opts.empty || 'Sin datos para graficar.'); return; }
   const total = items.reduce((s,d)=> s + d.value, 0);
+  const colOf = (d,i)=> d.color || SLICE_COLORS[i % SLICE_COLORS.length];
   const size = 176, cx = size/2, cy = size/2, r = size/2 - 2;
   let ang = -Math.PI/2;
   const slices = items.map((d,i)=>{
     const frac = d.value / total;
-    const col = SLICE_COLORS[i % SLICE_COLORS.length];
+    const col = colOf(d, i);
     if(frac >= 0.999) return `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${col}"></circle>`;
     const a0 = ang, a1 = ang + frac * Math.PI * 2; ang = a1;
     const x0 = (cx + r*Math.cos(a0)).toFixed(2), y0 = (cy + r*Math.sin(a0)).toFixed(2);
@@ -7456,7 +7490,7 @@ function renderPieChart(container, data, opts){
   }).join('');
   const svg = `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px;">${slices}</svg>`;
   const legend = `<div class="pie-legend">` + items.map((d,i)=>{
-    const col = SLICE_COLORS[i % SLICE_COLORS.length];
+    const col = colOf(d, i);
     const pct = Math.round(d.value / total * 100);
     return `<div class="pie-leg-item"><span class="sw" style="background:${col}"></span><span class="pl-label">${d.label}</span><span class="pl-val">${fmt(d.value)} · ${pct}%</span></div>`;
   }).join('') + `</div>`;
@@ -7469,6 +7503,36 @@ function gastoPorCategoriaData(refDate){
   getExpensesForMonth(refDate).filter(e=> !e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
   state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
   return Object.entries(ct).filter(([,v])=> v>0).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
+}
+
+// Tanda X · pto 3: ingreso por FUENTE del mes, para la torta de la pestaña Ingresos del
+// Historial. Mismo criterio que la torta de gastos por categoría: TODAS las fuentes con
+// monto > 0, sin agrupar en "Otros" (que además es una fuente REAL del usuario, así que
+// no puede haber choque de nombres). Un ingreso sin fuente (source vacío) se rotula
+// "Sin fuente", igual que el agregado de Insights.
+function ingresoPorFuenteData(refDate){
+  const by = {};
+  getIncomesForMonth(refDate).forEach(i=>{
+    const k = (i.source && String(i.source).trim()) || 'Sin fuente';
+    by[k] = (by[k] || 0) + i.amount;
+  });
+  return Object.entries(by).filter(([,v])=> v > 0)
+    .map(([label,value])=> ({ label, value, color: colorDeFuente(label) }))
+    .sort((a,b)=> b.value - a.value);
+}
+// Color ESTABLE por fuente: sale de su posición en state.config.fuentes, no de su
+// ranking del mes ni de su nombre — así una fuente no cambia de color entre meses, y
+// tampoco al renombrarla (Tanda W cambia el texto, no la posición en la lista). Una
+// fuente heredada que ya no está en la lista cae a un tono generado por hash del nombre;
+// "Sin fuente" tiene un tono fijo apagado.
+function colorDeFuente(nombre){
+  if(nombre === 'Sin fuente') return 'var(--cream-dim)';
+  const arr = (state.config && state.config.fuentes) || [];
+  const idx = arr.indexOf(nombre);
+  if(idx >= 0) return sliceColor(idx);
+  let h = 0;
+  for(let c = 0; c < nombre.length; c++) h = (h * 31 + nombre.charCodeAt(c)) | 0;
+  return sliceColor(SLICE_COLORS.length + (Math.abs(h) % 12));   // zona de tonos generados
 }
 
 // Barras horizontales. data: [{label, value}]. opts: {max, fmt, empty, note}
