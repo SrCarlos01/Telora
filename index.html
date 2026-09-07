@@ -199,7 +199,11 @@ button{font-family:inherit;}
   border-radius:20px; padding:22px 20px; margin-bottom:22px;
 }
 .balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
-.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9;}
+/* Tanda S · pto 4: red de seguridad para el caso extremo (8 cifras + font-scale 1.3,
+   ver .balance-head-main más abajo) — si ni siquiera la fila completa (dona ya abajo)
+   alcanza para la cifra, que baje a una 2ª línea propia en vez de salirse de la
+   tarjeta. overflow-wrap:anywhere no cambia nada cuando el monto sí cabe. */
+.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9; overflow-wrap:anywhere;}
 .amount.neg{color:#F3D3CE;}
 /* ---------- TANDA R2 · líneas de contexto de la cifra grande (ptos 2 y 3) ----------
    "Saldo mes anterior" y "Cuotas pendientes" con sintaxis pareja: nombre · monto ·
@@ -236,8 +240,13 @@ button{font-family:inherit;}
    gap 10px→6px y letter-spacing -0.2px: a font-scale 1.3 (accesibilidad, "Muy grande")
    "Ingresos" en negrita alcanzaba a desbordar su columna por unos px — verificado con
    los 3 tamaños de letra del sistema; con este ajuste ya no ocurre en ninguno. */
-.balance-row{display:flex; gap:6px; align-items:flex-start; margin-top:14px;}
-.balance-item{flex:1; min-width:0;}
+/* Tanda S · pto 5: min-width:max-content en .balance-item (en vez de 0) + flex-wrap en
+   la fila — con montos de 7-8 cifras el valor .v ya no se recorta: si las 4 columnas no
+   caben, la fila pasa a 2 líneas en vez de comprimir el monto por debajo de su ancho
+   real. El resaltado de labels de R4 pto 3 (12.5px negrita, letter-spacing -0.2px, gap
+   6px) NO se toca — ya está medido sin overflow y sigue igual. */
+.balance-row{display:flex; flex-wrap:wrap; gap:6px; row-gap:12px; align-items:flex-start; margin-top:14px;}
+.balance-item{flex:1; min-width:max-content;}
 .balance-item .k{font-size:12.5px; font-weight:700; letter-spacing:-0.2px; color:#E7C3CB; margin:0 0 3px;}
 .balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
 /* Desglose "Contado" bajo el mini-total "Gastos" (Tanda O · punto 4): "Gastos" pasa a
@@ -254,10 +263,21 @@ button{font-family:inherit;}
 :root.hc #rIngresos, :root.hc #rGastos, :root.hc #rCuotas, :root.hc #rMetas{color:#fff;}
 
 /* ---------- TANDA R · cabecera de la balance-card + dona de gastos ---------- */
-.balance-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
-.balance-head-main{ flex:1; min-width:0; }
+/* Tanda S · pto 4: la cifra grande se solapaba con la dona a escala 1× con montos de 7
+   cifras (positivos o negativos) — "$-4.634.567" no cabía en .balance-head-main con
+   min-width:0 y desbordaba encima de la dona en vez de forzarla a bajar.
+   min-width:max-content hace que el ítem nunca se encoja por debajo del ancho real de
+   la cifra, así que junto con flex-wrap:wrap en .balance-head la dona baja a su propia
+   línea en cuanto no caben lado a lado (en vez de solaparse o encogerse hasta
+   ilegible). El min() con 100% es el techo para el caso extremo (8 cifras + escala
+   1.3): sin él, min-width:max-content puro podía forzar la fila entera más ancha que
+   la tarjeta y desbordar la pantalla; con el techo, si ni la cifra sola alcanza,
+   overflow-wrap:anywhere en .amount (ver arriba) la baja a una 2ª línea en vez de
+   salirse. En montos cortos nada cambia: siguen cabiendo lado a lado igual que antes. */
+.balance-head{ display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:14px; }
+.balance-head-main{ flex:1 1 auto; min-width:min(max-content, 100%); }
 .balance-head-main .amount{ margin-bottom:0; }
-.balance-dona{ flex-shrink:0; width:98px; text-align:center; }
+.balance-dona{ flex-shrink:0; width:98px; text-align:center; margin-left:auto; }
 .balance-dona-svg{ width:98px; height:98px; }
 .balance-dona-svg svg{ display:block; width:100%; height:100%; overflow:visible; }
 .balance-dona-tip{ font-size:10px; line-height:1.35; color:#E7C3CB; margin:3px 0 0; min-height:27px; }
@@ -1022,11 +1042,23 @@ button:active{ transform:scale(0.97); }
   box-shadow:0 10px 30px rgba(0,0,0,.4);
   opacity:0; transform:translateY(14px);
   transition:opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  display:flex; align-items:center; gap:12px; pointer-events:auto;
 }
 .toast.show{ opacity:1; transform:translateY(0); }
 .toast.error{ border-left-color:var(--danger); }
 .toast.success{ border-left-color:var(--success); }
 :root.hc .toast{ border-width:2px; color:#fff; }
+/* Tanda S · pto 1: botón de acción opcional dentro del toast (ej. "Deshacer"). El host
+   sigue con pointer-events:none para no bloquear el resto de la pantalla; el toast en sí
+   necesita pointer-events:auto para que el botón sea tocable. */
+.toast-msg{ flex:1; min-width:0; }
+.toast-action{
+  flex-shrink:0; background:none; border:0; padding:4px 2px; margin:0 -4px 0 0;
+  font:inherit; font-weight:700; font-size:13px; color:var(--gold); cursor:pointer;
+  text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;
+}
+.toast-action:active{ color:var(--cream); }
+:root.hc .toast-action{ color:#fff; text-decoration:underline; }
 
 /* Confetti al completar una meta (canvas nativo, sin librerías). */
 .confetti-cv{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:200; }
@@ -1193,6 +1225,16 @@ button:active{ transform:scale(0.97); }
 :root.hc .insight-alerta .ia-razon{color:var(--cream);}
 .insight-ok{font-size:12.5px; color:var(--cream-dim); margin:8px 0 0;}
 :root.hc .insight-ok{color:var(--cream);}
+
+/* Tanda S · pto 2: aviso de cuota terminada — buena noticia, tratada como tal (verde,
+   sin ícono de alerta), NO como .insight-alerta (rojo). Mismo patrón visual que
+   .insight-frase pero con borde verde en vez de dorado. */
+.insight-cuota-libre{
+  font-size:13px; color:var(--cream); line-height:1.5; margin:0 0 14px;
+  padding:11px 13px; background:rgba(125,155,105,0.10); border:1px solid rgba(125,155,105,0.35);
+  border-left:3px solid var(--success); border-radius:var(--radius-sm);
+}
+:root.hc .insight-cuota-libre{border-width:2px;}
 
 /* ---------- METAS: racha de cumplimiento del aporte automático ---------- */
 .goal-racha{
@@ -1616,16 +1658,19 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
-<!-- SHEET: confirmar borrar gasto especial (cuota o fijo) -->
+<!-- SHEET: confirmar eliminar gasto/ingreso (Tanda S · pto 1). Reutilizada para los 5
+     casos: gasto/ingreso simple, gasto/ingreso fijo, y compra a crédito con cuotas. El
+     título y el texto se arman en JS según el caso; el botón rojo confirma, el botón
+     neutro (foco por defecto) cancela — igual que Escape y el gesto de cierre. -->
 <div class="sheet-overlay" id="sheetConfirmDebt">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="confirmDeleteTitle">Este gasto tiene cuotas asociadas</h2>
     <p class="sheet-note" id="confirmDeleteText">
-      Si eliminas este gasto, también se eliminará la deuda completa y todas sus cuotas pendientes en meses futuros. Esta acción no se puede deshacer.
+      Si eliminas este gasto, también se eliminará la deuda completa y todas sus cuotas pendientes en meses futuros.
     </p>
     <button class="btn-danger" id="btnConfirmDeleteDebt">Sí, eliminar todo</button>
-    <button class="btn-ghost" data-close>Cancelar</button>
+    <button class="btn-ghost" id="btnCancelConfirmDelete" data-close>Cancelar</button>
   </div>
 </div>
 
@@ -2102,6 +2147,45 @@ let editingIncomeId = null;
 let pendingDeleteExpenseId = null;
 let pendingDeleteIncomeId = null;
 
+/* ==================== TANDA S · pto 1: DESHACER POR SNAPSHOT ====================
+   Antes de cualquier borrado (gasto, ingreso, o deuda+cuotas), se guarda una copia
+   JSON de TODO lo que se va a quitar o mutar. "Deshacer" restaura esos objetos tal
+   cual — mismos IDs, mismos campos — en vez de reconstruirlos desde cero. Para el
+   caso "fijo" (que no borra el objeto, solo le corta la recurrencia hacia adelante
+   vía fixedEndMonthKey) el snapshot también es el objeto COMPLETO tal como estaba
+   antes de mutarlo: deshacer lo reemplaza entero, no solo revierte un campo — mismo
+   principio de "snapshot, no reconstrucción" para los cinco casos por igual.
+   Si la app se cierra con el toast de "Deshacer" todavía abierto: el borrado YA quedó
+   guardado (saveState() corre antes de mostrar el toast, igual que el resto de la
+   app), así que "Deshacer" se pierde con la sesión. Es una decisión deliberada, no un
+   descuido — no hay una cola de "borrados pendientes" que sobreviva a un cierre; el
+   guardado sigue siendo síncrono e inmediato como en el resto de MisFinanzas. */
+const deepClone = x => JSON.parse(JSON.stringify(x));
+// Captura objeto + posición ORIGINAL en su array (antes de quitarlo). "Deshacer" no
+// solo repone el objeto tal cual — lo repone exactamente donde estaba, para que el
+// estado quede byte a byte igual al de antes del borrado, no solo "financieramente
+// equivalente" con el objeto reordenado al final.
+const snapItem = (arr, obj) => ({ obj: deepClone(obj), index: arr.indexOf(obj) });
+function restoreDeleteSnapshot(snap){
+  if(!snap) return;
+  const reinsert = (coll, items)=>{
+    const arr = state[coll];
+    (items || []).slice().sort((a,b)=> a.index - b.index).forEach(it=>{
+      arr.splice(Math.min(Math.max(it.index, 0), arr.length), 0, it.obj);
+    });
+  };
+  reinsert('expenses', snap.expenses);
+  reinsert('incomes', snap.incomes);
+  reinsert('debts', snap.debts);
+  (snap.mutations || []).forEach(m=>{
+    const arr = state[m.coll];
+    const idx = arr ? arr.findIndex(x=> x.id === m.id) : -1;
+    if(idx > -1) arr[idx] = m.snapshot;   // reemplazo completo del objeto, no fusión de campos
+  });
+  saveState();
+  renderAll();
+}
+
 /* Estado de microinteracciones (Tanda G) */
 let lastResumenMonthKey = null;      // conteo animado de totales: solo al cambiar de mes / abrir Resumen
 let lastSemEstado = null;            // semáforo: detectar el paso a rojo para el pulso único
@@ -2112,7 +2196,16 @@ let rachaSeenSeeded = false;
 const GOALS_FREE_LIMIT = 3; // metas activas permitidas en la versión gratuita (freemium)
 
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const money = n => "$" + Math.round(n).toLocaleString('es-CL');
+// Tanda S · pto 3: el signo va ANTES del símbolo ("-$214.900", no "$-214.900") — así
+// se lee en todo el resto de la UI (Historial, montos con signo a mano, etc.). Antes
+// se concatenaba "$" + Math.round(n).toLocaleString(), y toLocaleString ya trae el "-"
+// pegado al número, dejándolo detrás del símbolo. Fuente única: todo el resto de la
+// app llama a money(), nunca arma el signo por su cuenta salvo con Math.abs() de por
+// medio (montos que ya llegan sin signo).
+const money = n => {
+  const r = Math.round(n);
+  return (r < 0 ? '-' : '') + '$' + Math.abs(r).toLocaleString('es-CL');
+};
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
@@ -2137,8 +2230,11 @@ let reduceMotionMQ = null;
 try{ reduceMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)'); }catch(_){}
 function prefersReducedMotion(){ return !!(reduceMotionMQ && reduceMotionMQ.matches); }
 
-/* ---- Toast / snackbar propio (reemplaza alert() en flujos no críticos) ---- */
-function showToast(msg, type, ms){
+/* ---- Toast / snackbar propio (reemplaza alert() en flujos no críticos) ----
+   Tanda S · pto 1: acepta un `action` opcional ({label, onClick}) para el toast de
+   "Deshacer" al eliminar — mismo componente, sin sistema paralelo. Los toasts sin
+   `action` (todos los llamados existentes) se comportan exactamente igual que antes. */
+function showToast(msg, type, ms, action){
   try{
     let host = document.getElementById('toastHost');
     if(!host){
@@ -2149,19 +2245,33 @@ function showToast(msg, type, ms){
     const t = document.createElement('div');
     t.className = 'toast' + (type ? ' ' + type : '');
     t.setAttribute('role', type === 'error' ? 'alert' : 'status');
-    t.textContent = String(msg == null ? '' : msg);
+    const msgEl = document.createElement('span');
+    msgEl.className = 'toast-msg';
+    msgEl.textContent = String(msg == null ? '' : msg);
+    t.appendChild(msgEl);
     host.appendChild(t);
     const life = ms || 3400;
-    if(prefersReducedMotion()){
-      t.classList.add('show');
-      setTimeout(()=> t.remove(), life);
-      return;
-    }
-    requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
-    setTimeout(()=>{
+    const reduced = prefersReducedMotion();
+    const remove = ()=>{
+      if(reduced){ t.remove(); return; }
       t.classList.remove('show');
       setTimeout(()=> t.remove(), 320);
-    }, life);
+    };
+    const timer = setTimeout(remove, life);
+    if(action && action.label && typeof action.onClick === 'function'){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', ()=>{
+        clearTimeout(timer);
+        action.onClick();
+        remove();
+      });
+      t.appendChild(btn);
+    }
+    if(reduced){ t.classList.add('show'); return; }
+    requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
   }catch(_){ /* último recurso: no romper el flujo que llamaba */ }
 }
 
@@ -2912,11 +3022,29 @@ document.getElementById('nextMonth').onclick = nextMonth;
 })();
 
 /* ==================== SHEETS (modales) ==================== */
-function openSheet(id){
+// Tanda S · pto 1: `focusId` opcional — qué elemento recibe el foco al abrir. Lo usa
+// el sheet de confirmar borrado para que el foco inicial caiga en "Cancelar", no en
+// el botón rojo (así Enter/Espacio por defecto no elimina nada).
+function openSheet(id, focusId){
   document.getElementById(id).classList.add('open');
   if(window.__syncTogglePressed) window.__syncTogglePressed();   // aria-pressed de los toggles del sheet
+  if(focusId){
+    // Foco síncrono: el sheet ya pasó a display:flex en la línea de arriba (misma
+    // tarea), así que no hace falta esperar un frame para que el elemento sea enfocable.
+    const el = document.getElementById(focusId);
+    if(el) el.focus();
+  }
 }
 function closeSheet(id){ document.getElementById(id).classList.remove('open'); }
+// Escape cierra el sheet abierto más reciente — mismo efecto que tocar el fondo o el
+// gesto de swipe-down (cancela, nunca confirma). No existía ningún manejo de Escape
+// para los sheets antes de esto; se agrega global para que sea consistente en todos.
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape') return;
+  const open = document.querySelectorAll('.sheet-overlay.open');
+  if(!open.length) return;
+  open[open.length - 1].classList.remove('open');
+});
 
 /* ==================== A11Y: toggles y tarjetas de opción ==================== */
 // Los .toggle-opt y .choice-card son <div>: se les da semántica de botón, foco por
@@ -3168,61 +3296,112 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   flashSaveButton(document.getElementById('btnSaveGasto'), ()=>{ closeSheet('sheetGasto'); renderAll(); });
 };
 
-let pendingDeleteType = null; // 'cuota' | 'fijo'
+let pendingDeleteType = null; // 'simple' | 'cuota' | 'fijo' | 'simpleIngreso' | 'fijoIngreso'
+
+/* ==================== TANDA S · pto 1: TEXTO "QUÉ SE BORRA" ====================
+   Título del sheet de confirmación para TODOS los casos: nombre, monto y fecha del
+   movimiento — nunca un "¿estás seguro?" genérico. `${d} de ${mes}` en vez de
+   fmtDate() (que da "02/09/26") porque acá se lee en voz alta la pregunta, no se
+   escanea una lista. */
+function fmtDiaMes(iso){ const [,m,d] = iso.split('-').map(Number); return `${d} de ${MESES[m-1].toLowerCase()}`; }
+function fraseQueSeBorra(nombre, monto, fechaIso){
+  return `¿Eliminar "${(nombre||'').trim() || 'Movimiento'} ${money(monto)}" del ${fmtDiaMes(fechaIso)}?`;
+}
 
 document.getElementById('btnDeleteGasto').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   const e = state.expenses.find(x=>x.id===editingExpenseId);
-  if(e && e.debtId){
+  if(!e) return;
+  if(e.debtId){
+    const debt = state.debts.find(d=>d.id===e.debtId);
     pendingDeleteExpenseId = editingExpenseId;
     pendingDeleteType = 'cuota';
-    document.getElementById('confirmDeleteTitle').textContent = 'Este gasto tiene cuotas asociadas';
-    document.getElementById('confirmDeleteText').textContent = 'Si eliminas este gasto, también se eliminará la deuda completa y todas sus cuotas pendientes en meses futuros. Esta acción no se puede deshacer.';
+    document.getElementById('confirmDeleteTitle').textContent = fraseQueSeBorra(e.nombre || e.description, e.amount, e.date);
+    if(debt && debt.numCuotas > 0){
+      const montoCuota = Math.round(debt.totalAmount / debt.numCuotas);
+      const fraseCuotas = debt.numCuotas === 1 ? 'la cuota pendiente' : `las ${debt.numCuotas} cuotas pendientes`;
+      document.getElementById('confirmDeleteText').textContent =
+        `Es una compra a crédito: se eliminará también ${fraseCuotas} de ${money(montoCuota)}${debt.numCuotas===1?'':' cada una'}.`;
+    } else {
+      document.getElementById('confirmDeleteText').textContent = 'Es una compra a crédito: también se eliminará la deuda asociada.';
+    }
+    document.getElementById('confirmDeleteText').style.display = '';
+    document.getElementById('btnConfirmDeleteDebt').textContent = 'Sí, eliminar todo';
     closeSheet('sheetGasto');
-    openSheet('sheetConfirmDebt');
-  } else if(e && e.tipo==='Fijo'){
+    openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
+  } else if(e.tipo==='Fijo'){
     pendingDeleteExpenseId = editingExpenseId;
     pendingDeleteType = 'fijo';
     const nombreMes = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
-    document.getElementById('confirmDeleteTitle').textContent = 'Este es un gasto fijo recurrente';
-    document.getElementById('confirmDeleteText').textContent = `Dejará de aparecer desde ${nombreMes} en adelante. Los meses anteriores mantendrán este gasto en su historial, tal como ocurrió. Esta acción no se puede deshacer.`;
+    document.getElementById('confirmDeleteTitle').textContent = fraseQueSeBorra(e.nombre || e.description, e.amount, e.date);
+    document.getElementById('confirmDeleteText').textContent =
+      `Es un gasto fijo recurrente: dejará de aparecer desde ${nombreMes} en adelante. Los meses anteriores mantendrán este gasto en su historial, tal como ocurrió.`;
+    document.getElementById('confirmDeleteText').style.display = '';
+    document.getElementById('btnConfirmDeleteDebt').textContent = 'Eliminar desde este mes';
     closeSheet('sheetGasto');
-    openSheet('sheetConfirmDebt');
+    openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   } else {
-    const delId = editingExpenseId;
-    state.expenses = state.expenses.filter(x=>x.id!==delId);
-    haptic(HAPTIC_DELETE);
-    saveState(); closeSheet('sheetGasto');
-    fadeRow(document.querySelector('[data-editexpense="' + delId + '"]'), renderAll);
+    pendingDeleteExpenseId = editingExpenseId;
+    pendingDeleteType = 'simple';
+    document.getElementById('confirmDeleteTitle').textContent = fraseQueSeBorra(e.nombre || e.description, e.amount, e.date);
+    document.getElementById('confirmDeleteText').textContent = '';
+    document.getElementById('confirmDeleteText').style.display = 'none';
+    document.getElementById('btnConfirmDeleteDebt').textContent = 'Eliminar';
+    closeSheet('sheetGasto');
+    openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   }
 };
 document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   haptic(HAPTIC_DELETE);
-  if(pendingDeleteType === 'fijoIngreso'){
-    // Ingreso fijo recurrente: corta la recurrencia desde el mes visto en adelante;
-    // los meses anteriores quedan intactos (mismo criterio que los gastos fijos).
+  const tipo = pendingDeleteType;
+
+  if(tipo === 'simpleIngreso' || tipo === 'fijoIngreso'){
     const i = state.incomes.find(x=>x.id===pendingDeleteIncomeId);
-    if(i) i.fixedEndMonthKey = monthKey(currentDate);
-    saveState();
+    if(i){
+      if(tipo === 'simpleIngreso'){
+        const snap = { incomes:[snapItem(state.incomes, i)] };
+        state.incomes = state.incomes.filter(x=>x.id!==i.id);
+        saveState(); closeSheet('sheetConfirmDebt');
+        fadeRow(document.querySelector('[data-editincome="' + i.id + '"]'), renderAll);
+        showToast('Ingreso eliminado.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
+      } else {
+        const snap = { mutations:[{ coll:'incomes', id:i.id, snapshot: deepClone(i) }] };
+        i.fixedEndMonthKey = monthKey(currentDate);
+        saveState(); closeSheet('sheetConfirmDebt'); renderAll();
+        showToast('Ingreso fijo cortado desde este mes.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
+      }
+    }
     pendingDeleteType = null; pendingDeleteIncomeId = null;
-    closeSheet('sheetConfirmDebt'); renderAll();
     return;
   }
+
   const e = state.expenses.find(x=>x.id===pendingDeleteExpenseId);
   if(e){
-    if(pendingDeleteType==='cuota'){
+    if(tipo==='cuota'){
+      const debt = state.debts.find(d=>d.id===e.debtId);
+      const snap = { expenses:[snapItem(state.expenses, e)], debts: debt ? [snapItem(state.debts, debt)] : [] };
       state.debts = state.debts.filter(d=>d.id!==e.debtId);
-      state.expenses = state.expenses.filter(x=>x.id!==pendingDeleteExpenseId);
-    } else if(pendingDeleteType==='fijo'){
+      state.expenses = state.expenses.filter(x=>x.id!==e.id);
+      saveState(); closeSheet('sheetConfirmDebt');
+      fadeRow(document.querySelector('[data-editexpense="' + e.id + '"]'), renderAll);
+      showToast('Compra a crédito eliminada.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
+    } else if(tipo==='fijo'){
       // Corta la recurrencia desde el mes que se está viendo en adelante;
       // los meses anteriores (ya generados/registrados) quedan intactos.
+      const snap = { mutations:[{ coll:'expenses', id:e.id, snapshot: deepClone(e) }] };
       e.fixedEndMonthKey = monthKey(currentDate);
+      saveState(); closeSheet('sheetConfirmDebt'); renderAll();
+      showToast('Gasto fijo cortado desde este mes.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
+    } else {
+      const snap = { expenses:[snapItem(state.expenses, e)] };
+      state.expenses = state.expenses.filter(x=>x.id!==e.id);
+      saveState(); closeSheet('sheetConfirmDebt');
+      fadeRow(document.querySelector('[data-editexpense="' + e.id + '"]'), renderAll);
+      showToast('Gasto eliminado.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
     }
-    saveState();
   }
   pendingDeleteType = null;
-  closeSheet('sheetConfirmDebt'); renderAll();
 };
 
 /* ==================== FORM: INGRESO ==================== */
@@ -3285,21 +3464,28 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   const i = state.incomes.find(x=>x.id===editingIncomeId);
-  if(i && i.tipo==='Fijo'){
+  if(!i) return;
+  if(i.tipo==='Fijo'){
     // Ingreso fijo recurrente: confirmación + corte hacia adelante (no se borra el objeto).
     pendingDeleteIncomeId = editingIncomeId;
     pendingDeleteType = 'fijoIngreso';
     const nombreMes = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
-    document.getElementById('confirmDeleteTitle').textContent = 'Este es un ingreso fijo recurrente';
-    document.getElementById('confirmDeleteText').textContent = `Dejará de aparecer desde ${nombreMes} en adelante. Los meses anteriores mantendrán este ingreso en su historial, tal como ocurrió. Esta acción no se puede deshacer.`;
+    document.getElementById('confirmDeleteTitle').textContent = fraseQueSeBorra(i.nombre || i.description, i.amount, i.date);
+    document.getElementById('confirmDeleteText').textContent =
+      `Es un ingreso fijo recurrente: dejará de aparecer desde ${nombreMes} en adelante. Los meses anteriores mantendrán este ingreso en su historial, tal como ocurrió.`;
+    document.getElementById('confirmDeleteText').style.display = '';
+    document.getElementById('btnConfirmDeleteDebt').textContent = 'Eliminar desde este mes';
     closeSheet('sheetIngreso');
-    openSheet('sheetConfirmDebt');
+    openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   } else {
-    const delId = editingIncomeId;
-    state.incomes = state.incomes.filter(x=>x.id!==delId);
-    haptic(HAPTIC_DELETE);
-    saveState(); closeSheet('sheetIngreso');
-    fadeRow(document.querySelector('[data-editincome="' + delId + '"]'), renderAll);
+    pendingDeleteIncomeId = editingIncomeId;
+    pendingDeleteType = 'simpleIngreso';
+    document.getElementById('confirmDeleteTitle').textContent = fraseQueSeBorra(i.nombre || i.description, i.amount, i.date);
+    document.getElementById('confirmDeleteText').textContent = '';
+    document.getElementById('confirmDeleteText').style.display = 'none';
+    document.getElementById('btnConfirmDeleteDebt').textContent = 'Eliminar';
+    closeSheet('sheetIngreso');
+    openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   }
 };
 
@@ -4765,6 +4951,26 @@ function categoriasEnAlerta(data, prevData, prevTiene){
   return res.sort((a,b)=> b.val - a.val);
 }
 
+// Tanda S · pto 2: deudas cuya ÚLTIMA cuota cae en el mes en curso real o el
+// siguiente. Anclado a mesActualReal() (no a currentDate/el mes que se está
+// navegando) — es una noticia sobre lo que se libera pronto, no algo que dependa de
+// qué mes se está viendo. Agrupa por mes: si varias deudas terminan el mismo mes, un
+// solo aviso con el monto sumado y cuántas son.
+function deudasQueTerminanPronto(){
+  const mkHoy = monthKey(mesActualReal()), mkSiguiente = mkHoy + 1;
+  const porMes = new Map();
+  state.debts.forEach(d=>{
+    if(!(d.numCuotas > 0) || !(d.totalAmount > 0)) return;
+    const mkUltima = monthKey(addMonths(d.purchaseDate, d.numCuotas));
+    if(mkUltima !== mkHoy && mkUltima !== mkSiguiente) return;
+    if(!porMes.has(mkUltima)) porMes.set(mkUltima, { mk:mkUltima, total:0, count:0 });
+    const g = porMes.get(mkUltima);
+    g.total += Math.round(d.totalAmount / d.numCuotas);
+    g.count += 1;
+  });
+  return Array.from(porMes.values()).sort((a,b)=> a.mk - b.mk);
+}
+
 function renderInsights(){
   const box = document.getElementById('rInsights');
   if(!box) return;
@@ -4794,7 +5000,9 @@ function renderInsights(){
   const hayAlerta = alertas.length > 0;
   const disp = proy.dispProyectado;
   const nombreMes = d => MESES[d.getMonth()] + ' ' + d.getFullYear();
-  const signedMoney = n => (n < 0 ? '−' : '') + money(Math.abs(n));
+  // Tanda S · pto 3: el ayudante local "signedMoney" que estaba acá duplicaba money()
+  // (mismo resultado: money() ya pone el signo antes del "$"). Se unifica — se llama
+  // money() directo en todo este bloque.
 
   // ---- a) Semáforo de salud financiera ----
   let semEstado, semTxt;
@@ -4819,13 +5027,13 @@ function renderInsights(){
     const fraseIngreso = info.esHabitual
       ? `Con tu ingreso habitual (~${money(info.estimado)})`
       : `Según ${MESES[info.meses[0].date.getMonth()].toLowerCase()} (~${money(info.estimado)})`;
-    frase = `Todavía no registras ingresos de ${mesActualNombre}. ${fraseIngreso}, cerrarías el mes en ${signedMoney(disp)} (estimado).`;
+    frase = `Todavía no registras ingresos de ${mesActualNombre}. ${fraseIngreso}, cerrarías el mes en ${money(disp)} (estimado).`;
     fraseCTA = true;
   } else if(sinIngresosDelMes && !proy.ingresoEstimado){
     frase = `Todavía no registras ingresos de ${mesActualNombre}, y tampoco hay ingresos anteriores para estimar uno. Registra el primero para ver proyecciones.`;
     fraseCTA = true;
   } else if(disp < 0){
-    frase = `Proyección de sobregasto: cerrarías el mes en ${signedMoney(disp)}.`;
+    frase = `Proyección de sobregasto: cerrarías el mes en ${money(disp)}.`;
   } else if(prevTiene && topAumento){
     frase = `${topAumento.cat} es la categoría que más subió este mes: +${money(topAumento.delta)} respecto al mes anterior.`;
   } else {
@@ -4835,11 +5043,25 @@ function renderInsights(){
     fraseCTA ? `<button type="button" class="insight-frase-btn" id="insightRegistrarIngresoBtn">Registrar ingreso</button>` : ''
   }</div>`;
 
+  // ---- b2) Aviso de cuota terminada (Tanda S · pto 2) ----
+  // Bloque APARTE de la frase — no compite con el guardarraíl de ingresos de R4 (que
+  // vive en fraseHtml) por el mismo espacio: ambos pueden mostrarse a la vez. Si algún
+  // día hubiera que elegir uno solo, el guardarraíl iría primero por avisar de un
+  // problema real (ingreso sin registrar); esto es una buena noticia, no urgente.
+  const cuotaLibreHtml = deudasQueTerminanPronto().map(g=>{
+    const mesNom = MESES[g.mk % 12].toLowerCase();
+    return `<div class="insight-cuota-libre">${
+      g.count > 1
+        ? `En ${mesNom} terminan ${g.count} cuotas y se te liberan ${money(g.total)} al mes.`
+        : `En ${mesNom} se te liberan ${money(g.total)} al mes.`
+    }</div>`;
+  }).join('');
+
   // ---- c) Comparación mes a mes ----
   const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
     const rowCls = 'insight-cmp-row' + (mvClass ? ' ' + mvClass : '');
     if(!prevTiene){
-      return `<div class="${rowCls}"><span class="ic-label">${label}</span><span class="ic-cur">${signedMoney(curr)}</span></div>`;
+      return `<div class="${rowCls}"><span class="ic-label">${label}</span><span class="ic-cur">${money(curr)}</span></div>`;
     }
     const delta = curr - prev;
     const pct = prev !== 0 ? Math.round(delta / Math.abs(prev) * 100) : null;
@@ -4850,8 +5072,8 @@ function renderInsights(){
     const pctTxt = pct === null ? (delta === 0 ? 'sin cambio' : 'nuevo') : Math.abs(pct) + '%';
     return `<div class="${rowCls}">
       <span class="ic-label">${label}</span>
-      <span class="ic-cur">${signedMoney(curr)}</span>
-      <span class="ic-prev">antes ${signedMoney(prev)}</span>
+      <span class="ic-cur">${money(curr)}</span>
+      <span class="ic-prev">antes ${money(prev)}</span>
       <span class="ic-delta ${cls}">${arrow} ${pctTxt}</span>
     </div>`;
   };
@@ -4912,7 +5134,7 @@ function renderInsights(){
   const proyHtml = `<div class="insight-block">
     <p class="insight-block-title">Proyección de fin de mes</p>
     <div class="insight-proy-main${disp < 0 ? ' neg' : ''}">
-      <span>Disponible proyectado${ingEst ? ' <span class="insight-proy-est-tag">estimado</span>' : ''}</span><b>${signedMoney(disp)}</b>
+      <span>Disponible proyectado${ingEst ? ' <span class="insight-proy-est-tag">estimado</span>' : ''}</span><b>${money(disp)}</b>
     </div>
     <p class="insight-proy-detail">
       Gasto proyectado ${money(proy.proyGastos)} = ${money(proy.gastosRealizados)} ya realizado
@@ -4926,7 +5148,7 @@ function renderInsights(){
 
   box.innerHTML =
     `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
-    semHtml + fraseHtml + cmpHtml + varHtml + proyHtml;
+    semHtml + fraseHtml + cuotaLibreHtml + cmpHtml + varHtml + proyHtml;
 
   const registrarBtn = box.querySelector('#insightRegistrarIngresoBtn');
   if(registrarBtn) registrarBtn.addEventListener('click', ()=> openIngresoForm(null));
