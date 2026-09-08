@@ -584,6 +584,19 @@ button{font-family:inherit;}
 .hist-month-totals .hmt-v.hmt-out{color:var(--mv-gasto);}
 :root.hc .hist-kind-select{border-width:2px;}
 :root.hc .hist-month-totals .hmt-k{color:var(--cream);}
+/* Tanda Y2: encabezado del Historial bajo el filtro "Crédito". Una compra a crédito
+   no mueve el Disponible del mes, así que el "total de impacto" es $0 aunque la lista
+   traiga filas con monto. Se muestran las dos cifras — impacto primero (mismo peso que
+   el total normal), luego lo comprado — en su propia línea a lo ancho, para no competir
+   por el espacio con los botones ni recortarse con ellipsis. Envuelve a dos líneas
+   antes que achicar. */
+.hist-credito-nota{
+  margin:-2px 0 14px; display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px;
+  font-size:12px; line-height:1.45; color:var(--cream-dim);
+}
+.hist-credito-nota .hcn-v{font-size:13.5px; font-weight:700; color:var(--mv-gasto);}
+.hist-credito-nota .hcn-v.hcn-buy{color:var(--cream);}
+.hist-credito-nota .hcn-sep{color:var(--gold-dim);}
 .hist-cat-carousel{
   display:flex; flex-wrap:nowrap; gap:8px; margin-top:10px; padding-bottom:2px;
   overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none;
@@ -1441,6 +1454,7 @@ button:active{ transform:scale(0.97); }
         <div class="toggle-row seg-chart" id="segHistorial" role="tablist" aria-label="Vista del gráfico"></div>
       </div>
     </div>
+    <p class="hist-credito-nota" id="hCreditoNota" style="display:none;"></p>
     <div class="hist-search" id="histSearchWrap">
       <div class="hist-search-bar">
         <div class="hist-search-input">
@@ -5656,7 +5670,30 @@ function renderHistMonthTotals(){
   const iItem = document.getElementById('hmtIngresosItem');
   const showG = hTab === 'gastos' || hTab === 'todo';
   const showI = hTab === 'ingresos' || hTab === 'todo';
-  if(gItem) gItem.style.display = showG ? '' : 'none';
+
+  // Tanda Y2: bajo el filtro "Crédito", la lista trae compras a crédito de este mes
+  // (filas de ORIGEN, con debtId), cuyo impacto en el Disponible del mes es $0. Un
+  // "TOTAL GASTO $0" sobre una lista con montos se lee como error, así que se sustituye
+  // el chip compacto por una línea a lo ancho con las dos cifras: primero el impacto
+  // (el mismo `gastos` de siempre), después el monto comprado. Solo aquí; el resto de
+  // los totales del Historial queda igual.
+  const notaEl = document.getElementById('hCreditoNota');
+  let mostrarNotaCredito = false;
+  if(notaEl){
+    const compradoCredito = (enLista && showG && hKindFilter === 'credito')
+      ? getExpensesForMonth(currentDate).reduce((s,e)=> histPasaGasto(e) ? s + e.amount : s, 0)
+      : 0;
+    mostrarNotaCredito = compradoCredito > 0;
+    if(mostrarNotaCredito){
+      notaEl.innerHTML =
+        `<span class="hcn-v">${money(gastos)}</span><span>de impacto este mes</span>`
+        + `<span class="hcn-sep">·</span>`
+        + `<span class="hcn-v hcn-buy">${money(compradoCredito)}</span><span>comprado a crédito</span>`;
+    }
+    notaEl.style.display = mostrarNotaCredito ? '' : 'none';
+  }
+
+  if(gItem) gItem.style.display = (showG && !mostrarNotaCredito) ? '' : 'none';
   if(iItem) iItem.style.display = showI ? '' : 'none';
 }
 function renderHistorial(){
