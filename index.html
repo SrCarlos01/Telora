@@ -864,6 +864,18 @@ button{font-family:inherit;}
 }
 .chart-toggle:active{transform:scale(0.96);}
 .chart-toggle .icon{width:15px; height:15px;}
+/* Tanda Y · pto 1: selector de vista del gráfico. Reusa el componente de "Tamaño de
+   letra" (.toggle-row / .toggle-opt): mismo fondo, mismo burdeos para la opción activa.
+   Solo se ajusta a "solo íconos" y se compacta para caber en la fila de controles del
+   Historial junto a "Detalle". En Resumen ocupa su propia línea, alineado a la derecha. */
+.seg-chart{gap:6px; width:fit-content; flex:0 0 auto;}
+#segResumen{margin:0 0 14px auto;}   /* misma posición que el antiguo botón: a la derecha */
+.seg-chart .toggle-opt{
+  flex:0 0 auto; min-width:46px; padding:9px 13px; line-height:0; font:inherit;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.seg-chart .toggle-opt .icon{width:16px; height:16px;}
+.seg-chart .toggle-opt:active{transform:scale(0.96);}
 .chart-box{margin-bottom:8px;}
 .chart-box svg{display:block; width:100%; height:auto; overflow:visible;}
 .chart-note{font-size:11.5px; color:var(--gold-dim); margin:6px 0 0;}
@@ -1405,7 +1417,7 @@ button:active{ transform:scale(0.97); }
       <button type="button" class="balance-detalle-btn" id="tgResumenDetalle" aria-expanded="false"></button>
       <div class="balance-detalle" id="rDetalle"></div>
     </div>
-    <button class="chart-toggle" id="tgResumen"></button>
+    <div class="toggle-row seg-chart" id="segResumen" role="tablist" aria-label="Vista del gráfico"></div>
     <p class="section-title">Gasto por categoría</p>
     <div id="rCategorias"></div>
     <div class="chart-box" id="rChart" style="display:none;"></div>
@@ -1426,7 +1438,7 @@ button:active{ transform:scale(0.97); }
       </div>
       <div class="hist-controls-btns">
         <button class="chart-toggle" id="tgHistorialDetalle" type="button" aria-pressed="false"></button>
-        <button class="chart-toggle" id="tgHistorial"></button>
+        <div class="toggle-row seg-chart" id="segHistorial" role="tablist" aria-label="Vista del gráfico"></div>
       </div>
     </div>
     <div class="hist-search" id="histSearchWrap">
@@ -2949,6 +2961,7 @@ function switchScreen(id){
   const prevIdx = SCREEN_ORDER.indexOf(currentScreen);
   const nextIdx = SCREEN_ORDER.indexOf(id);
   currentScreen = id;
+  resetChartViews();   // Tanda Y · pto 1: la vista del gráfico no se recuerda al navegar
   // Al abrir el Resumen se re-dispara el conteo animado de los totales.
   if(id === 'resumen') lastResumenMonthKey = null;
   document.querySelectorAll('.nav-btn').forEach(b=>{
@@ -2968,8 +2981,8 @@ function switchScreen(id){
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> switchScreen(btn.dataset.screen));
 });
-function prevMonth(){ currentDate.setMonth(currentDate.getMonth()-1); renderAll(); }
-function nextMonth(){ currentDate.setMonth(currentDate.getMonth()+1); renderAll(); }
+function prevMonth(){ currentDate.setMonth(currentDate.getMonth()-1); resetChartViews(); renderAll(); }
+function nextMonth(){ currentDate.setMonth(currentDate.getMonth()+1); resetChartViews(); renderAll(); }
 document.getElementById('prevMonth').onclick = prevMonth;
 document.getElementById('nextMonth').onclick = nextMonth;
 
@@ -4756,7 +4769,7 @@ function renderResumen(){
   const rows = Object.entries(catTotals).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
   const box = document.getElementById('rCategorias');
   const chartBox = document.getElementById('rChart');
-  syncChartToggle('resumen');
+  renderChartSeg('resumen');
   // Tanda R · pto 3: colores por categoría — mismo mapa que usa la dona, para que la
   // lista funcione como su leyenda (las categorías fuera del top 5 comparten el color
   // del segmento "Otros").
@@ -5390,22 +5403,26 @@ function histFiltrosActivos(){
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
 }
-// Filtro por tipo de pago (Tanda O · punto 3 — 4 opciones; "Crédito" redefinido en
-// Tanda P · punto 4). Se combina en AND con la búsqueda de texto, las categorías y el orden.
-//  · "Cuotas"  = SUBCONJUNTO específico: fila virtual de cuota o fila de ORIGEN de una
-//                compra a cuotas (debtId).
-//  · "Crédito" = CONJUNTO AMPLIO: todo lo que se pagó con crédito — pagos únicos con
-//                método "Crédito" + todas las filas de cuota (las cuotas son crédito).
-//                "Cuotas" queda como el subconjunto de este.
-//  · "Contado" = todo lo demás (ni cuota ni método "Crédito").
-function histRowEsCuota(row){
-  return !!(row && (row.isVirtualCuota || row.debtId));
+// Filtro por tipo de pago (Tanda O · punto 3; semántica alineada al badge en Tanda Y ·
+// punto 3). Se combina en AND con la búsqueda de texto, las categorías y el orden.
+// Los tres tipos parten TODAS las filas en conjuntos disjuntos, y cada uno coincide con
+// el badge que ya se muestra en la fila:
+//  · "Cuotas"  = badge CUOTA: una cuota que VENCE este mes (fila virtual), venga de la
+//                compra que venga. La fila de ORIGEN de la compra NO entra acá.
+//  · "Crédito" = badge CRÉDITO: compras hechas ESTE mes con método Crédito — la fila de
+//                origen de una compra a cuotas + pagos únicos con método "Crédito".
+//  · "Contado" = todo lo demás (ni cuota que vence, ni compra a crédito de este mes).
+function histRowEsCuotaVence(row){
+  return !!(row && row.isVirtualCuota);
+}
+function histRowEsCompraCredito(row){
+  return !!(row && !row.isVirtualCuota && (row.debtId || row.method === 'Crédito'));
 }
 function histPasaKind(row){
   if(hKindFilter === 'all') return true;
-  if(hKindFilter === 'cuotas') return histRowEsCuota(row);
-  const esCredito = histRowEsCuota(row) || (row && row.method === 'Crédito');
-  return hKindFilter === 'credito' ? !!esCredito : !esCredito;
+  if(hKindFilter === 'cuotas')  return histRowEsCuotaVence(row);
+  if(hKindFilter === 'credito') return histRowEsCompraCredito(row);
+  return !histRowEsCuotaVence(row) && !histRowEsCompraCredito(row);   // 'contado'
 }
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
 // Categoría = "está en el conjunto seleccionado" (o no hay conjunto -> pasa todo).
@@ -5585,8 +5602,9 @@ document.querySelectorAll('[data-htab]').forEach(b=>{
     });
     // Al cambiar de pestaña, las categorías disponibles cambian: se reinicia el filtro
     // por categoría, el filtro Cuotas/Gastos normales y se cierra el panel (la búsqueda
-    // por texto y el orden se conservan).
+    // por texto y el orden se conservan). La vista del gráfico también vuelve a Lista.
     hFilterCats.clear(); hFilterPanelOpen = false; hKindFilter = 'all';
+    chartView.historial = 'lista';
     renderHistorial();
   });
 });
@@ -5645,26 +5663,22 @@ function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
-  const tgBtn = document.getElementById('tgHistorial');
   syncHistDetalleBtn();
   renderHistSearchControls();
   renderHistMonthTotals();
+  renderChartSeg('historial');   // oculta el control en "Todo" y marca la vista activa
 
   const detalleOn = historialDetalleOn();
   const expCls = detalleOn ? ' expanded' : '';
   const agrupaPorDia = hSortMode.split('-')[0] === 'fecha';
 
-  // Pestaña "Todo": lista mezclada de gastos + ingresos. El gráfico Barra/Torta no
-  // aporta claridad sobre datos de signo mixto, así que aquí se oculta el toggle.
+  // Pestaña "Todo": lista mezclada de gastos + ingresos. Solo hay vista de lista.
   if(hTab === 'todo'){
-    if(tgBtn) tgBtn.style.display = 'none';
     box.style.display = ''; chartBox.style.display = 'none';
     renderHistorialTodo(box);
     return;
   }
-  if(tgBtn) tgBtn.style.display = '';
 
-  syncChartToggle('historial');
   if(chartView.historial !== 'lista'){
     // En vista de gráfico (barra/torta) la búsqueda no filtra la lista: oculta el contador.
     const cEl = document.getElementById('hSearchCount'); if(cEl) cEl.style.display = 'none';
@@ -7335,23 +7349,77 @@ function sliceColor(i){
 }
 
 function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
-// El botón refleja SIEMPRE el estado ACTUAL (el mismo chartView[screen] que decide
-// qué se renderiza). Al tocarlo cicla al siguiente estado y renderAll() lo re-sincroniza.
+// METAS conserva el botón ciclador (un solo botón que muestra el estado ACTUAL y
+// al tocarlo pasa al siguiente). Resumen e Historial usan el selector segmentado
+// (renderChartSeg), no este.
 function syncChartToggle(screen){
   const btn = document.getElementById('tg' + cap(screen));
   if(!btn) return;
   const cur = { lista:['rows','Lista'], barra:['bars','Barra'], torta:['chart-pie','Torta'] }[chartView[screen]] || ['rows','Lista'];
   btn.innerHTML = `${icon(cur[0])}<span>${cur[1]}</span>`;
 }
-['resumen','historial','metas'].forEach(screen=>{
-  const btn = document.getElementById('tg' + cap(screen));
-  if(btn) btn.addEventListener('click', ()=>{
-    const states = CHART_STATES_BY_SCREEN[screen] || CHART_STATES;
-    const idx = states.indexOf(chartView[screen]);
-    chartView[screen] = states[(idx + 1) % states.length];
+(function initMetasChartToggle(){
+  const btn = document.getElementById('tgMetas');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    const states = CHART_STATES_BY_SCREEN.metas || CHART_STATES;
+    const idx = states.indexOf(chartView.metas);
+    chartView.metas = states[(idx + 1) % states.length];
     renderAll();
   });
-});
+})();
+
+/* ==================== TANDA Y · pto 1 · SELECTOR DE VISTA SEGMENTADO ====================
+   Reemplaza el ciclador de Resumen e Historial por un control segmentado: las opciones
+   de esa pantalla lado a lado, solo íconos, la activa iluminada (mismo patrón que el
+   selector de "Tamaño de letra"). La vista NO se recuerda: `chartView` arranca en
+   'lista' y se re-fija a 'lista' al cambiar de mes, de pestaña del Historial o de
+   pantalla (ver resetChartViews). En Historial → Todo hay una sola vista posible, así
+   que el control se oculta por completo. */
+const CHART_SEG_OPTS = {
+  lista: ['rows', 'Lista'],
+  barra: ['bars', 'Barra'],
+  torta: ['chart-pie', 'Torta']
+};
+function renderChartSeg(screen){
+  const box = document.getElementById('seg' + cap(screen));
+  if(!box) return;
+  const states = (screen === 'historial' && hTab === 'todo')
+    ? ['lista']
+    : (CHART_STATES_BY_SCREEN[screen] || CHART_STATES);
+  // Un selector con una sola opción no es un control: se oculta.
+  if(states.length < 2){ box.style.display = 'none'; box.innerHTML = ''; box.dataset.key = ''; return; }
+  box.style.display = '';
+  const cur = chartView[screen];
+  const key = screen + '|' + states.join(',');
+  // Reconstruye la estructura solo si cambió el juego de opciones; si no, solo
+  // actualiza la marca de activo (así no se re-enganchan listeners a cada render).
+  if(box.dataset.key !== key){
+    box.dataset.key = key;
+    box.innerHTML = states.map(st=>{
+      const [ic, lbl] = CHART_SEG_OPTS[st] || CHART_SEG_OPTS.lista;
+      return `<button type="button" class="toggle-opt" data-chartstate="${st}" role="tab"`
+        + ` aria-label="Ver ${lbl}" title="Ver ${lbl}">${icon(ic)}</button>`;
+    }).join('');
+    box.querySelectorAll('[data-chartstate]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(chartView[screen] === btn.dataset.chartstate) return;
+        chartView[screen] = btn.dataset.chartstate;
+        renderAll();
+      });
+    });
+  }
+  box.querySelectorAll('[data-chartstate]').forEach(btn=>{
+    const on = btn.dataset.chartstate === cur;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+// La vista del gráfico dura solo mientras el usuario permanece en ella sin navegar.
+function resetChartViews(){
+  chartView.resumen = 'lista';
+  chartView.historial = 'lista';
+}
 
 /* ==================== BOTÓN "DETALLE" (Historial) ==================== */
 // Expande/colapsa TODAS las filas visibles de la lista de golpe. El estado se guarda
