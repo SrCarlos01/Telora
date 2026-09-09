@@ -402,6 +402,15 @@ button{font-family:inherit;}
   font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:20px;
   background:var(--surface-3); color:var(--gold-dim); flex-shrink:0;
 }
+/* Fijo con rango de días sin confirmar: badge propio + botón chico "Confirmar fecha" */
+.li-badge.li-badge-rango{background:rgba(198,161,91,0.18); color:var(--gold-dim);}
+:root.hc .li-badge.li-badge-rango{border:1.5px solid var(--gold-dim); color:var(--cream);}
+.li-cff-btn{
+  margin-top:6px; font-size:12px; padding:5px 10px; border-radius:8px;
+  background:var(--surface-3); color:var(--cream); border:1px solid var(--border);
+  cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.li-cff-btn:hover{background:var(--surface-2);}
 
 /* ---------- DEBTS ---------- */
 .debt-card{
@@ -1562,6 +1571,14 @@ button:active{ transform:scale(0.97); }
         <div class="toggle-opt active" data-tipo="Casual">Casual</div>
       </div>
       <p id="fijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
+      <label class="check-row" id="gRangoWrap" style="display:none; margin-top:10px;">
+        <input type="checkbox" id="gRangoChk">
+        <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
+      </label>
+      <div class="field" id="gRangoField" style="display:none; margin:8px 0 0;">
+        <label for="gDiaHasta">Hasta el día</label>
+        <input type="number" id="gDiaHasta" min="1" max="31" inputmode="numeric" placeholder="Ej: 30">
+      </div>
     </div>
     <div class="cuota-fields" id="cuotaFields">
       <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
@@ -1597,6 +1614,14 @@ button:active{ transform:scale(0.97); }
         <div class="toggle-opt active" data-itipo="Casual">Casual</div>
       </div>
       <p id="iFijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
+      <label class="check-row" id="iRangoWrap" style="display:none; margin-top:10px;">
+        <input type="checkbox" id="iRangoChk">
+        <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
+      </label>
+      <div class="field" id="iRangoField" style="display:none; margin:8px 0 0;">
+        <label for="iDiaHasta">Hasta el día</label>
+        <input type="number" id="iDiaHasta" min="1" max="31" inputmode="numeric" placeholder="Ej: 30">
+      </div>
     </div>
     <button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button>
     <button class="btn-danger" id="btnDeleteIngreso" style="display:none;">Eliminar ingreso</button>
@@ -1764,6 +1789,21 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
+<!-- SHEET: confirmar la fecha real de un fijo con rango de días (este mes) -->
+<div class="sheet-overlay" id="sheetConfirmarFechaFijo">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Confirmar fecha</h2>
+    <p class="sheet-note" id="cffTexto"></p>
+    <div class="field" style="margin-bottom:0;">
+      <label for="cffFecha">Fecha real de este mes</label>
+      <input type="date" id="cffFecha">
+    </div>
+    <button class="btn-primary" id="cffGuardar">Guardar fecha</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
 <!-- SHEET: configuración -->
 <div class="sheet-overlay" id="sheetConfig">
   <div class="sheet">
@@ -1771,10 +1811,10 @@ button:active{ transform:scale(0.97); }
     <h2>Configuración</h2>
 
     <details class="cfg-group">
-      <summary>Categorías <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <summary>Categoría de gastos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
         <div class="config-list" id="cfgCategorias"></div>
-        <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
+        <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
       </div>
     </details>
 
@@ -2132,6 +2172,23 @@ function loadState(){
         i.nombre = desc || (typeof i.source === 'string' && i.source) || 'Ingreso';
       }
     });
+    // Rango de días de un fijo (diaHasta + fechasConfirmadas): campos opcionales. Se
+    // descarta cualquier valor mal formado para que applyFixedRangeMeta no tope con
+    // basura (un dato bien formado sobrevive intacto; ausente = fijo de día exacto).
+    const limpiaFijoRango = o=>{
+      if(o.diaHasta !== undefined && !(Number.isInteger(o.diaHasta) && o.diaHasta >= 1 && o.diaHasta <= 31)) delete o.diaHasta;
+      const fc = o.fechasConfirmadas;
+      if(fc !== undefined){
+        if(!fc || typeof fc !== 'object' || Array.isArray(fc)){ delete o.fechasConfirmadas; return; }
+        Object.keys(fc).forEach(k=>{
+          const v = fc[k];
+          if(!(/^\d{4}-\d{2}$/.test(k) && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && v.slice(0,7) === k)) delete fc[k];
+        });
+        if(!Object.keys(fc).length) delete o.fechasConfirmadas;
+      }
+    };
+    if(Array.isArray(parsed.expenses)) parsed.expenses.forEach(limpiaFijoRango);
+    if(Array.isArray(parsed.incomes)) parsed.incomes.forEach(limpiaFijoRango);
     // manualUnpaidMonthKeys: array legado (Tanda M). Desde Tanda P quedó INERTE — el
     // criterio único de pago es la confirmación manual (manualPaidMonthKeys). Se sigue
     // migrando/normalizando el array solo por compatibilidad de datos.
@@ -2309,7 +2366,60 @@ const money = n => {
   return (r < 0 ? '-' : '') + '$' + Math.abs(r).toLocaleString('es-CL');
 };
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
+const monthKeyStr = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ==================== GASTOS/INGRESOS FIJOS CON RANGO DE DÍAS ====================
+   Un fijo puede no tener día exacto sino un RANGO ("entre el 25 y el 30") para quien
+   no sabe con certeza cuándo cae. Campos OPCIONALES en el registro base:
+     · diaHasta            → día del mes (entero) en que TERMINA el rango. Ausente =
+                              comportamiento de siempre (día exacto = día de la fecha).
+     · fechasConfirmadas   → { "YYYY-MM": "YYYY-MM-DD" }. Cuando el usuario confirma la
+                              fecha real de un mes concreto, se guarda ahí; ese mes deja
+                              de comportarse como rango. Los demás meses siguen sin
+                              confirmar, cada uno con su propio rango, hasta que se les
+                              confirme el suyo.
+   applyFixedRangeMeta() recibe una ocurrencia (real o virtual) que YA trae `date` y,
+   si corresponde, devuelve una COPIA anotada:
+     · mes confirmado  → { date: <fecha confirmada>, esRangoFijo:false }
+     · rango sin confirmar → { date: <día de inicio>, esRangoFijo:true,
+                               rangoDiaInicio, rangoDiaFin }
+   Para todo lo demás (no fijo, fijo sin diaHasta, o rango degenerado en un mes corto)
+   devuelve la ocurrencia intacta, por referencia — cero cambio de comportamiento. */
+function applyFixedRangeMeta(occ, refDate){
+  if(!occ || occ.tipo !== 'Fijo' || occ.debtId) return occ;
+  const diaHasta = Number.isInteger(occ.diaHasta) ? occ.diaHasta : null;
+  if(!diaHasta || diaHasta < 1 || diaHasta > 31) return occ;
+  const y = refDate.getFullYear(), m = refDate.getMonth();
+  const mkStr = monthKeyStr(refDate);
+  const lastDay = new Date(y, m+1, 0).getDate();
+  const conf = (occ.fechasConfirmadas && typeof occ.fechasConfirmadas === 'object' && !Array.isArray(occ.fechasConfirmadas))
+    ? occ.fechasConfirmadas[mkStr] : null;
+  if(typeof conf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(conf) && conf.slice(0,7) === mkStr){
+    return { ...occ, date: conf, esRangoFijo:false };
+  }
+  const startDay = Math.min(parseInt(String(occ.date).split('-')[2], 10) || 1, lastDay);
+  const finDay = Math.min(diaHasta, lastDay);
+  if(finDay <= startDay) return occ;   // rango degenerado (mes más corto que el rango): día exacto
+  return {
+    ...occ,
+    date: mkStr + '-' + String(startDay).padStart(2,'0'),
+    esRangoFijo: true,
+    rangoDiaInicio: startDay,
+    rangoDiaFin: finDay
+  };
+}
+// Trozos de fila para el Historial cuando la ocurrencia es un rango sin confirmar.
+function rangoFijoRowBits(occ, kind){   // kind: 'gasto' | 'ingreso'
+  if(!occ || !occ.esRangoFijo) return null;
+  const btn = isReadOnly() ? '' :
+    `<button type="button" class="li-cff-btn" data-cff-id="${occ.id}" data-cff-kind="${kind}" data-cff-mk="${String(occ.date).slice(0,7)}">Confirmar fecha</button>`;
+  return {
+    fechaTxt: `Entre el ${occ.rangoDiaInicio} y el ${occ.rangoDiaFin}`,
+    badge: '<span class="li-badge li-badge-rango">Rango</span>',
+    btn
+  };
+}
 
 /* ==================== VIBRACIÓN HÁPTICA (confirmaciones) ==================== */
 // Feedback táctil corto en acciones clave. Se verifica soporte antes de llamar:
@@ -2634,7 +2744,11 @@ function getExpensesForMonth(refDate){
   const mk = monthKey(refDate);
   const notCutOff = e => e.fixedEndMonthKey == null || mk < e.fixedEndMonthKey;
 
-  const real = state.expenses.filter(e=> monthKey(new Date(e.date+"T00:00:00")) === mk && notCutOff(e));
+  // Fijos con rango de días: la ocurrencia (real en su mes de origen o virtual en los
+  // siguientes) pasa por applyFixedRangeMeta -> día de inicio + marca de rango, o la
+  // fecha ya confirmada para ese mes. Sin diaHasta no cambia nada.
+  const real = state.expenses.filter(e=> monthKey(new Date(e.date+"T00:00:00")) === mk && notCutOff(e))
+    .map(e=> applyFixedRangeMeta(e, refDate));
 
   const virtualFixed = state.expenses
     .filter(e=> e.tipo==='Fijo' && !e.debtId)
@@ -2647,7 +2761,7 @@ function getExpensesForMonth(refDate){
       const useDay = Math.min(day, lastDayOfMonth);
       const vDate = new Date(refDate.getFullYear(), refDate.getMonth(), useDay);
       const yyyy = vDate.getFullYear(), mm=String(vDate.getMonth()+1).padStart(2,'0'), dd=String(vDate.getDate()).padStart(2,'0');
-      return { ...e, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true };
+      return applyFixedRangeMeta({ ...e, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true }, refDate);
     });
 
   return [...real, ...virtualFixed];
@@ -2662,7 +2776,8 @@ function getIncomesForMonth(refDate){
   const mk = monthKey(refDate);
   const notCutOff = i => i.fixedEndMonthKey == null || mk < i.fixedEndMonthKey;
 
-  const real = state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk && notCutOff(i));
+  const real = state.incomes.filter(i=> monthKey(new Date(i.date+"T00:00:00")) === mk && notCutOff(i))
+    .map(i=> applyFixedRangeMeta(i, refDate));
 
   const virtualFixed = state.incomes
     .filter(i=> i.tipo==='Fijo')
@@ -2675,7 +2790,7 @@ function getIncomesForMonth(refDate){
       const useDay = Math.min(day, lastDayOfMonth);
       const vDate = new Date(refDate.getFullYear(), refDate.getMonth(), useDay);
       const yyyy = vDate.getFullYear(), mm=String(vDate.getMonth()+1).padStart(2,'0'), dd=String(vDate.getDate()).padStart(2,'0');
-      return { ...i, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true };
+      return applyFixedRangeMeta({ ...i, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true }, refDate);
     });
 
   return [...real, ...virtualFixed];
@@ -3216,13 +3331,26 @@ document.getElementById('btnExport').onclick = ()=>{
 };
 
 /* ==================== TOGGLES en formulario gasto ==================== */
+// Rango de días (solo visible con tipo "Fijo"): el checkbox muestra/oculta "Hasta el día".
+// Al salir de "Fijo" se apaga y se limpia para no guardar un rango en un gasto casual.
+function syncGastoRango(){
+  const esFijo = !!document.querySelector('#sheetGasto [data-tipo].active') &&
+                 document.querySelector('#sheetGasto [data-tipo].active').dataset.tipo === 'Fijo';
+  const wrap = document.getElementById('gRangoWrap');
+  const chk = document.getElementById('gRangoChk');
+  wrap.style.display = esFijo ? 'flex' : 'none';
+  if(!esFijo){ chk.checked = false; document.getElementById('gDiaHasta').value = ''; }
+  document.getElementById('gRangoField').style.display = (esFijo && chk.checked) ? 'block' : 'none';
+}
 document.querySelectorAll('#sheetGasto [data-tipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
     document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('fijoNote').style.display = el.dataset.tipo==='Fijo' ? 'block' : 'none';
+    syncGastoRango();
   });
 });
+document.getElementById('gRangoChk').addEventListener('change', syncGastoRango);
 // Cuotas directas: cuando el método es Crédito el gasto SIEMPRE es una cuota y se
 // muestra sin paso intermedio el campo "Número de cuotas". Con cualquier otro
 // método, ese campo se oculta por completo y se limpia.
@@ -3234,13 +3362,24 @@ function syncCuotaFields(){
 document.getElementById('gMetodo').addEventListener('change', syncCuotaFields);
 
 // Toggle Fijo/Casual del formulario de ingreso (mismo comportamiento que en gastos).
+function syncIngresoRango(){
+  const act = document.querySelector('#sheetIngreso [data-itipo].active');
+  const esFijo = !!act && act.dataset.itipo === 'Fijo';
+  const wrap = document.getElementById('iRangoWrap');
+  const chk = document.getElementById('iRangoChk');
+  wrap.style.display = esFijo ? 'flex' : 'none';
+  if(!esFijo){ chk.checked = false; document.getElementById('iDiaHasta').value = ''; }
+  document.getElementById('iRangoField').style.display = (esFijo && chk.checked) ? 'block' : 'none';
+}
 document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
     document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('iFijoNote').style.display = el.dataset.itipo==='Fijo' ? 'block' : 'none';
+    syncIngresoRango();
   });
 });
+document.getElementById('iRangoChk').addEventListener('change', syncIngresoRango);
 
 /* ==================== SELECTS dinámicos ==================== */
 function fillSelect(id, options, selected){
@@ -3305,6 +3444,8 @@ function openGastoForm(expenseId){
   document.getElementById('gDescripcion').value = '';
   document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo==='Casual'));
   document.getElementById('fijoNote').style.display = 'none';
+  document.getElementById('gRangoChk').checked = false;
+  document.getElementById('gDiaHasta').value = '';
   document.getElementById('cuotaFields').classList.remove('open');
   document.getElementById('gNumCuotas').value = '';
   document.getElementById('btnDeleteGasto').style.display = 'none';
@@ -3323,12 +3464,18 @@ function openGastoForm(expenseId){
     document.getElementById('gDescripcion').value = e.description;
     document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo===e.tipo));
     document.getElementById('fijoNote').style.display = e.tipo==='Fijo' ? 'block' : 'none';
+    // Rango de días de un fijo (diaHasta): solo aplica a fijos sin cuota.
+    if(e.tipo==='Fijo' && !e.debtId && Number.isInteger(e.diaHasta)){
+      document.getElementById('gRangoChk').checked = true;
+      document.getElementById('gDiaHasta').value = e.diaHasta;
+    }
     if(e.debtId){
       const debt = state.debts.find(d=>d.id===e.debtId);
       if(debt) document.getElementById('gNumCuotas').value = debt.numCuotas;
     }
     document.getElementById('btnDeleteGasto').style.display = 'block';
   }
+  syncGastoRango();
 
   // Chips de categorías frecuentes: solo al crear un gasto nuevo, no al editar.
   // Aislado en try/catch: pase lo que pase aquí, el formulario debe abrirse igual.
@@ -3392,6 +3539,22 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('gMonto')); return; }
   if(!categoria){ showToast('Elige una categoría.', 'error'); fieldError(document.getElementById('gCategoria')); return; }
 
+  // Rango de días de un fijo: opcional. Solo para tipo "Fijo" sin cuotas y con el
+  // checkbox marcado. diaHasta debe ser un día del mes (1-31) POSTERIOR al día de la
+  // fecha base — si no, no es un rango hacia adelante.
+  const rangoActivo = tipo === 'Fijo' && !esCredito && document.getElementById('gRangoChk').checked;
+  let diaHasta = null;
+  if(rangoActivo){
+    diaHasta = parseInt(document.getElementById('gDiaHasta').value, 10);
+    const diaBase = parseInt(fecha.split('-')[2], 10);
+    if(!Number.isInteger(diaHasta) || diaHasta < 1 || diaHasta > 31){
+      showToast('El "hasta el día" debe ser un día del mes (1 a 31).', 'error'); fieldError(document.getElementById('gDiaHasta')); return;
+    }
+    if(diaHasta <= diaBase){
+      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('gDiaHasta')); return;
+    }
+  }
+
   // Tanda W (hallazgo c): cambiar el método de un gasto que ES compra a cuotas por uno
   // que NO genera cuotas no se guarda en silencio. Se pide confirmación explícita. La
   // deuda y sus cuotas se conservan intactas; solo cambia la etiqueta de método.
@@ -3417,6 +3580,9 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
     e.date=fecha; e.nombre=nombre; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
+    // Rango de días: se guarda / se quita. Las fechas ya confirmadas (fechasConfirmadas)
+    // se dejan intactas: quedan inertes sin diaHasta y vuelven a valer si se reactiva.
+    if(rangoActivo) e.diaHasta = diaHasta; else delete e.diaHasta;
     if(esCredito){
       const debt = e.debtId ? state.debts.find(d=>d.id===e.debtId) : null;
       if(debt){
@@ -3432,6 +3598,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     // (caso borde); para quitarla del todo hay que eliminar el gasto.
   } else {
     const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null };
+    if(rangoActivo) expense.diaHasta = diaHasta;
     if(esCredito){
       const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
       state.debts.push(debt);
@@ -3568,6 +3735,8 @@ function openIngresoForm(incomeId){
   // Tipo Fijo/Casual (mismo motor de recurrencia que los gastos): por defecto Casual.
   document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo==='Casual'));
   document.getElementById('iFijoNote').style.display = 'none';
+  document.getElementById('iRangoChk').checked = false;
+  document.getElementById('iDiaHasta').value = '';
   document.getElementById('btnDeleteIngreso').style.display = 'none';
   document.getElementById('ingresoTitle').textContent = 'Nuevo ingreso';
   if(incomeId){
@@ -3581,8 +3750,13 @@ function openIngresoForm(incomeId){
     const itipo = i.tipo === 'Fijo' ? 'Fijo' : 'Casual';
     document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo===itipo));
     document.getElementById('iFijoNote').style.display = itipo==='Fijo' ? 'block' : 'none';
+    if(itipo==='Fijo' && Number.isInteger(i.diaHasta)){
+      document.getElementById('iRangoChk').checked = true;
+      document.getElementById('iDiaHasta').value = i.diaHasta;
+    }
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
+  syncIngresoRango();
   applyReadOnlyLock('sheetIngreso');
   openSheet('sheetIngreso');
 }
@@ -3597,12 +3771,29 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   if(!nombre){ showToast('Ponle un nombre al ingreso.', 'error'); fieldError(document.getElementById('iNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('iMonto')); return; }
   if(!fuente){ showToast('Elige una fuente.', 'error'); fieldError(document.getElementById('iFuente')); return; }
+
+  // Rango de días (opcional, solo tipo "Fijo"): diaHasta 1-31 y posterior al día de la fecha base.
+  const rangoActivo = itipo === 'Fijo' && document.getElementById('iRangoChk').checked;
+  let diaHasta = null;
+  if(rangoActivo){
+    diaHasta = parseInt(document.getElementById('iDiaHasta').value, 10);
+    const diaBase = parseInt(fecha.split('-')[2], 10);
+    if(!Number.isInteger(diaHasta) || diaHasta < 1 || diaHasta > 31){
+      showToast('El "hasta el día" debe ser un día del mes (1 a 31).', 'error'); fieldError(document.getElementById('iDiaHasta')); return;
+    }
+    if(diaHasta <= diaBase){
+      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('iDiaHasta')); return;
+    }
+  }
+
   let nuevoIngresoId = null;
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
     i.date=fecha; i.nombre=nombre; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
+    if(rangoActivo) i.diaHasta = diaHasta; else delete i.diaHasta;
   } else {
     const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo};
+    if(rangoActivo) inc.diaHasta = diaHasta;
     state.incomes.push(inc);
     nuevoIngresoId = inc.id;
   }
@@ -3638,6 +3829,62 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
     openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   }
 };
+
+/* ==================== CONFIRMAR FECHA DE UN FIJO CON RANGO ====================
+   Desde el Historial, el botón "Confirmar fecha" de una fila de rango abre este mini
+   sheet (no el formulario completo). Guarda la fecha real elegida en
+   registro.fechasConfirmadas["YYYY-MM"]; desde ese momento la ocurrencia de ESE mes
+   deja de mostrarse como rango. Los demás meses siguen sin confirmar. */
+let cffCtx = null;
+function openConfirmarFechaFijo(id, kind, mkStr){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const coll = kind === 'ingreso' ? state.incomes : state.expenses;
+  const rec = coll.find(x=> x.id === id);
+  if(!rec || !/^\d{4}-\d{2}$/.test(mkStr)) return;
+  const [y, m] = mkStr.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const startDay = Math.min(parseInt(String(rec.date).split('-')[2], 10) || 1, lastDay);
+  const finDay = Math.min(Number.isInteger(rec.diaHasta) ? rec.diaHasta : startDay, lastDay);
+  cffCtx = { id, kind, mkStr };
+  document.getElementById('cffTexto').textContent =
+    `«${rec.nombre || rec.description || 'Movimiento'}» — elige el día real de ${MESES[m-1]} ${y}. ` +
+    `Se esperaba entre el ${startDay} y el ${finDay}.`;
+  const inp = document.getElementById('cffFecha');
+  inp.min = `${mkStr}-01`;
+  inp.max = `${mkStr}-${String(lastDay).padStart(2,'0')}`;
+  inp.value = `${mkStr}-${String(startDay).padStart(2,'0')}`;
+  openSheet('sheetConfirmarFechaFijo');
+}
+document.getElementById('cffGuardar').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!cffCtx) return;
+  const val = document.getElementById('cffFecha').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(val) || val.slice(0,7) !== cffCtx.mkStr){
+    showToast('Elige una fecha dentro de ese mes.', 'error'); fieldError(document.getElementById('cffFecha')); return;
+  }
+  const coll = cffCtx.kind === 'ingreso' ? state.incomes : state.expenses;
+  const rec = coll.find(x=> x.id === cffCtx.id);
+  if(!rec){ cffCtx = null; closeSheet('sheetConfirmarFechaFijo'); return; }
+  if(!rec.fechasConfirmadas || typeof rec.fechasConfirmadas !== 'object' || Array.isArray(rec.fechasConfirmadas)){
+    rec.fechasConfirmadas = {};
+  }
+  rec.fechasConfirmadas[cffCtx.mkStr] = val;
+  haptic(HAPTIC_OK);
+  saveState();
+  cffCtx = null;
+  closeSheet('sheetConfirmarFechaFijo');
+  renderAll();
+};
+// Conecta los botones "Confirmar fecha" de un contenedor del Historial. El click no
+// debe disparar el tap de edición de la fila (igual criterio que .li-expand).
+function wireConfirmFechaFijo(box){
+  box.querySelectorAll('.li-cff-btn').forEach(btn=>{
+    btn.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      openConfirmarFechaFijo(btn.dataset.cffId, btn.dataset.cffKind, btn.dataset.cffMk);
+    });
+  });
+}
 
 /* ==================== FORM: META ==================== */
 // "Meta indefinida" es un checkbox simple: al marcarlo se ocultan Monto objetivo y
@@ -5009,15 +5256,21 @@ function proyeccionFinDeMes(refDate){
   else { diasTranscurridos = hoy.getDate(); diasRestantes = diasEnMes - diasTranscurridos; }
 
   const dayOf = iso => parseInt(iso.split('-')[2], 10);
-  const yaOcurrio = iso => {
+  // Acepta un iso (cuotas) o la ocurrencia completa (gastos/ingresos). Un fijo con
+  // rango de días SIN confirmar no se da por ocurrido hasta que pase su día FINAL
+  // (rangoDiaFin): que el día de inicio ya haya pasado es incertidumbre, no certeza.
+  const yaOcurrio = occ => {
     if(mkRef < mkHoy) return true;
     if(mkRef > mkHoy) return false;
-    return dayOf(iso) <= hoy.getDate();
+    if(occ && typeof occ === 'object' && occ.esRangoFijo){
+      return hoy.getDate() > occ.rangoDiaFin;
+    }
+    return dayOf(typeof occ === 'string' ? occ : occ.date) <= hoy.getDate();
   };
 
   let gastosRealizados = 0, fijosCuotasRestantes = 0, variableOcurrido = 0;
   getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=>{
-    if(yaOcurrio(e.date)){
+    if(yaOcurrio(e)){
       gastosRealizados += e.amount;
       if(e.tipo !== 'Fijo') variableOcurrido += e.amount;   // base del promedio diario
     } else {
@@ -5025,6 +5278,17 @@ function proyeccionFinDeMes(refDate){
       fijosCuotasRestantes += e.amount;
     }
   });
+  // Fijos (gasto o ingreso) del mes EN CURSO que aún son un rango sin confirmar: se
+  // informa "puede caer entre el D1 y el D2" en vez de asumir una fecha. Solo el mes
+  // en curso (mkRef === mkHoy); meses cerrados o futuros no muestran este aviso.
+  const rangosPendientes = [];
+  if(mkRef === mkHoy){
+    const push = (o, tipo)=>{ if(o && o.esRangoFijo) rangosPendientes.push({
+      nombre: o.nombre || o.description || 'Movimiento', diaInicio: o.rangoDiaInicio, diaFin: o.rangoDiaFin, tipo
+    }); };
+    getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> push(e, 'gasto'));
+    getIncomesForMonth(refDate).forEach(i=> push(i, 'ingreso'));
+  }
   cuotasVirtualesHistorial(refDate).forEach(c=>{
     if(yaOcurrio(c.date)) gastosRealizados += c.amount;
     else fijosCuotasRestantes += c.amount;
@@ -5050,7 +5314,7 @@ function proyeccionFinDeMes(refDate){
   return {
     diasTranscurridos, diasRestantes, diasEnMes,
     gastosRealizados, fijosCuotasRestantes, variableEstimado, promedioDiario,
-    proyGastos, dispProyectado,
+    proyGastos, dispProyectado, rangosPendientes,
     ingresos: data.ingresos, ingresosProy, ingresoEstimado,
     aportesMetas: data.aportesMetas, saldoAnterior: data.saldoAnterior
   };
@@ -5319,6 +5583,11 @@ function renderInsights(){
       ${proy.diasRestantes > 0 ? `· ${proy.diasRestantes === 1 ? 'queda 1 día' : 'quedan ' + proy.diasRestantes + ' días'} del mes` : '· mes cerrado'}.
     </p>
     ${ingEst ? `<p class="insight-proy-detail">Incluye un ingreso estimado de ${money(ingEst.estimado)} (${ingEstDesc}) — todavía no registras ingresos de ${mesActualNombre}.</p>` : ''}
+    ${(proy.rangosPendientes && proy.rangosPendientes.length) ? `<p class="insight-proy-detail">${
+      proy.rangosPendientes.map(r=>
+        `${r.tipo === 'ingreso' ? 'El ingreso' : 'El gasto'} «${r.nombre}» puede caer entre el ${r.diaInicio} y el ${r.diaFin} — aún sin confirmar.`
+      ).join('<br>')
+    }</p>` : ''}
     ${alertasHtml}
   </div>`;
 
@@ -5767,6 +6036,9 @@ function renderHistorial(){
       // compra total, que NO es lo que impacta el Disponible de este mes -> tono neutro y
       // más opaco. El resto de gastos (normal / fijo) SÍ impactan el Disponible -> rojo.
       const amtCls = e.debtId ? 'li-amount li-amount-cuota-origen' : 'li-amount li-amount-gasto';
+      // Fijo con rango de días sin confirmar: "Entre el D1 y el D2" + badge "Rango" +
+      // botón "Confirmar fecha" (mini sheet, no el formulario completo).
+      const rb = rangoFijoRowBits(e, 'gasto');
       // Tanda M: la etiqueta principal es el "Nombre"; la "Descripción" (opcional) solo
       // aparece al expandir el Detalle, dentro de .li-sub.
       const nom = e.nombre || e.description || '';
@@ -5774,8 +6046,9 @@ function renderHistorial(){
       <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${badge}</p>
-          <p class="li-sub">${fmtDate(e.date)} · ${e.category} · ${e.method}${e.description ? ' · ' + e.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(e.date)} · ${e.category} · ${e.method}${e.description ? ' · ' + e.description : ''}</p>
+          ${rb ? rb.btn : ''}
         </div>
         <span class="${amtCls}">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -5788,7 +6061,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
       el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
     });
-    wireRowExpand(box); markNewRow(box);
+    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
   } else {
     const items = applySort(getIncomesForMonth(currentDate), 'nombre', 'amount', 'date').filter(histPasaIngreso);
     updateHistCount(items.length);
@@ -5799,12 +6072,14 @@ function renderHistorial(){
     // Tanda M: etiqueta principal = "Nombre"; fuente y descripción pasan al Detalle (.li-sub).
     const rowHtml = (i)=>{
       const nom = i.nombre || i.description || i.source || '';
+      const rb = rangoFijoRowBits(i, 'ingreso');
       return `
       <div class="list-item income${expCls}" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
-          <p class="li-sub">${fmtDate(i.date)} · ${i.source}${i.description? ' · '+i.description:''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(i.date)} · ${i.source}${i.description? ' · '+i.description:''}</p>
+          ${rb ? rb.btn : ''}
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -5814,7 +6089,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-editincome]').forEach(el=>{
       el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
     });
-    wireRowExpand(box); markNewRow(box);
+    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
   }
 }
 
@@ -5832,7 +6107,8 @@ function renderHistorialTodo(box){
   const gastos = getExpensesForMonth(currentDate).map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
     name:e.nombre || e.description || '', description:e.description||'',
-    category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId
+    category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId,
+    esRangoFijo:e.esRangoFijo, rangoDiaInicio:e.rangoDiaInicio, rangoDiaFin:e.rangoDiaFin
   })).filter(g=>{
     if(!histMatchTexto((g.name || '') + ' ' + (g.description || ''))) return false;
     if(hFilterCats.size > 0 && !hFilterCats.has(g.category)) return false;
@@ -5841,7 +6117,8 @@ function renderHistorialTodo(box){
   });
   const ingresos = getIncomesForMonth(currentDate).map(i=>({
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
-    name:i.nombre || i.description || i.source || '', source:i.source, description:i.description||'', tipo:i.tipo
+    name:i.nombre || i.description || i.source || '', source:i.source, description:i.description||'', tipo:i.tipo,
+    esRangoFijo:i.esRangoFijo, rangoDiaInicio:i.rangoDiaInicio, rangoDiaFin:i.rangoDiaFin
   })).filter(i=>{
     if(!histMatchTexto((i.name || '') + ' ' + (i.description || '') + ' ' + (i.source || ''))) return false;
     if(hFilterCats.size > 0) return false;
@@ -5887,12 +6164,14 @@ function renderHistorialTodo(box){
     const saldoTxt = (saldo === undefined) ? ''
       : `<span class="li-saldo${saldo < 0 ? ' neg' : ''}">Saldo: ${money(saldo)}</span>`;
     if(it.kind==='ingreso'){
+      const rb = rangoFijoRowBits(it, 'ingreso');
       return `
       <div class="list-item income${expCls}" data-editincome="${it.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}</p>
-          <p class="li-sub">${fmtDate(it.date)} · ${it.source}${it.description ? ' · '+it.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${it.source}${it.description ? ' · '+it.description : ''}</p>
+          ${rb ? rb.btn : ''}
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount income">+${money(it.amount)}</span>
@@ -5922,6 +6201,7 @@ function renderHistorialTodo(box){
     }
     // Fila de origen de una compra a crédito -> "CRÉDITO"; gasto fijo -> "FIJO".
     const badge = it.debtId ? '<span class="li-badge">Crédito</span>' : (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '');
+    const rb = rangoFijoRowBits(it, 'gasto');
     // Compra a crédito: el número grande es la compra total, pero al saldo del mes solo
     // le pesa la cuota de ese mes (0 en el mes de la compra: las cuotas parten al mes
     // siguiente). Se aclara con una nota chica bajo el detalle de la fila.
@@ -5939,9 +6219,10 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-editexpense="${it.id}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}</p>
-          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · ${it.method}${it.description ? ' · ' + it.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${it.category} · ${it.method}${it.description ? ' · ' + it.description : ''}</p>
           ${cuotaNote}
+          ${rb ? rb.btn : ''}
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount${it.debtId ? ' li-amount-cuota-origen' : ' li-amount-gasto'}">−${money(it.amount)}</span>
@@ -5961,7 +6242,7 @@ function renderHistorialTodo(box){
   box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
     el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
   });
-  wireRowExpand(box); markNewRow(box);
+  wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
 }
 // Chevron "aparte" que expande/colapsa el sub-detalle de una fila, sin disparar el tap de edición.
 function wireRowExpand(box){
@@ -6650,12 +6931,14 @@ function validExpenseShape(e){
   return e && typeof e === 'object' && !Array.isArray(e)
     && isIsoDate(e.date) && isNum(e.amount)                                   // requeridos
     && optStr(e.id) && optStr(e.category) && optStr(e.method) && optStr(e.description)
-    && optStr(e.nombre) && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId));
+    && optStr(e.nombre) && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId))
+    && optNum(e.diaHasta) && optPlainObj(e.fechasConfirmadas);               // rango de días (opcional)
 }
 function validIncomeShape(i){
   return i && typeof i === 'object' && !Array.isArray(i)
     && isIsoDate(i.date) && isNum(i.amount)                                   // requeridos
-    && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.nombre) && optStr(i.tipo);
+    && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.nombre) && optStr(i.tipo)
+    && optNum(i.diaHasta) && optPlainObj(i.fechasConfirmadas);               // rango de días (opcional)
 }
 function validDebtShape(d){
   return d && typeof d === 'object' && !Array.isArray(d)
@@ -6739,6 +7022,25 @@ function migrateBackup(parsed){
     }
   }
 
+  // Rango de días de un fijo (diaHasta + fechasConfirmadas): campos OPCIONALES. Se
+  // conservan solo si son coherentes — entero 1-31 para diaHasta; claves "YYYY-MM" con
+  // una fecha ISO de ESE mes para fechasConfirmadas. Un respaldo sin estos campos entra
+  // como fijo de día exacto, igual que siempre.
+  const aplicarFijoRango = (o, srcObj)=>{
+    if(o.tipo === 'Fijo' && !o.debtId && Number.isInteger(srcObj.diaHasta) && srcObj.diaHasta >= 1 && srcObj.diaHasta <= 31){
+      o.diaHasta = srcObj.diaHasta;
+    }
+    const fc = srcObj.fechasConfirmadas;
+    if(fc && typeof fc === 'object' && !Array.isArray(fc)){
+      const limpio = {};
+      for(const k of Object.keys(fc)){
+        const v = fc[k];
+        if(/^\d{4}-\d{2}$/.test(k) && isStr(v) && /^\d{4}-\d{2}-\d{2}$/.test(v) && v.slice(0,7) === k) limpio[k] = v;
+      }
+      if(Object.keys(limpio).length) o.fechasConfirmadas = limpio;
+    }
+  };
+
   const expenses = arrOf(src.expenses).map(e=>{
     const desc = isStr(e.description) ? e.description : '';
     const cat = isStr(e.category) ? e.category : 'Varios';
@@ -6756,6 +7058,7 @@ function migrateBackup(parsed){
       debtId: isStr(e.debtId) ? e.debtId : null
     };
     if(e.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = e.fixedEndMonthKey;
+    aplicarFijoRango(o, e);
     return o;
   });
 
@@ -6772,6 +7075,7 @@ function migrateBackup(parsed){
       tipo: (i.tipo === 'Fijo' || i.tipo === 'Casual') ? i.tipo : 'Casual'   // `tipo` no existía en la alfa
     };
     if(i.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = i.fixedEndMonthKey;
+    aplicarFijoRango(o, i);
     return o;
   });
 
