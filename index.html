@@ -3462,6 +3462,13 @@ document.getElementById('btnExport').onclick = ()=>{
     document.getElementById('rangoFields').style.display = 'flex';
     document.getElementById('expDesde').value = hRango.desde;
     document.getElementById('expHasta').value = hRango.hasta;
+  } else {
+    // Ajuste pendiente de Tanda E: sin rango activo en el Historial, la hoja abre
+    // SIEMPRE en "Solo este mes" — los <input radio> conservaban el último alcance
+    // elegido entre aperturas.
+    const rMes = document.querySelector('input[name=exportScope][value="mes"]');
+    if(rMes) rMes.checked = true;
+    document.getElementById('rangoFields').style.display = 'none';
   }
   openSheet('sheetExportar');
 };
@@ -7766,12 +7773,47 @@ function buildExportWorkbook(fromDate, toDate){
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Resumen");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows), "Gastos");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeRows), "Ingresos");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(debtRows), "Deudas (Cuotas)");
+  appendSheet(wb, "Resumen", summaryRows);
+  appendSheet(wb, "Gastos", expenseRows);
+  appendSheet(wb, "Ingresos", incomeRows);
+  appendSheet(wb, "Deudas (Cuotas)", debtRows);
   const filename = `MisFinanzas_${new Date().toISOString().slice(0,10)}.xlsx`;
   return { wb, filename };
+}
+
+// Tanda H · ancho de columna. SheetJS (edición community 0.20.3, autohospedada
+// desde Tanda Q) NO tiene autofit, pero SÍ respeta ws['!cols'] con `wch` al
+// escribir .xlsx. Medimos el texto más largo de cada columna —encabezado
+// incluido— y fijamos ese ancho para que ninguna celda quede cortada. Esto es
+// solo presentación: no altera ningún valor exportado.
+// (Colores de encabezado/bordes/totales y logo quedaron FUERA de alcance: la
+// edición community de SheetJS ignora los estilos de celda y la inserción de
+// imágenes al escribir, y añadir un fork con estilos sería una dependencia
+// nueva — prohibido en esta tanda. Ver reporte de la Tanda H.)
+function fitColsForRows(rows){
+  if(!Array.isArray(rows) || rows.length === 0) return [];
+  // Unión de claves en orden de aparición: es el mismo criterio con que
+  // json_to_sheet arma los encabezados, por si alguna fila trae menos campos.
+  const cols = [];
+  rows.forEach(r=> Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
+  return cols.map(key=>{
+    let max = String(key).length;
+    for(const r of rows){
+      const v = r[key];
+      const len = (v == null ? '' : String(v)).length;
+      if(len > max) max = len;
+    }
+    // +2 de margen para que el contenido nunca quede pegado al borde. El tope de
+    // 200 (Excel admite hasta 255) es solo un seguro ante un valor degenerado;
+    // ningún texto real de la app se acerca, así que nada queda cortado.
+    return { wch: Math.min(200, max + 2) };
+  });
+}
+function appendSheet(wb, name, rows){
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const cols = fitColsForRows(rows);
+  if(cols.length) ws['!cols'] = cols;
+  XLSX.utils.book_append_sheet(wb, ws, name);
 }
 // Descarga (comportamiento de siempre de "Generar Excel").
 function exportExcel(fromDate, toDate){
