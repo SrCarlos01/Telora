@@ -644,6 +644,47 @@ button{font-family:inherit;}
 /* panel del embudo = ordenamiento (Fecha / Monto / Nombre, ambas direcciones) */
 .hist-sort-opts{display:flex; flex-direction:column; gap:10px;}
 
+/* ---------- HISTORIAL: rango de fechas personalizado (Tanda E) ---------- */
+.hist-rango-box{margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);}
+.hist-rango-fields{display:flex; gap:10px;}
+.hist-rango-field{display:flex; flex-direction:column; gap:4px; flex:1; min-width:0;}
+.hist-rango-field > span{
+  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gold-dim);
+}
+.hist-rango-field input{
+  width:100%; box-sizing:border-box; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-sm); color:var(--cream); font-family:inherit; font-size:14px;
+  padding:9px 10px; min-height:38px;
+}
+.hist-rango-field input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-rango-err{margin:9px 0 0; font-size:12px; color:var(--danger); line-height:1.4;}
+.hist-rango-actions{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;}
+.hist-rango-apply, .hist-rango-clear{
+  flex:1; min-width:120px; border-radius:var(--radius-sm); padding:9px 12px;
+  font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s ease;
+}
+.hist-rango-apply{background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9;}
+.hist-rango-apply:active{transform:scale(0.97);}
+.hist-rango-clear{background:var(--surface-2); border:1px solid var(--border); color:var(--cream);}
+.hist-rango-clear:active{transform:scale(0.97);}
+/* Chip "Rango: 15 ago – 3 sep" — deja claro que se salió de la vista mensual. */
+.hist-rango-chip{
+  display:flex; align-items:center; gap:10px; margin:12px 0 4px;
+  background:var(--burgundy); border:1px solid var(--burgundy); border-radius:var(--radius-sm);
+  padding:9px 10px 9px 13px; color:#FBEFE9; font-size:13px;
+}
+.hist-rango-chip[hidden]{display:none;}
+.hist-rango-chip .hrc-txt{flex:1; min-width:0;}
+.hist-rango-chip .hrc-k{opacity:.8; text-transform:uppercase; font-size:10.5px; letter-spacing:.05em;}
+.hist-rango-chip .hrc-back{
+  flex-shrink:0; background:rgba(251,239,233,0.16); border:1px solid rgba(251,239,233,0.28);
+  color:#FBEFE9; border-radius:14px; padding:5px 12px; font-family:inherit; font-size:12px;
+  font-weight:600; cursor:pointer;
+}
+.hist-rango-chip .hrc-back:active{transform:scale(0.96);}
+:root.hc .hist-rango-field input, :root.hc .hist-rango-chip, :root.hc .hist-rango-apply,
+:root.hc .hist-rango-clear{border-width:2px;}
+
 /* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
 .hist-day-sep{
   font-size:12px; font-weight:600; color:var(--gold-dim); letter-spacing:.02em;
@@ -1476,6 +1517,12 @@ button:active{ transform:scale(0.97); }
       <button data-htab="ingresos" role="tab" aria-selected="false">Ingresos</button>
       <button data-htab="todo" role="tab" aria-selected="false">Todo</button>
     </div>
+    <!-- Tanda E: chip visible cuando el Historial salió de la vista mensual y muestra un
+         rango de fechas elegido a mano. El botón vuelve a "Este mes" (navegación normal). -->
+    <div class="hist-rango-chip" id="hRangoChip" hidden>
+      <span class="hrc-txt"><span class="hrc-k">Rango:</span> <span id="hRangoChipTxt"></span></span>
+      <button type="button" class="hrc-back" id="hRangoChipBack">Este mes</button>
+    </div>
     <div class="hist-controls">
       <div class="hist-month-totals" id="hMonthTotals">
         <span class="hmt-item" id="hmtGastosItem"><span class="hmt-k">Total gasto</span><span class="hmt-v hmt-out" id="hmtGastos">$0</span></span>
@@ -1506,6 +1553,21 @@ button:active{ transform:scale(0.97); }
       </div>
       <div class="hist-cat-carousel" id="hCatCarousel"></div>
       <div class="hist-filter-panel" id="hFilterPanel" style="display:none;">
+        <!-- Tanda E: rango de fechas personalizado. Al aplicarlo, reemplaza la navegación
+             mensual del Historial por una vista que junta los movimientos de todos los
+             meses que toca el rango. Se combina en AND con búsqueda, categoría y tipo. -->
+        <div class="hist-rango-box">
+          <p class="hist-filter-label">Rango de fechas personalizado</p>
+          <div class="hist-rango-fields">
+            <label class="hist-rango-field"><span>Desde</span><input type="date" id="hRangoDesde"></label>
+            <label class="hist-rango-field"><span>Hasta</span><input type="date" id="hRangoHasta"></label>
+          </div>
+          <p class="hist-rango-err" id="hRangoErr" hidden></p>
+          <div class="hist-rango-actions">
+            <button type="button" class="hist-rango-apply" id="hRangoApply">Aplicar rango</button>
+            <button type="button" class="hist-rango-clear" id="hRangoClear" hidden>Quitar rango</button>
+          </div>
+        </div>
         <p class="hist-filter-label">Ordenar por</p>
         <div class="hist-sort-opts" id="hSortOptsList" role="radiogroup" aria-label="Ordenar historial">
           <label class="hist-check"><input type="radio" name="hSortOpt" value="fecha-desc"><span>Fecha (recientes primero)</span></label>
@@ -3154,8 +3216,11 @@ function switchScreen(id){
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> switchScreen(btn.dataset.screen));
 });
-function prevMonth(){ currentDate.setMonth(currentDate.getMonth()-1); resetChartViews(); renderAll(); }
-function nextMonth(){ currentDate.setMonth(currentDate.getMonth()+1); resetChartViews(); renderAll(); }
+// Tanda E: con un rango de fechas activo en el Historial, la navegación mensual está
+// desactivada (el selector de mes se oculta). El guard evita que un swipe residual sobre
+// esa zona mueva currentDate por detrás del rango.
+function prevMonth(){ if(hRango && currentScreen === 'historial') return; currentDate.setMonth(currentDate.getMonth()-1); resetChartViews(); renderAll(); }
+function nextMonth(){ if(hRango && currentScreen === 'historial') return; currentDate.setMonth(currentDate.getMonth()+1); resetChartViews(); renderAll(); }
 document.getElementById('prevMonth').onclick = prevMonth;
 document.getElementById('nextMonth').onclick = nextMonth;
 
@@ -5745,10 +5810,76 @@ let hFilterCats = new Set();        // categorías seleccionadas (selección mú
 let hFilterPanelOpen = false;       // panel del embudo (ordenar) desplegado
 let hKindFilter = 'all';            // 'all' | 'cuotas' | 'contado' | 'credito' — filtro por tipo de pago (Tanda L; 4 opciones en Tanda O · punto 3)
 
-// ¿Hay búsqueda, filtro de categoría o filtro de tipo activo? (define si se muestra el
-// contador). El orden NO cuenta como filtro.
+/* ---- Rango de fechas personalizado del Historial (Tanda E) ----
+   null            -> navegación mensual normal: currentDate manda, nada cambia.
+   {desde, hasta}  -> el Historial ignora currentDate y muestra las ocurrencias de TODOS
+                      los meses que toca el rango, filtradas por fecha exacta entre desde
+                      y hasta (ISO 'YYYY-MM-DD', ambos inclusive). currentDate NO se toca:
+                      al quitar el rango se vuelve exactamente al mes que se veía.
+   El "Saldo: $X" de la pestaña Todo es un cierre mensual (saldoPorMovimientoDelMes,
+   memoizado por mes, parte del arrastre de meses previos). Bajo un rango que cruza meses
+   no hay un único mes de referencia y recomponerlo sería duplicar el motor mensual, así
+   que con rango activo la columna "Saldo" se oculta en todas las filas. */
+let hRango = null;
+
+// Primer día de cada mes entre desde y hasta (ambos ISO). Sirve para llamar a los
+// motores mensuales (getExpensesForMonth / getIncomesForMonth / cuotasVirtualesHistorial)
+// una vez por mes tocado y luego filtrar por fecha exacta.
+function mesesDelRango(desdeISO, hastaISO){
+  const [y0, m0] = desdeISO.split('-').map(Number);
+  const [y1, m1] = hastaISO.split('-').map(Number);
+  const out = [];
+  let y = y0, m = m0 - 1;
+  while(y < y1 || (y === y1 && m <= m1 - 1)){
+    out.push(new Date(y, m, 1));
+    m++; if(m > 11){ m = 0; y++; }
+  }
+  return out;
+}
+// Ocurrencias de gastos dentro del rango activo (reales + virtuales de fijos), juntando
+// todos los meses que toca y filtrando por date exacto. Sin rango -> el mes de siempre.
+function gastosDelHistorial(){
+  if(!hRango) return getExpensesForMonth(currentDate);
+  const { desde, hasta } = hRango;
+  const out = [];
+  mesesDelRango(desde, hasta).forEach(d=>{
+    getExpensesForMonth(d).forEach(e=>{ if(e.date >= desde && e.date <= hasta) out.push(e); });
+  });
+  return out;
+}
+function ingresosDelHistorial(){
+  if(!hRango) return getIncomesForMonth(currentDate);
+  const { desde, hasta } = hRango;
+  const out = [];
+  mesesDelRango(desde, hasta).forEach(d=>{
+    getIncomesForMonth(d).forEach(i=>{ if(i.date >= desde && i.date <= hasta) out.push(i); });
+  });
+  return out;
+}
+function cuotasVirtualesDelHistorial(){
+  if(!hRango) return cuotasVirtualesHistorial(currentDate);
+  const { desde, hasta } = hRango;
+  const out = [];
+  mesesDelRango(desde, hasta).forEach(d=>{
+    cuotasVirtualesHistorial(d).forEach(c=>{ if(c.date >= desde && c.date <= hasta) out.push(c); });
+  });
+  return out;
+}
+// "15 ago" / "15 ago 25" (año solo si los extremos difieren de año) para el chip.
+function fmtRangoChipTxt(desdeISO, hastaISO){
+  const dY = +desdeISO.slice(0,4), hY = +hastaISO.slice(0,4);
+  const parte = (iso, conAnio)=>{
+    const [y, m, d] = iso.split('-').map(Number);
+    return d + ' ' + MESES[m-1].slice(0,3).toLowerCase() + (conAnio ? ' ' + String(y).slice(2) : '');
+  };
+  const conAnio = dY !== hY;
+  return parte(desdeISO, conAnio) + ' – ' + parte(hastaISO, conAnio);
+}
+
+// ¿Hay búsqueda, filtro de categoría, filtro de tipo o rango de fechas activo? (define si
+// se muestra el contador). El orden NO cuenta como filtro.
 function histFiltrosActivos(){
-  return !!hSearchText || hFilterCats.size > 0 || hKindFilter !== 'all';
+  return !!hSearchText || hFilterCats.size > 0 || hKindFilter !== 'all' || !!hRango;
 }
 function histMatchTexto(txt){
   return !hSearchText || String(txt || '').toLowerCase().includes(hSearchText);
@@ -5812,12 +5943,14 @@ function renderHistSearchControls(){
   wrap.style.display = enLista ? '' : 'none';
   if(!enLista) return;
 
-  const monthExpenses = getExpensesForMonth(currentDate);
+  // Con rango activo, las categorías salen de las ocurrencias del rango completo, no del
+  // mes navegado.
+  const monthExpenses = gastosDelHistorial();
   // Incluye también las categorías de las cuotas virtuales del mes: así, en un mes
   // posterior al de la compra, el chip de esa categoría existe y el filtro la alcanza.
   const catsRaw = [
     ...monthExpenses.map(e=> e.category),
-    ...cuotasVirtualesHistorial(currentDate).map(c=> c.category)
+    ...cuotasVirtualesDelHistorial().map(c=> c.category)
   ];
   const cats = [...new Set(catsRaw.filter(Boolean))].sort((a,b)=> a.localeCompare(b,'es'));
 
@@ -5890,16 +6023,39 @@ function renderHistSearchControls(){
   // El ordenamiento siempre está disponible, así que el botón se muestra siempre.
   const fbtn = document.getElementById('hFilterBtn');
   fbtn.style.display = '';
-  fbtn.classList.toggle('on', hFilterPanelOpen || hSortMode !== 'fecha-desc');
+  fbtn.classList.toggle('on', hFilterPanelOpen || hSortMode !== 'fecha-desc' || !!hRango);
   fbtn.setAttribute('aria-expanded', hFilterPanelOpen ? 'true' : 'false');
 
   const panel = document.getElementById('hFilterPanel');
   panel.style.display = hFilterPanelOpen ? '' : 'none';
 
+  // --- Rango de fechas personalizado ---
+  // Sincroniza los selectores con el rango vigente sin pisar lo que el usuario tiene
+  // enfocado, y muestra "Quitar rango" solo cuando hay uno activo.
+  const rDesde = document.getElementById('hRangoDesde');
+  const rHasta = document.getElementById('hRangoHasta');
+  if(rDesde && document.activeElement !== rDesde) rDesde.value = hRango ? hRango.desde : (rDesde.value || '');
+  if(rHasta && document.activeElement !== rHasta) rHasta.value = hRango ? hRango.hasta : (rHasta.value || '');
+  const rClear = document.getElementById('hRangoClear');
+  if(rClear) rClear.hidden = !hRango;
+  const rErr = document.getElementById('hRangoErr');
+  if(rErr && hRango){ rErr.hidden = true; rErr.textContent = ''; }
+
   // Marca el radio del criterio de orden activo.
   document.querySelectorAll('#hSortOptsList input[name="hSortOpt"]').forEach(r=>{
     r.checked = (r.value === hSortMode);
   });
+}
+// Chip "Rango: 15 ago – 3 sep" bajo las pestañas: visible solo con rango activo, deja
+// claro que el Historial salió de la vista mensual. Se llama en cada renderHistorial().
+function syncHistRangoChip(){
+  const chip = document.getElementById('hRangoChip');
+  if(!chip) return;
+  chip.hidden = !hRango;
+  if(hRango){
+    const txt = document.getElementById('hRangoChipTxt');
+    if(txt) txt.textContent = fmtRangoChipTxt(hRango.desde, hRango.hasta);
+  }
 }
 
 // Eventos fijos del bloque de búsqueda (los dinámicos se enganchan en renderHistSearchControls).
@@ -5930,6 +6086,39 @@ function renderHistSearchControls(){
       if(r.checked){ hSortMode = r.value; renderHistorial(); }
     });
   });
+})();
+
+// --- Rango de fechas personalizado (Tanda E): aplicar / quitar ---
+(function initHistRango(){
+  const rDesde = document.getElementById('hRangoDesde');
+  const rHasta = document.getElementById('hRangoHasta');
+  const rErr   = document.getElementById('hRangoErr');
+  const showErr = msg=>{ if(rErr){ rErr.textContent = msg; rErr.hidden = false; } };
+  const clearErr = ()=>{ if(rErr){ rErr.textContent = ''; rErr.hidden = true; } };
+
+  function aplicar(){
+    const desde = rDesde ? rDesde.value : '';
+    const hasta = rHasta ? rHasta.value : '';
+    if(!desde || !hasta){ showErr('Elige las dos fechas: desde y hasta.'); return; }
+    if(desde > hasta){ showErr('La fecha "desde" debe ser anterior o igual a "hasta".'); return; }
+    clearErr();
+    hRango = { desde, hasta };
+    renderAll();   // el selector de mes global se oculta mientras el rango está activo
+  }
+  function quitar(){
+    clearErr();
+    hRango = null;
+    // currentDate nunca se tocó: volvemos exactamente al mes que se estaba viendo, sin
+    // filtros residuales del rango.
+    renderAll();
+  }
+  const applyBtn = document.getElementById('hRangoApply');
+  if(applyBtn) applyBtn.addEventListener('click', aplicar);
+  const clearBtn = document.getElementById('hRangoClear');
+  if(clearBtn) clearBtn.addEventListener('click', quitar);
+  const chipBack = document.getElementById('hRangoChipBack');
+  if(chipBack) chipBack.addEventListener('click', quitar);
+  [rDesde, rHasta].forEach(el=>{ if(el) el.addEventListener('input', clearErr); });
 })();
 
 function applySort(items, nameKey, amountKey, dateKey){
@@ -5973,17 +6162,17 @@ function historialDetalleOn(){ return !state.config || state.config.historialDet
 function histTotalesVisibles(){
   let gastos = 0, ingresos = 0;
   if(hTab !== 'ingresos'){
-    getExpensesForMonth(currentDate).forEach(e=>{
+    gastosDelHistorial().forEach(e=>{
       if(!histPasaGasto(e)) return;
       if(e.debtId) return;                 // fila de origen: $0 de impacto este mes
       gastos += e.amount;
     });
-    cuotasVirtualesHistorial(currentDate).forEach(c=>{
+    cuotasVirtualesDelHistorial().forEach(c=>{
       if(histPasaGasto(c)) gastos += c.amount;
     });
   }
   if(hTab !== 'gastos'){
-    getIncomesForMonth(currentDate).forEach(i=>{
+    ingresosDelHistorial().forEach(i=>{
       if(histPasaIngreso(i)) ingresos += i.amount;
     });
   }
@@ -6017,7 +6206,7 @@ function renderHistMonthTotals(){
   let mostrarNotaCredito = false;
   if(notaEl){
     const compradoCredito = (enLista && showG && hKindFilter === 'credito')
-      ? getExpensesForMonth(currentDate).reduce((s,e)=> histPasaGasto(e) ? s + e.amount : s, 0)
+      ? gastosDelHistorial().reduce((s,e)=> histPasaGasto(e) ? s + e.amount : s, 0)
       : 0;
     mostrarNotaCredito = compradoCredito > 0;
     if(mostrarNotaCredito){
@@ -6036,10 +6225,13 @@ function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
+  // Con rango activo, barra/torta no aplican (son mensuales): se fuerza vista Lista.
+  if(hRango) chartView.historial = 'lista';
   syncHistDetalleBtn();
+  syncHistRangoChip();
   renderHistSearchControls();
   renderHistMonthTotals();
-  renderChartSeg('historial');   // oculta el control en "Todo" y marca la vista activa
+  renderChartSeg('historial');   // oculta el control en "Todo"/rango y marca la vista activa
 
   const detalleOn = historialDetalleOn();
   const expCls = detalleOn ? ' expanded' : '';
@@ -6072,11 +6264,11 @@ function renderHistorial(){
   box.style.display = ''; chartBox.style.display = 'none';
   if(hTab==='gastos'){
     // Gastos reales/fijos + filas virtuales de cuota (meses posteriores al de la compra).
-    const base = [...getExpensesForMonth(currentDate), ...cuotasVirtualesHistorial(currentDate)];
+    const base = [...gastosDelHistorial(), ...cuotasVirtualesDelHistorial()];
     const items = applySort(base, 'nombre', 'amount', 'date').filter(histPasaGasto);
     updateHistCount(items.length);
     if(items.length===0){
-      box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
+      box.innerHTML = emptyMsg(hRango ? 'Sin gastos en el rango elegido.' : histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
       return;
     }
     const rowHtml = (e)=>{
@@ -6130,10 +6322,10 @@ function renderHistorial(){
     });
     wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
   } else {
-    const items = applySort(getIncomesForMonth(currentDate), 'nombre', 'amount', 'date').filter(histPasaIngreso);
+    const items = applySort(ingresosDelHistorial(), 'nombre', 'amount', 'date').filter(histPasaIngreso);
     updateHistCount(items.length);
     if(items.length===0){
-      box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún ingreso coincide con la búsqueda.' : 'Sin ingresos registrados este mes.');
+      box.innerHTML = emptyMsg(hRango ? 'Sin ingresos en el rango elegido.' : histFiltrosActivos() ? 'Ningún ingreso coincide con la búsqueda.' : 'Sin ingresos registrados este mes.');
       return;
     }
     // Tanda M: etiqueta principal = "Nombre"; fuente y descripción pasan al Detalle (.li-sub).
@@ -6169,9 +6361,11 @@ function renderHistorialTodo(box){
   const detalleOn = historialDetalleOn();
   const expCls = detalleOn ? ' expanded' : '';
   const [campo, dir] = hSortMode.split('-');
-  const saldoMap = saldoPorMovimientoDelMes(currentDate);
+  // El "Saldo: $X" es un cierre mensual. Bajo un rango que cruza meses no hay un único
+  // mes de referencia, así que con rango activo la columna no se calcula ni se muestra.
+  const saldoMap = hRango ? null : saldoPorMovimientoDelMes(currentDate);
 
-  const gastos = getExpensesForMonth(currentDate).map(e=>({
+  const gastos = gastosDelHistorial().map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
     name:e.nombre || e.description || '', description:e.description||'',
     category:e.category, method:e.method, tipo:e.tipo, debtId:e.debtId,
@@ -6182,7 +6376,7 @@ function renderHistorialTodo(box){
     if(!histPasaKind(g)) return false;
     return true;
   });
-  const ingresos = getIncomesForMonth(currentDate).map(i=>({
+  const ingresos = ingresosDelHistorial().map(i=>({
     kind:'ingreso', id:i.id, date:i.date, amount:i.amount,
     name:i.nombre || i.description || i.source || '', source:i.source, description:i.description||'', tipo:i.tipo,
     esRangoFijo:i.esRangoFijo, rangoDiaInicio:i.rangoDiaInicio, rangoDiaFin:i.rangoDiaFin
@@ -6194,7 +6388,7 @@ function renderHistorialTodo(box){
   });
   // Filas virtuales de cuota (meses posteriores al de la compra): participan igual que
   // cualquier fila en búsqueda, filtro por categoría, orden y saldo acumulado.
-  const cuotasV = cuotasVirtualesHistorial(currentDate).map(c=>({
+  const cuotasV = cuotasVirtualesDelHistorial().map(c=>({
     kind:'cuota', id:c.id, date:c.date, amount:c.amount,
     name:c.description||'', category:c.category, method:c.method, tipo:c.tipo,
     debtId:c.debtId, isVirtualCuota:true, cuotaNum:c.cuotaNum, totalCuotas:c.totalCuotas, paid:c.paid
@@ -6222,12 +6416,12 @@ function renderHistorialTodo(box){
     agrupaPorDia = false;
   }
   if(items.length===0){
-    box.innerHTML = emptyMsg(histFiltrosActivos() ? 'Ningún movimiento coincide con la búsqueda.' : 'Sin movimientos registrados este mes.');
+    box.innerHTML = emptyMsg(hRango ? 'Sin movimientos en el rango elegido.' : histFiltrosActivos() ? 'Ningún movimiento coincide con la búsqueda.' : 'Sin movimientos registrados este mes.');
     return;
   }
 
   const rowHtml = (it)=>{
-    const saldo = saldoMap.get(saldoRowKey(it.kind, it.id, it.date));
+    const saldo = saldoMap ? saldoMap.get(saldoRowKey(it.kind, it.id, it.date)) : undefined;
     const saldoTxt = (saldo === undefined) ? ''
       : `<span class="li-saldo${saldo < 0 ? ' neg' : ''}">Saldo: ${money(saldo)}</span>`;
     if(it.kind==='ingreso'){
@@ -7847,7 +8041,7 @@ const CHART_SEG_OPTS = {
 function renderChartSeg(screen){
   const box = document.getElementById('seg' + cap(screen));
   if(!box) return;
-  const states = (screen === 'historial' && hTab === 'todo')
+  const states = (screen === 'historial' && (hTab === 'todo' || hRango))
     ? ['lista']
     : (CHART_STATES_BY_SCREEN[screen] || CHART_STATES);
   // Un selector con una sola opción no es un control: se oculta.
@@ -8275,9 +8469,11 @@ function renderAll(){
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
   renderReadOnlyBanner();
   document.getElementById('monthLabel').textContent = MESES[currentDate.getMonth()] + " " + currentDate.getFullYear();
-  // Metas es independiente del mes: sin selector de mes en esa pantalla.
+  // Metas es independiente del mes: sin selector de mes en esa pantalla. Tanda E: en el
+  // Historial con un rango de fechas activo también se oculta — el rango reemplaza a la
+  // navegación mensual (y el chip "Rango: …" indica cómo volver a "Este mes").
   const monthSel = document.querySelector('.month-select');
-  if(monthSel) monthSel.style.display = currentScreen === 'metas' ? 'none' : '';
+  if(monthSel) monthSel.style.display = (currentScreen === 'metas' || (currentScreen === 'historial' && hRango)) ? 'none' : '';
   // El botón "guardar resumen como imagen" solo tiene sentido en la pantalla Resumen.
   const briBtn = document.getElementById('btnResumenImg');
   if(briBtn) briBtn.style.display = currentScreen === 'resumen' ? '' : 'none';
