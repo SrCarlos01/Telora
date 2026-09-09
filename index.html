@@ -352,7 +352,7 @@ button{font-family:inherit;}
   color:var(--gold-dim); margin:0 0 12px;
 }
 .cat-row{
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
   background:var(--surface-2); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:8px;
   border:1px solid var(--border); cursor:pointer; transition:background .15s ease, transform .12s ease;
 }
@@ -362,6 +362,12 @@ button{font-family:inherit;}
 .cat-row .name{font-size:15px; color:#EADFD2;}
 .cat-row .val{font-size:15px; font-weight:600; color:var(--cream);}
 .cat-icon{color:var(--gold); width:19px; height:19px;}
+/* Tope de gasto mensual: barra "gastado / tope" bajo la categoría (vista Lista). */
+.cat-tope{width:100%; margin-top:10px;}
+.cat-tope .progress-track{margin-bottom:5px;}
+.cat-tope-txt{font-size:12px; color:var(--cream-dim);}
+.cat-tope.over .progress-fill{background:var(--danger);}
+.cat-tope.over .cat-tope-txt{color:var(--danger); font-weight:600;}
 
 .empty-state{
   text-align:center; padding:50px 20px; color:var(--cream-dim);
@@ -968,6 +974,22 @@ button{font-family:inherit;}
 .cfg-icon-btn:active{transform:scale(0.9);}
 .cfg-icon-btn .icon{width:18px; height:18px;}
 .cfg-icon-btn .cat-emoji{font-size:17px;}
+/* Tope de gasto mensual por categoría: segunda línea de la fila de Configuración. */
+.config-item.is-cat{flex-wrap:wrap;}
+.cfg-cat-tope{flex-basis:100%; display:flex; align-items:center; gap:8px; margin-top:8px;}
+.cfg-cat-tope label{font-size:12px; color:var(--cream-dim); flex-shrink:0;}
+.cfg-cat-tope-in{
+  display:flex; align-items:center; gap:4px; flex:1; max-width:190px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:0 10px;
+}
+.cfg-cat-tope-in:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.cfg-cat-tope-in > span{color:var(--cream-dim); font-size:14px;}
+.cfg-cat-tope-in input{
+  flex:1; min-width:0; border:none; background:none; color:var(--cream);
+  font-size:15px; font-family:inherit; padding:8px 0;
+}
+.cfg-cat-tope-in input:focus{outline:none;}
+.cfg-cat-tope-in input::placeholder{color:var(--cream-dim);}
 /* Tanda W: fila de Configuración con "Crédito" bloqueado + renombrado inline */
 .config-item.is-locked{flex-direction:column; align-items:flex-start; gap:3px;}
 .cfg-item-lock{font-size:11px; line-height:1.35; color:var(--cream-dim);}
@@ -1153,6 +1175,7 @@ button:active{ transform:scale(0.97); }
 :root.hc .li-saldo.neg{ color:var(--danger); }
 :root.hc .progress-track{ border:1px solid var(--border); }
 :root.hc .progress-fill{ background:var(--gold); }
+:root.hc .cat-tope.over .progress-fill{ background:var(--danger); }
 :root.hc .balance-card{ background:var(--burgundy-dim); border:2px solid var(--border); }
 :root.hc .balance-card .label, :root.hc .balance-card .amount, :root.hc .balance-item .k,
 :root.hc .balance-item .v{ color:#fff; }
@@ -2126,7 +2149,8 @@ const DEFAULTS = {
   categorias: ["Comida","Aseo casa","Transporte","Cursos","Libros","Vestuario","Maquillaje/Skincare","Aseo/cuidado personal","Salidas con amigas o citas","Regalos","Ahorro","Varios"],
   metodos: ["Efectivo","Débito","Crédito","Transferencia"],
   fuentes: ["Iustax","Agrupación","Sesiones Online","Otros"],
-  categoriaIconos: {}   // { "Nombre categoría": {tipo:'emoji'|'icono', valor:'...'} }
+  categoriaIconos: {},  // { "Nombre categoría": {tipo:'emoji'|'icono', valor:'...'} }
+  categoriaTopes: {}    // { "Nombre categoría": monto CLP entero > 0 } — clave ausente = sin tope
 };
 const CAT_ICONS = {
   "Comida":"coffee","Aseo casa":"home","Transporte":"truck","Cursos":"book-open",
@@ -2147,6 +2171,12 @@ function catIcon(cat, extraClass){
   return icon(CAT_ICONS[cat] || 'tag', extraClass);
 }
 
+// Tope de gasto mensual de una categoría: monto entero > 0, o null si no tiene tope.
+function catTope(cat){
+  const v = (state.config.categoriaTopes || {})[cat];
+  return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.round(v) : null;
+}
+
 function loadState(){
   // Lectura defensiva (Tanda Q): si el navegador bloquea el acceso a localStorage
   // (algunos modos privados / permisos restringidos lanzan al solo tocarlo), la app
@@ -2156,6 +2186,20 @@ function loadState(){
   if(s){
     const parsed = JSON.parse(s);
     if(parsed.config && !parsed.config.categoriaIconos) parsed.config.categoriaIconos = {};   // íconos por categoría
+    // Topes de gasto mensual por categoría (mapa aparte, como categoriaIconos): clave
+    // ausente = sin tope. Se saldan valores basura para que catTope()/la barra de
+    // progreso nunca topen con algo que no sea un monto positivo.
+    if(parsed.config){
+      const t = parsed.config.categoriaTopes;
+      if(!t || typeof t !== 'object' || Array.isArray(t)){
+        parsed.config.categoriaTopes = {};
+      } else {
+        Object.keys(t).forEach(k=>{
+          if(typeof t[k] === 'number' && isFinite(t[k]) && t[k] > 0) t[k] = Math.round(t[k]);
+          else delete t[k];
+        });
+      }
+    }
     // Tanda M · campo "Nombre" en gastos e ingresos. Migración obligatoria: ningún
     // registro puede quedar sin nombre. Por defecto = su descripción completa; si no
     // hay descripción, cae a la categoría (gasto) o la fuente (ingreso) para nunca
@@ -2233,7 +2277,7 @@ function loadState(){
     }
     return parsed;
   }
-  return { config: {...DEFAULTS, categoriaIconos: {}}, expenses: [], incomes: [], debts: [], goals: [] };
+  return { config: {...DEFAULTS, categoriaIconos: {}, categoriaTopes: {}}, expenses: [], incomes: [], debts: [], goals: [] };
 }
 /* ==================== GUARDADO BLINDADO (Tanda Q · pto 1) ====================
    saveState() puede fallar: cuota excedida (QuotaExceededError), modo privado o
@@ -5028,6 +5072,16 @@ function renderResumen(){
   Object.keys(cuotasPorCategoria).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCategoria[c]);
 
   const rows = Object.entries(catTotals).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  // Vista Lista: además de las categorías con gasto, se muestran las que tienen un tope
+  // definido aunque este mes vayan en $0 — el tope sirve de recordatorio de presupuesto
+  // antes de gastar, no solo de registro después. Los gráficos (torta/barra) siguen
+  // usando solo `rows` (categorías con gasto > 0).
+  const conGasto = new Set(rows.map(([c])=>c));
+  const listaRows = rows.concat(
+    state.config.categorias
+      .filter(c=> !conGasto.has(c) && catTope(c) != null)
+      .map(c=> [c, catTotals[c] || 0])
+  );
   const box = document.getElementById('rCategorias');
   const chartBox = document.getElementById('rChart');
   renderChartSeg('resumen');
@@ -5035,7 +5089,20 @@ function renderResumen(){
   // lista funcione como su leyenda (las categorías fuera del top 5 comparten el color
   // del segmento "Otros").
   const dona = donaResumenData(currentDate);
-  if(rows.length===0){
+  // Fila de progreso "gastado / tope" bajo una categoría con tope definido. Si el gasto
+  // supera el tope se marca `.over` (color de alerta) — solo visual, no bloquea nada.
+  const topeBar = (cat, val)=>{
+    const tope = catTope(cat);
+    if(tope == null) return '';
+    const pct = Math.max(0, Math.min(100, val / tope * 100));
+    const over = val > tope;
+    return `
+        <div class="cat-tope${over ? ' over' : ''}">
+          <div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+          <span class="cat-tope-txt">${money(val)} de ${money(tope)}</span>
+        </div>`;
+  };
+  if(rows.length===0 && (chartView.resumen !== 'lista' || listaRows.length===0)){
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = `<div class="empty-state">${icon('frown')}<p>Todavía no hay gastos registrados este mes.</p></div>`;
   } else if(chartView.resumen !== 'lista'){
@@ -5045,10 +5112,10 @@ function renderResumen(){
     else renderBarChart(chartBox, cd);
   } else {
     box.style.display = ''; chartBox.style.display = 'none';
-    box.innerHTML = rows.map(([cat,val])=>`
+    box.innerHTML = listaRows.map(([cat,val])=>`
       <div class="cat-row" data-cat="${cat}">
         <div class="left"><span class="cat-sw" style="background:${dona.colorDeCat[cat] || 'var(--cream-dim)'}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${cat}</span></div>
-        <span class="val">${money(val)}</span>
+        <span class="val">${money(val)}</span>${topeBar(cat, val)}
       </div>`).join('');
     box.querySelectorAll('[data-cat]').forEach(el=>{
       el.addEventListener('click', ()=> openCategoriaDetalle(el.dataset.cat, normalExpenses));
@@ -6516,14 +6583,26 @@ function renderConfigList(key, boxId){
       <small class="cfg-item-lock">Activa las compras a cuotas — no se puede eliminar.</small>
     </div>`;
     }
+    // Categorías: segunda línea con el tope de gasto mensual (opcional, vacío = sin tope).
+    const topeRow = isCat ? `
+      <div class="cfg-cat-tope">
+        <label for="cfgTope-${idx}">Tope mensual</label>
+        <div class="cfg-cat-tope-in">
+          <span aria-hidden="true">$</span>
+          <input type="text" inputmode="numeric" id="cfgTope-${idx}" data-cattope="${idx}"
+                 value="${catTope(item) != null ? formatMiles(String(catTope(item))) : ''}"
+                 placeholder="Sin tope" autocomplete="off"
+                 aria-label="Tope de gasto mensual de ${escAttr(item)}">
+        </div>
+      </div>` : '';
     return `
-    <div class="config-item" data-cfgitem="${key}:${idx}">
+    <div class="config-item${isCat ? ' is-cat' : ''}" data-cfgitem="${key}:${idx}">
       <span>${item}</span>
       <div class="cfg-item-actions">
         ${isCat ? `<button class="cfg-icon-btn" data-caticon="${idx}" aria-label="Cambiar ícono">${catIcon(item)}</button>` : ''}
         ${renombrable ? `<button class="cfg-rename-btn" data-rename="${key}:${idx}" aria-label="Renombrar ${escAttr(item)}">${icon('edit')}</button>` : ''}
         <button data-remove="${key}:${idx}" aria-label="Eliminar ${escAttr(item)}">${icon('x')}</button>
-      </div>
+      </div>${topeRow}
     </div>`;
   }).join('');
 
@@ -6539,6 +6618,7 @@ function renderConfigList(key, boxId){
       if(k === 'categorias'){
         state.config[k].splice(idx, 1);
         if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
+        if(state.config.categoriaTopes) delete state.config.categoriaTopes[item];
         haptic(HAPTIC_DELETE); saveState(); renderConfig();
         return;
       }
@@ -6568,6 +6648,40 @@ function renderConfigList(key, boxId){
 
   box.querySelectorAll('[data-caticon]').forEach(btn=>{
     btn.addEventListener('click', ()=> openCatIcon(state.config.categorias[parseInt(btn.dataset.caticon, 10)]));
+  });
+
+  // --- Tope de gasto mensual por categoría (mapa aparte state.config.categoriaTopes) ---
+  // Formateo de miles en vivo; se guarda al salir del campo o con Enter. Vacío / 0 borra
+  // el tope. NO se re-renderiza la lista al guardar: así el foco y el cursor no saltan.
+  box.querySelectorAll('[data-cattope]').forEach(inp=>{
+    const catActual = ()=> state.config.categorias[parseInt(inp.dataset.cattope, 10)];
+    inp.addEventListener('input', ()=>{
+      if(inp !== document.activeElement) return;
+      const f = formatMiles(inp.value);
+      if(f !== inp.value) inp.value = f;
+    });
+    const guardar = ()=>{
+      const cat = catActual();
+      if(!cat) return;
+      if(isReadOnly()){
+        blockReadOnly();
+        inp.value = catTope(cat) != null ? formatMiles(String(catTope(cat))) : '';
+        return;
+      }
+      if(!state.config.categoriaTopes) state.config.categoriaTopes = {};
+      const n = parseInt(soloDigitos(inp.value), 10);
+      if(n > 0){
+        state.config.categoriaTopes[cat] = n;
+        inp.value = formatMiles(String(n));
+      } else {
+        delete state.config.categoriaTopes[cat];
+        inp.value = '';
+      }
+      saveState();
+    };
+    inp.addEventListener('change', guardar);
+    inp.addEventListener('blur', guardar);
+    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); } });
   });
 }
 
@@ -6964,7 +7078,7 @@ function validConfigShape(c){
   if(c === null || typeof c !== 'object' || Array.isArray(c)) return false;
   const optStrArr = a => a === undefined || (Array.isArray(a) && a.every(isStr));
   return optStrArr(c.categorias) && optStrArr(c.metodos) && optStrArr(c.fuentes)
-    && optPlainObj(c.categoriaIconos) && optStr(c.mesInicioRegistro);
+    && optPlainObj(c.categoriaIconos) && optPlainObj(c.categoriaTopes) && optStr(c.mesInicioRegistro);
 }
 // Devuelve null si el respaldo es aceptable (aunque le falten campos/secciones), o un
 // mensaje de error si está genuinamente corrupto.
@@ -7001,6 +7115,14 @@ function migrateBackup(parsed){
   config.fuentes    = Array.isArray(c.fuentes)    ? c.fuentes.slice()    : DEFAULTS.fuentes.slice();
   config.categoriaIconos = (c.categoriaIconos && typeof c.categoriaIconos === 'object' && !Array.isArray(c.categoriaIconos))
     ? c.categoriaIconos : {};
+  // Topes de gasto mensual por categoría: solo pares con monto numérico > 0; el resto se descarta.
+  config.categoriaTopes = {};
+  if(c.categoriaTopes && typeof c.categoriaTopes === 'object' && !Array.isArray(c.categoriaTopes)){
+    Object.keys(c.categoriaTopes).forEach(k=>{
+      const v = c.categoriaTopes[k];
+      if(typeof v === 'number' && isFinite(v) && v > 0) config.categoriaTopes[k] = Math.round(v);
+    });
+  }
   if(config.paleta === undefined) config.paleta = 'cafe';
   if(config.fontScale === undefined) config.fontScale = '1';
   if(!isBool(config.altoContraste)) config.altoContraste = false;
