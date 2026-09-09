@@ -1874,6 +1874,17 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
+<!-- SHEET: aviso de posible gasto duplicado al crear (Tanda F). Liviano, NO bloqueante. -->
+<div class="sheet-overlay" id="sheetGastoDuplicado">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Ya registraste este gasto?</h2>
+    <p class="sheet-note" id="gdupTexto"></p>
+    <button class="btn-primary" id="gdupConfirm">Guardar de todas formas</button>
+    <button class="btn-ghost" data-close>Revisar</button>
+  </div>
+</div>
+
 <!-- SHEET: confirmar la fecha real de un fijo con rango de días (este mes) -->
 <div class="sheet-overlay" id="sheetConfirmarFechaFijo">
   <div class="sheet">
@@ -3436,6 +3447,19 @@ document.getElementById('btnConfig').onclick = ()=>{
 document.getElementById('btnExport').onclick = ()=>{
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
+  // Tanda E: si el Historial tiene un rango de fechas activo, la exportación abre ya
+  // apuntando a ESE rango (opción "Rango de fechas" preseleccionada y fechas cargadas).
+  // El usuario puede cambiarlo a "este mes" / "todo el historial" o editar las fechas.
+  // Sin rango activo, la hoja abre con sus opciones de siempre. El motor de exportación
+  // (buildExportWorkbook) ya expande fijos y cuotas mes a mes dentro del rango elegido,
+  // así que el Excel refleja los mismos movimientos que la lista del Historial.
+  if(hRango){
+    const rRango = document.querySelector('input[name=exportScope][value="rango"]');
+    if(rRango) rRango.checked = true;
+    document.getElementById('rangoFields').style.display = 'flex';
+    document.getElementById('expDesde').value = hRango.desde;
+    document.getElementById('expHasta').value = hRango.hasta;
+  }
   openSheet('sheetExportar');
 };
 
@@ -3544,6 +3568,7 @@ function openGastoForm(expenseId){
   if(!expenseId && isReadOnly()){ blockReadOnly(); return; }
   editingExpenseId = expenseId;
   confirmarMetodoSinCuotas = false;   // Tanda W: reinicia el ok del aviso de "compra a cuotas"
+  confirmarGastoDuplicado = false;    // Tanda F: reinicia el ok del aviso de gasto duplicado
   fillSelect('gCategoria', state.config.categorias);
   fillSelect('gMetodo', state.config.metodos);
   const today = new Date();
@@ -3629,6 +3654,13 @@ document.getElementById('gmaConfirm').onclick = ()=>{
   closeSheet('sheetGastoMetodoAviso');
   document.getElementById('btnSaveGasto').onclick();
 };
+
+let confirmarGastoDuplicado = false;   // Tanda F: "Guardar de todas formas" del aviso de gasto duplicado
+document.getElementById('gdupConfirm').onclick = ()=>{
+  confirmarGastoDuplicado = true;
+  closeSheet('sheetGastoDuplicado');
+  document.getElementById('btnSaveGasto').onclick();
+};
 document.getElementById('btnSaveGasto').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
@@ -3684,6 +3716,30 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     }
   }
   confirmarMetodoSinCuotas = false;   // consumido
+
+  // Tanda F: aviso de posible gasto duplicado. Advertencia liviana, NO bloqueante.
+  // Solo al CREAR un gasto nuevo (nunca al editar) y solo si el gasto nuevo es "real":
+  // si es Fijo o a Crédito (cuota) no aplica, porque esos se repiten a propósito.
+  // Dispara si ya existe un gasto real (no cuota, no fijo) con el mismo monto exacto,
+  // la misma categoría y la misma fecha (mismo día).
+  if(!editingExpenseId && !confirmarGastoDuplicado && tipo !== 'Fijo' && !esCredito){
+    const dup = state.expenses.find(e =>
+      !e.debtId &&                 // no es cuota de una compra a crédito
+      e.tipo !== 'Fijo' &&         // no es un fijo recurrente
+      e.amount === monto &&        // mismo monto exacto
+      e.category === categoria &&  // misma categoría
+      e.date === fecha             // mismo día
+    );
+    if(dup){
+      const hoyIso = new Date().toISOString().slice(0,10);
+      const cuando = fecha === hoyIso ? 'hoy' : `el ${fmtDiaMes(fecha)}`;
+      document.getElementById('gdupTexto').textContent =
+        `Ya registraste ${money(monto)} en ${categoria} ${cuando}. ¿Guardar de todas formas?`;
+      openSheet('sheetGastoDuplicado');
+      return;
+    }
+  }
+  confirmarGastoDuplicado = false;   // consumido
 
   let nuevoGastoId = null;
   if(editingExpenseId){
@@ -3869,6 +3925,11 @@ function openIngresoForm(incomeId){
   applyReadOnlyLock('sheetIngreso');
   openSheet('sheetIngreso');
 }
+// Tanda F: el aviso de posible duplicado se implementó SOLO para gastos (btnSaveGasto).
+// Los ingresos quedan fuera de esta tanda a propósito: un doble sueldo o dos ventas del
+// mismo monto el mismo día son mucho más plausibles que un gasto repetido por error.
+// Si se decide extenderlo, replicar aquí el bloque `confirmarGastoDuplicado` con un
+// sheet propio (mismo monto + misma fuente + misma fecha, solo al crear, no fijos).
 document.getElementById('btnSaveIngreso').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   const fecha = document.getElementById('iFecha').value || new Date().toISOString().slice(0,10);
@@ -5814,13 +5875,21 @@ let hKindFilter = 'all';            // 'all' | 'cuotas' | 'contado' | 'credito' 
    null            -> navegación mensual normal: currentDate manda, nada cambia.
    {desde, hasta}  -> el Historial ignora currentDate y muestra las ocurrencias de TODOS
                       los meses que toca el rango, filtradas por fecha exacta entre desde
-                      y hasta (ISO 'YYYY-MM-DD', ambos inclusive). currentDate NO se toca:
-                      al quitar el rango se vuelve exactamente al mes que se veía.
+                      y hasta (ISO 'YYYY-MM-DD', ambos inclusive).
    El "Saldo: $X" de la pestaña Todo es un cierre mensual (saldoPorMovimientoDelMes,
    memoizado por mes, parte del arrastre de meses previos). Bajo un rango que cruza meses
    no hay un único mes de referencia y recomponerlo sería duplicar el motor mensual, así
-   que con rango activo la columna "Saldo" se oculta en todas las filas. */
+   que con rango activo la columna "Saldo" se oculta en todas las filas.
+
+   DECISIÓN (cambio de pantalla): el rango SOBREVIVE al ir a Resumen/Cuotas/Metas y volver
+   — es un modo de vista del Historial, igual que hSearchText / hFilterCats / hTab, que
+   tampoco se resetean al navegar. El selector de mes global reaparece en las otras
+   pantallas (solo se oculta en Historial con rango). Para cumplir "volver exactamente al
+   mes que se estaba viendo antes de activar el rango" aunque el usuario haya navegado
+   meses en otra pantalla mientras tanto, al ACTIVAR el rango se guarda ese mes en
+   hRangoMesPrevio y al quitarlo se restaura currentDate a él. */
 let hRango = null;
+let hRangoMesPrevio = null;   // mes (día 1) que se veía al activar el rango; se restaura al quitarlo
 
 // Primer día de cada mes entre desde y hasta (ambos ISO). Sirve para llamar a los
 // motores mensuales (getExpensesForMonth / getIncomesForMonth / cuotasVirtualesHistorial)
@@ -6102,14 +6171,21 @@ function syncHistRangoChip(){
     if(!desde || !hasta){ showErr('Elige las dos fechas: desde y hasta.'); return; }
     if(desde > hasta){ showErr('La fecha "desde" debe ser anterior o igual a "hasta".'); return; }
     clearErr();
+    // Solo al ACTIVAR desde cero se guarda el mes actual; re-aplicar (cambiar las fechas
+    // con el rango ya activo) conserva el mes de la activación original.
+    if(!hRango) hRangoMesPrevio = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     hRango = { desde, hasta };
     renderAll();   // el selector de mes global se oculta mientras el rango está activo
   }
   function quitar(){
     clearErr();
     hRango = null;
-    // currentDate nunca se tocó: volvemos exactamente al mes que se estaba viendo, sin
-    // filtros residuales del rango.
+    // Vuelve exactamente al mes que se estaba viendo al activar el rango, aunque el
+    // usuario haya navegado meses en otra pantalla mientras el rango estaba activo.
+    if(hRangoMesPrevio){
+      currentDate.setFullYear(hRangoMesPrevio.getFullYear(), hRangoMesPrevio.getMonth(), 1);
+      hRangoMesPrevio = null;
+    }
     renderAll();
   }
   const applyBtn = document.getElementById('hRangoApply');
