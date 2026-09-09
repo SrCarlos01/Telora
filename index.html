@@ -374,6 +374,9 @@ button{font-family:inherit;}
 }
 .empty-state .icon{width:32px; height:32px; color:var(--gold-dim); margin:0 auto 10px; display:block;}
 .empty-state p{font-size:15px; margin:4px 0 0; line-height:1.5;}
+/* Botón de acción dentro de un estado vacío (ej. "crear la primera cuota"). Selector
+   más específico que .btn-primary para ganarle el width:100% y quedar contenido. */
+.empty-state .empty-state-action{width:auto; margin-top:18px; padding:12px 22px; font-size:15px;}
 
 /* ---------- TABS (Historial) ---------- */
 .segmented{
@@ -6619,6 +6622,19 @@ function groupByDayHtml(items, rowHtml){
 }
 
 /* ==================== RENDER: CUOTAS ==================== */
+// Tanda G: acción del estado vacío de Cuotas. Abre "Nuevo gasto" ya con el método
+// Crédito puesto (que es lo que convierte un gasto en una compra a cuotas).
+// openGastoForm() ya bloquea si el mes está en solo-lectura; si no abrió el sheet,
+// no tocamos nada.
+function abrirFormPrimeraCuota(){
+  openGastoForm(null);
+  if(!document.getElementById('sheetGasto').classList.contains('open')) return;
+  const sel = document.getElementById('gMetodo');
+  if(sel && [...sel.options].some(o=> o.value === 'Crédito')){
+    sel.value = 'Crédito';
+    syncCuotaFields();
+  }
+}
 document.querySelectorAll('[data-ctab]').forEach(b=>{
   b.addEventListener('click', ()=>{
     cTab = b.dataset.ctab;
@@ -6640,6 +6656,21 @@ function renderCuotas(){
   const filtered = state.debts.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
 
   if(filtered.length===0){
+    // Tanda G: si NO hay ninguna compra en cuotas registrada, la pantalla no puede
+    // quedar muerta — se muestra un estado vacío accionable (mismo patrón que Metas /
+    // Resumen: ícono + texto + acción). Las cuotas nacen de un gasto con método
+    // Crédito, así que la acción abre ese formulario ya en "Crédito".
+    if(state.debts.length === 0){
+      box.innerHTML = `
+        <div class="empty-state">
+          ${icon('credit-card')}
+          <p>Todavía no tienes compras en cuotas.<br>Registra un gasto con método <b>Crédito</b> y aparecerá aquí, cuota por cuota.</p>
+          <button class="btn-primary empty-state-action" id="btnPrimeraCuota">Registrar compra en cuotas</button>
+        </div>`;
+      const b = document.getElementById('btnPrimeraCuota');
+      if(b) b.addEventListener('click', abrirFormPrimeraCuota);
+      return;
+    }
     box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.');
     return;
   }
