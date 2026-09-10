@@ -188,6 +188,61 @@ button{font-family:inherit;}
 .month-select button:active{transform:scale(0.85); color:var(--gold);}
 .month-label{font-size:18px; font-weight:500; color:var(--cream); min-width:160px; text-align:center;}
 
+/* ---------- SELECTOR DE CUENTA (Tanda C3) ---------- */
+/* Vive en el header, bajo el selector de mes; sólo se muestra en Resumen e Historial
+   (renderAll lo oculta en Cuotas/Metas). El menú desplegable se posiciona absoluto
+   respecto de .account-select y hace scroll propio si hay muchas cuentas. */
+.account-select{position:relative; display:flex; justify-content:center; padding:0 20px 14px; margin-top:-6px;}
+.account-select-btn{
+  display:inline-flex; align-items:center; gap:8px; max-width:100%;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+  color:var(--cream); font:inherit; font-size:13.5px; font-weight:500;
+  padding:7px 14px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+}
+.account-select-btn:active{transform:scale(0.97);}
+.account-select-btn[aria-expanded="true"]{border-color:var(--gold-dim); background:var(--surface-3);}
+.account-select-btn .asb-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+.account-select-btn .asb-k{color:var(--cream-dim); flex-shrink:0;}
+.account-select-btn .icon{width:15px; height:15px; flex-shrink:0; color:var(--gold-dim);}
+.account-menu{
+  position:absolute; top:100%; left:50%; transform:translateX(-50%);
+  z-index:40; min-width:min(280px, calc(100vw - 40px)); max-width:calc(100vw - 32px);
+  max-height:min(50vh, 340px); overflow-y:auto;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:14px;
+  box-shadow:0 12px 34px rgba(0,0,0,0.45); padding:6px;
+}
+.account-menu-item{
+  display:flex; align-items:center; gap:10px; width:100%;
+  background:none; border:none; color:var(--cream); font:inherit; font-size:14px;
+  text-align:left; padding:10px 12px; border-radius:9px; cursor:pointer;
+}
+.account-menu-item:active{background:var(--surface-3);}
+.account-menu-item.is-active{background:var(--surface-3);}
+.account-menu-item .am-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.account-menu-item .am-check{width:16px; height:16px; flex-shrink:0; color:var(--gold);}
+.account-menu-item .icon{width:16px; height:16px; flex-shrink:0; color:var(--gold-dim);}
+.account-menu-sep{height:1px; background:var(--border); margin:6px 4px;}
+.account-menu-transfer{color:var(--cream-dim);}
+.account-menu-transfer .am-soon{
+  font-size:11px; color:var(--burgundy-light); border:1px solid var(--border);
+  border-radius:6px; padding:1px 6px; flex-shrink:0;
+}
+
+/* Lista de cuentas dentro de Configuración: mismo patrón visual que categorías/métodos. */
+.acc-cfg-item .cfg-acc-actions{display:flex; align-items:center; gap:4px; flex-shrink:0;}
+.acc-cfg-item .cfg-acc-actions button{
+  background:none; border:none; color:var(--gold); padding:4px; display:flex;
+  align-items:center; cursor:pointer;
+}
+.acc-cfg-item .cfg-acc-actions button.acc-del{color:var(--danger);}
+.acc-cfg-item .cfg-acc-actions button[disabled]{opacity:.3; cursor:default;}
+.acc-cfg-item .cfg-acc-actions button .icon{width:16px; height:16px;}
+.acc-cfg-item.is-archived > span{color:var(--cream-dim);}
+.acc-cfg-item .acc-arch-tag{
+  font-size:11px; color:var(--cream-dim); border:1px solid var(--border);
+  border-radius:6px; padding:1px 6px; margin-left:8px; flex-shrink:0;
+}
+
 /* ---------- SCREENS ---------- */
 .screen{display:none; padding:0 20px 110px; animation:fadeIn .28s ease; touch-action:pan-y;}
 .screen.active{display:block;}
@@ -1461,6 +1516,17 @@ button:active{ transform:scale(0.97); }
     <button id="nextMonth" aria-label="Mes siguiente"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
   </div>
 
+  <!-- Tanda C3: selector de cuenta. Sólo visible en Resumen e Historial (renderAll lo
+       oculta en Cuotas/Metas). "Total" suma todas las cuentas igual que antes de C3. -->
+  <div class="account-select" id="accountSelect" style="display:none;">
+    <button type="button" class="account-select-btn" id="accountSelectBtn" aria-haspopup="true" aria-expanded="false">
+      <span class="asb-k">Cuenta:</span>
+      <span class="asb-name" id="accountSelectName">Total</span>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="account-menu" id="accountMenu" role="menu" hidden></div>
+  </div>
+
   <!-- RESUMEN -->
   <div class="screen active" id="screen-resumen">
     <div class="balance-card">
@@ -1651,6 +1717,10 @@ button:active{ transform:scale(0.97); }
       <label>Método de pago</label>
       <select id="gMetodo"></select>
     </div>
+    <div class="field" id="gCuentaField" style="display:none;">
+      <label>Cuenta</label>
+      <select id="gCuenta"></select>
+    </div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="gDescripcion" placeholder="¿En qué fue? — opcional"></div>
     <div class="field">
       <label>Tipo</label>
@@ -1693,6 +1763,10 @@ button:active{ transform:scale(0.97); }
       <label>Monto</label>
       <input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off">
       <div class="chip-row chip-carousel chips-monto" id="montoChipsI"></div>
+    </div>
+    <div class="field" id="iCuentaField" style="display:none;">
+      <label>Cuenta</label>
+      <select id="iCuenta"></select>
     </div>
     <div class="field"><label>Descripción (opcional)</label><input type="text" id="iDescripcion" placeholder="Opcional"></div>
     <div class="field">
@@ -1866,6 +1940,31 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
+<!-- SHEET: eliminar una cuenta con movimientos → reasignar a otra (Tanda C3) -->
+<div class="sheet-overlay" id="sheetCuentaBorrar">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="ctaBorrarTitle">Eliminar cuenta</h2>
+    <p class="sheet-note" id="ctaBorrarBody"></p>
+    <div class="field" id="ctaBorrarReasignField">
+      <label for="ctaBorrarDestino">Mover sus movimientos a</label>
+      <select id="ctaBorrarDestino"></select>
+    </div>
+    <button class="btn-danger" id="ctaBorrarConfirm">Eliminar cuenta</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: transferir entre cuentas — placeholder hasta C4 (Tanda C3) -->
+<div class="sheet-overlay" id="sheetTransferir">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Transferir entre cuentas</h2>
+    <p class="sheet-note">Mover dinero de una cuenta a otra sin que cuente como gasto ni como ingreso. Esta función llega en la próxima actualización.</p>
+    <button class="btn-ghost" data-close>Entendido</button>
+  </div>
+</div>
+
 <!-- SHEET: aviso al cambiar el método de un gasto que es compra a cuotas (Tanda W · ajuste 1) -->
 <div class="sheet-overlay" id="sheetGastoMetodoAviso">
   <div class="sheet">
@@ -1930,6 +2029,17 @@ button:active{ transform:scale(0.97); }
       <div class="cfg-group-body">
         <div class="config-list" id="cfgFuentes"></div>
         <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
+      </div>
+    </details>
+
+    <details class="cfg-group">
+      <summary>Cuentas <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <p class="sheet-note" style="margin:0 0 12px;">
+          Cada gasto o ingreso pertenece a una cuenta. El selector del encabezado (en Resumen e Historial) filtra por cuenta; “Total” suma todas. Archivar una cuenta la saca del selector y de los formularios sin borrar sus movimientos.
+        </p>
+        <div class="config-list" id="cfgCuentas"></div>
+        <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
       </div>
     </details>
 
@@ -2079,6 +2189,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2>Exportar a Excel</h2>
+    <p class="sheet-note" id="expCuentaNota" hidden></p>
     <label class="export-opt"><input type="radio" name="exportScope" value="mes" checked><span>Solo este mes (<span id="expMesLabel"></span>)</span></label>
     <label class="export-opt"><input type="radio" name="exportScope" value="todo"><span>Todo el historial</span></label>
     <label class="export-opt"><input type="radio" name="exportScope" value="rango"><span>Rango de fechas</span></label>
@@ -2173,6 +2284,8 @@ const ICONS = {
   "chevron-left": '<polyline points="15 18 9 12 15 6"/>',
   "chevron-right": '<polyline points="9 18 15 12 9 6"/>',
   "chevron-down": '<polyline points="6 9 12 15 18 9"/>',
+  "chevron-up": '<polyline points="18 15 12 9 6 15"/>',
+  "archive": '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
   "edit": '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   "chart-pie": '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   "list": '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
@@ -2946,6 +3059,44 @@ function ctaCalc(cuentaId){
   return (state.accounts || []).some(a=> a.id === cuentaId) ? cuentaId : 'total';
 }
 
+/* ==================== TANDA C3 · SELECTOR DE CUENTA (UI) ====================
+   Helpers de la capa de UI multi-cuenta. La elección se guarda en
+   state.config.cuentaActiva ('total' | <accountId>). ctaVista() es lo que leen
+   Resumen e Historial para pasarlo a las funciones parametrizadas en C2; devuelve
+   'total' si la cuenta activa no existe o quedó archivada (guardarraíl: nunca se
+   muestran los números de una cuenta que ya no está en el selector). */
+function cuentasVivas(){
+  return (state.accounts || []).filter(a => a && !a.archivada)
+    .slice().sort((a,b)=> (a.orden||0) - (b.orden||0));
+}
+function cuentasTodasOrden(){
+  return (state.accounts || []).slice().sort((a,b)=> (a.orden||0) - (b.orden||0));
+}
+function cuentaById(id){ return (state.accounts || []).find(a=> a.id === id) || null; }
+function cuentaNombre(id){ const a = cuentaById(id); return a ? a.nombre : 'Cuenta'; }
+function ctaVista(){
+  const v = state.config && state.config.cuentaActiva;
+  if(v && v !== 'total' && (state.accounts || []).some(a=> a.id === v && !a.archivada)) return v;
+  return 'total';
+}
+// Cuenta por defecto de un formulario de gasto/ingreso NUEVO: la cuenta activa si hay
+// una, o "Principal" (misma resolución que cuentaIdParaNuevoMovimiento) en vista Total.
+function cuentaDefaultParaForm(){
+  const v = ctaVista();
+  return v !== 'total' ? v : cuentaIdParaNuevoMovimiento();
+}
+// Nº de gastos + ingresos asignados a una cuenta (para decidir si borrar pide reasignar).
+function contarUsoCuenta(id){
+  let n = 0;
+  (state.expenses || []).forEach(e=>{ if(e && e.cuentaId === id) n++; });
+  (state.incomes  || []).forEach(i=>{ if(i && i.cuentaId === id) n++; });
+  return n;
+}
+// Renumera `orden` 0..n-1 según el orden actual del array (tras reordenar/crear/borrar).
+function renumerarCuentas(){
+  cuentasTodasOrden().forEach((a,i)=>{ a.orden = i; });
+}
+
 /* ==================== GASTOS FIJOS RECURRENTES ==================== */
 // Un gasto marcado como "Fijo" (y que no sea una cuota) se repite automáticamente
 // cada mes posterior a su fecha de registro, el mismo día del mes, hasta que se
@@ -3373,9 +3524,9 @@ document.getElementById('nextMonth').onclick = nextMonth;
      Rastrea un único pointerId, escucha el fin del gesto en window (no en appEl) para
      no perderlo si iOS re-clasifica el gesto, y tiene un timeout de seguridad que
      limpia el estado si nunca llega pointerup/pointercancel (toques muy rápidos). */
-  let hId=null, hx=0, hy=0, ht=0, hOnMonthSel=false, hTimer=0;
+  let hId=null, hx=0, hy=0, ht=0, hOnMonthSel=false, hOnAccSel=false, hTimer=0;
   function hClear(){
-    hId = null; hOnMonthSel = false;
+    hId = null; hOnMonthSel = false; hOnAccSel = false;
     if(hTimer){ clearTimeout(hTimer); hTimer = 0; }
   }
   appEl.addEventListener('pointerdown', e=>{
@@ -3385,15 +3536,18 @@ document.getElementById('nextMonth').onclick = nextMonth;
     hId = e.pointerId;
     hx = e.clientX; hy = e.clientY; ht = Date.now();
     hOnMonthSel = !!(e.target.closest && e.target.closest('.month-select'));
+    hOnAccSel = !!(e.target.closest && e.target.closest('.account-select'));   // Tanda C3
     hTimer = setTimeout(hClear, 1000);
   });
   window.addEventListener('pointerup', e=>{
     if(hId === null || e.pointerId !== hId) return;
     const dx = e.clientX - hx, dy = e.clientY - hy, dt = Date.now() - ht;
     const onMonthSel = hOnMonthSel;
+    const onAccSel = hOnAccSel;
     hClear();
     if(dt > 700) return;
     if(Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.7) return;   // no es horizontal claro
+    if(onAccSel) return;   // Tanda C3: un swipe sobre el selector de cuenta no navega
     if(onMonthSel){
       dx < 0 ? nextMonth() : prevMonth();
       return;
@@ -3568,6 +3722,14 @@ document.getElementById('btnConfig').onclick = ()=>{
 document.getElementById('btnExport').onclick = ()=>{
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
+  // Tanda C3: el filtro por cuenta aplica sólo a Gastos e Ingresos; las Cuotas van
+  // completas siempre. Se avisa aquí para que no sea un comportamiento silencioso.
+  const expNota = document.getElementById('expCuentaNota');
+  if(expNota){
+    const cv = ctaVista();
+    if(cv === 'total'){ expNota.hidden = true; expNota.textContent = ''; }
+    else { expNota.hidden = false; expNota.textContent = `Se exportarán sólo los gastos e ingresos de «${cuentaNombre(cv)}» (la cuenta activa en el selector). Las cuotas se incluyen completas: son las mismas para todas las cuentas. Cambia a “Total” para exportar los gastos e ingresos de todas.`; }
+  }
   // Tanda E: si el Historial tiene un rango de fechas activo, la exportación abre ya
   // apuntando a ESE rango (opción "Rango de fechas" preseleccionada y fechas cargadas).
   // El usuario puede cambiarlo a "este mes" / "todo el historial" o editar las fechas.
@@ -3648,6 +3810,33 @@ function fillSelect(id, options, selected){
   sel.innerHTML = options.map(o=>`<option value="${o}" ${o===selected?'selected':''}>${o}</option>`).join('');
 }
 
+/* Tanda C3: selector de cuenta de los formularios de gasto/ingreso. `selId` es el
+   <select>, `fieldId` el .field contenedor (se oculta si sólo hay una cuenta viva y el
+   movimiento editado, si lo hay, pertenece a ella — así el formulario no cambia para
+   quien nunca creó una segunda cuenta). `actualId` es la cuenta del movimiento que se
+   edita, o null al crear (default = cuenta activa, o "Principal" en vista Total). */
+function poblarSelectCuenta(selId, fieldId, actualId){
+  const sel = document.getElementById(selId);
+  const field = document.getElementById(fieldId);
+  if(!sel || !field) return;
+  const vivas = cuentasVivas();
+  const editando = actualId != null;
+  const objetivo = editando ? actualId : cuentaDefaultParaForm();
+  const enVivas = vivas.some(a=> a.id === objetivo);
+  const opts = vivas.slice();
+  // Movimiento cuya cuenta está archivada o quedó huérfana: se añade como opción para
+  // no moverlo en silencio al guardar.
+  if(objetivo && !enVivas){
+    const arch = cuentaById(objetivo);
+    opts.push(arch ? { id: arch.id, nombre: arch.nombre + ' (archivada)' } : { id: objetivo, nombre: 'Cuenta anterior' });
+  }
+  sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${a.nombre}</option>`).join('');
+  if(objetivo) sel.value = objetivo;
+  // Visible si hay ≥2 cuentas vivas, o si el movimiento editado está en una cuenta que
+  // no aparece en la lista corta (archivada/huérfana).
+  field.style.display = (vivas.length >= 2 || (editando && !enVivas)) ? '' : 'none';
+}
+
 /* ==================== CATEGORÍAS FRECUENTES (chips, solo en "Nuevo gasto") ==================== */
 // Agrupa el historial de gastos por CATEGORÍA (últimos ~3 meses para mantenerlo
 // relevante; si eso deja menos de 2 categorías, usa todo el historial) y devuelve
@@ -3712,10 +3901,12 @@ function openGastoForm(expenseId){
   document.getElementById('gNumCuotas').value = '';
   document.getElementById('btnDeleteGasto').style.display = 'none';
   document.getElementById('gastoTitle').textContent = 'Nuevo gasto';
+  poblarSelectCuenta('gCuenta', 'gCuentaField', null);   // Tanda C3: default = cuenta activa / Principal
 
   if(expenseId){
     const e = state.expenses.find(x=>x.id===expenseId);
     document.getElementById('gastoTitle').textContent = 'Editar gasto';
+    poblarSelectCuenta('gCuenta', 'gCuentaField', e.cuentaId || null);
     document.getElementById('gFecha').value = e.date;
     // Editar un gasto anterior a Tanda M: Nombre y Descripción llegan poblados (el
     // Nombre ya migró desde la descripción) para separarlos a mano si se quiere.
@@ -3799,6 +3990,9 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   const metodo = document.getElementById('gMetodo').value;
   const descripcion = document.getElementById('gDescripcion').value.trim();   // opcional (puede quedar vacía); solo se ve al expandir el detalle en el Historial
   const tipo = document.querySelector('#sheetGasto [data-tipo].active').dataset.tipo;
+  // Tanda C3: cuenta elegida en el formulario. Si el campo está oculto (una sola cuenta)
+  // el <select> igual trae el id correcto (default = Principal / cuenta activa).
+  const cuentaSel = (document.getElementById('gCuenta') && document.getElementById('gCuenta').value) || cuentaIdParaNuevoMovimiento();
   // Con método Crédito el gasto es SIEMPRE una cuota; nº de cuotas = 1 por defecto
   // (pago único a crédito), tal como antes con "¿Es cuota? = Sí" y 1 cuota.
   const esCredito = metodo === 'Crédito';
@@ -3873,6 +4067,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
     e.date=fecha; e.nombre=nombre; e.amount=monto; e.category=categoria; e.method=metodo; e.description=descripcion; e.tipo=tipo;
+    e.cuentaId = cuentaSel;   // Tanda C3: editar la cuenta mueve el movimiento entre vistas
     // Rango de días: se guarda / se quita. Las fechas ya confirmadas (fechasConfirmadas)
     // se dejan intactas: quedan inertes sin diaHasta y vuelven a valer si se reactiva.
     if(rangoActivo) e.diaHasta = diaHasta; else delete e.diaHasta;
@@ -3890,7 +4085,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     // Si tenía deuda y el método dejó de ser Crédito, se conserva la deuda intacta
     // (caso borde); para quitarla del todo hay que eliminar el gasto.
   } else {
-    const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null, cuentaId:cuentaIdParaNuevoMovimiento() };
+    const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null, cuentaId:cuentaSel };
     if(rangoActivo) expense.diaHasta = diaHasta;
     if(esCredito){
       const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
@@ -4032,9 +4227,11 @@ function openIngresoForm(incomeId){
   document.getElementById('iDiaHasta').value = '';
   document.getElementById('btnDeleteIngreso').style.display = 'none';
   document.getElementById('ingresoTitle').textContent = 'Nuevo ingreso';
+  poblarSelectCuenta('iCuenta', 'iCuentaField', null);   // Tanda C3: default = cuenta activa / Principal
   if(incomeId){
     const i = state.incomes.find(x=>x.id===incomeId);
     document.getElementById('ingresoTitle').textContent = 'Editar ingreso';
+    poblarSelectCuenta('iCuenta', 'iCuentaField', i.cuentaId || null);
     document.getElementById('iFecha').value = i.date;
     document.getElementById('iNombre').value = i.nombre || i.description || '';
     document.getElementById('iFuente').value = i.source;
@@ -4066,6 +4263,7 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   const monto = parseMonto('iMonto');
   const descripcion = document.getElementById('iDescripcion').value.trim();   // opcional; solo se ve al expandir el detalle en el Historial
   const itipo = document.querySelector('#sheetIngreso [data-itipo].active').dataset.itipo;
+  const cuentaSel = (document.getElementById('iCuenta') && document.getElementById('iCuenta').value) || cuentaIdParaNuevoMovimiento();   // Tanda C3
   if(!nombre){ showToast('Ponle un nombre al ingreso.', 'error'); fieldError(document.getElementById('iNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('iMonto')); return; }
   if(!fuente){ showToast('Elige una fuente.', 'error'); fieldError(document.getElementById('iFuente')); return; }
@@ -4088,9 +4286,10 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
     i.date=fecha; i.nombre=nombre; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
+    i.cuentaId = cuentaSel;   // Tanda C3: editar la cuenta mueve el ingreso entre vistas
     if(rangoActivo) i.diaHasta = diaHasta; else delete i.diaHasta;
   } else {
-    const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo, cuentaId:cuentaIdParaNuevoMovimiento()};
+    const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo, cuentaId:cuentaSel};
     if(rangoActivo) inc.diaHasta = diaHasta;
     state.incomes.push(inc);
     nuevoIngresoId = inc.id;
@@ -5097,12 +5296,15 @@ function desgloseDisponible(refDate, incluirCeros, cuentaId){
    0) vía sliceColor(), que da tonos distintos hasta 12+ categorías; la lista "Gasto por
    categoría" reusa este mismo mapa `colorDeCat` para funcionar como leyenda. Esto es
    presentación: ningún monto se agrupa ni se recorta, sólo se dibujan todos los tramos. */
-function donaResumenData(refDate){
-  const T = resumenTotalesDelMes(refDate);
+// Tanda C3: `cuentaId` opcional al final. Sin él (o 'total') idéntico a hoy; con un id
+// de cuenta, sólo los gastos de esa cuenta y sin cuotas (globales hasta C5 → $0).
+function donaResumenData(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const T = resumenTotalesDelMes(refDate, cuentaId);
   const totalGastos = T.gastos + T.cuotas;
   const ct = {};
-  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
+  getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
   const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
   const colorDeCat = {};
   orden.forEach(([cat], i)=>{ colorDeCat[cat] = sliceColor(i); });
@@ -5195,13 +5397,14 @@ function openCuotaProyeccion(debtId){
 
 /* ==================== RENDER: RESUMEN ==================== */
 function renderResumen(){
-  const monthExpenses = getExpensesForMonth(currentDate);
+  const cta = ctaVista();   // Tanda C3: 'total' o la cuenta activa del selector del header
+  const monthExpenses = getExpensesForMonth(currentDate, cta);
   const normalExpenses = monthExpenses.filter(e=>!e.debtId);
 
   // Totales del mes — fórmula única compartida con la fila de totales del Historial.
   //  · dispLibre = cifra principal de "Disponible este mes" (de las cuotas solo resta las
   //    ya pagadas). La línea secundaria ya NO muestra otro Disponible: ver "Cuotas pendientes".
-  const T = resumenTotalesDelMes(currentDate);
+  const T = resumenTotalesDelMes(currentDate, cta);
   const totalIngresos = T.ingresos;
   // Tanda O · punto 4: "Gastos" pasa a ser gastos de contado + cuotas del mes (el
   // crédito es un gasto real, solo diferido en el tiempo). SOLO cambia la presentación:
@@ -5215,8 +5418,10 @@ function renderResumen(){
   const dispLibre = T.dispLibre;
 
   // Cuotas por categoría (para el desglose "Gasto por categoría" de más abajo).
+  // Tanda C3: las cuotas no tienen cuentaId hasta C5 → en una cuenta específica aportan
+  // $0 (igual que T.cuotas), sólo la vista Total las reparte por categoría.
   const cuotasPorCategoria = {};
-  state.debts.forEach(d=>{
+  if(cta === 'total') state.debts.forEach(d=>{
     const info = cuotaInfoForMonth(d, currentDate);
     if(info) cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto;
   });
@@ -5349,7 +5554,7 @@ function renderResumen(){
   // Tanda R · pto 3: colores por categoría — mismo mapa que usa la dona, para que la
   // lista funcione como su leyenda (las categorías fuera del top 5 comparten el color
   // del segmento "Otros").
-  const dona = donaResumenData(currentDate);
+  const dona = donaResumenData(currentDate, cta);
   // Fila de progreso "gastado / tope" bajo una categoría con tope definido. Si el gasto
   // supera el tope se marca `.over` (color de alerta) — solo visual, no bloquea nada.
   const topeBar = (cat, val)=>{
@@ -5397,7 +5602,7 @@ function renderDonaResumen(dona){
   const host = document.getElementById('rDona');
   const tip = document.getElementById('rDonaTip');
   if(!wrap || !host || !tip) return;
-  const d = dona || donaResumenData(currentDate);
+  const d = dona || donaResumenData(currentDate, ctaVista());
   if(!d.segs.length || Math.round(d.total) <= 0){
     wrap.style.display = 'none';
     host.innerHTML = '';
@@ -5461,22 +5666,23 @@ function renderResumenDetalle(){
   host.classList.toggle('open', abierto);
 
   const refDate = currentDate;
-  const T = resumenTotalesDelMes(refDate);
+  const cta = ctaVista();   // Tanda C3: cuotas y metas son globales → $0 en cuenta específica
+  const T = resumenTotalesDelMes(refDate, cta);
   const mk = monthKey(refDate);
 
   const ingByFuente = {};
-  getIncomesForMonth(refDate).forEach(i=>{ const k = i.source || 'Sin fuente'; ingByFuente[k] = (ingByFuente[k]||0) + i.amount; });
+  getIncomesForMonth(refDate, cta).forEach(i=>{ const k = i.source || 'Sin fuente'; ingByFuente[k] = (ingByFuente[k]||0) + i.amount; });
 
   const gastoByCat = {};
-  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> gastoByCat[e.category] = (gastoByCat[e.category]||0) + e.amount);
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) gastoByCat[d.category] = (gastoByCat[d.category]||0) + info.monto; });
+  getExpensesForMonth(refDate, cta).filter(e=>!e.debtId).forEach(e=> gastoByCat[e.category] = (gastoByCat[e.category]||0) + e.amount);
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) gastoByCat[d.category] = (gastoByCat[d.category]||0) + info.monto; });
 
   const cuotaByDeuda = {};
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info){ const k = d.description || 'Compra a cuotas'; cuotaByDeuda[k] = (cuotaByDeuda[k]||0) + info.monto; } });
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info){ const k = d.description || 'Compra a cuotas'; cuotaByDeuda[k] = (cuotaByDeuda[k]||0) + info.monto; } });
 
   const metaByGoal = {};
   const pausadasAuto = calcularEstadoAportesDelMes(refDate);
-  state.goals.forEach(g=>{
+  if(cta === 'total') state.goals.forEach(g=>{
     if(!goalNotCutOff(g, refDate)) return;
     let m = 0;
     (g.aportes||[]).forEach(a=>{ if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) m += a.monto; });
@@ -5749,7 +5955,8 @@ function renderInsights(){
   if(primerMesConDatos() === null){ box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
 
-  const data = insightsMesData(currentDate);
+  const cta = ctaVista();   // Tanda C3: insights de la cuenta activa (cuotas/metas globales → $0)
+  const data = insightsMesData(currentDate, cta);
   const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1);
   // Tanda R3 · pto 4: no comparar contra meses ANTERIORES al "Mes de inicio de registro".
   // Sus cifras arrastran saldo y cuotas de un tramo que el usuario declaró fuera de su
@@ -5757,16 +5964,16 @@ function renderInsights(){
   // pre-corte). Se trata como "sin mes anterior comparable".
   const inicioMkCmp = mesInicioRegistroMk();
   const prevFueraDeRegistro = inicioMkCmp !== null && monthKey(prevDate) < inicioMkCmp;
-  const prevTiene = !prevFueraDeRegistro && mesTieneMovimientos(prevDate);
-  const prevData = insightsMesData(prevDate);
+  const prevTiene = !prevFueraDeRegistro && mesTieneMovimientos(prevDate, cta);
+  const prevData = insightsMesData(prevDate, cta);
 
   // Nada que mostrar: el mes visto no tiene movimientos, no hay mes anterior con datos
   // y no se arrastra saldo. Evita un panel de puros ceros en meses vacíos.
-  if(!mesTieneMovimientos(currentDate) && !prevTiene && Math.round(data.saldoAnterior) === 0){
+  if(!mesTieneMovimientos(currentDate, cta) && !prevTiene && Math.round(data.saldoAnterior) === 0){
     box.style.display = 'none'; box.innerHTML = ''; return;
   }
 
-  const proy = proyeccionFinDeMes(currentDate);
+  const proy = proyeccionFinDeMes(currentDate, cta);
   const alertas = categoriasEnAlerta(data, prevData, prevTiene);
   const hayAlerta = alertas.length > 0;
   const disp = proy.dispProyectado;
@@ -6049,30 +6256,36 @@ function mesesDelRango(desdeISO, hastaISO){
 }
 // Ocurrencias de gastos dentro del rango activo (reales + virtuales de fijos), juntando
 // todos los meses que toca y filtrando por date exacto. Sin rango -> el mes de siempre.
+// Tanda C3: todo el Historial (lista, totales, "Todo", gráficos) pasa por estos tres
+// helpers, así que filtrarlos por ctaVista() basta para que el Historial respete el
+// selector de cuenta del header. En cuenta específica no hay filas de cuota (globales).
 function gastosDelHistorial(){
-  if(!hRango) return getExpensesForMonth(currentDate);
+  const cta = ctaVista();
+  if(!hRango) return getExpensesForMonth(currentDate, cta);
   const { desde, hasta } = hRango;
   const out = [];
   mesesDelRango(desde, hasta).forEach(d=>{
-    getExpensesForMonth(d).forEach(e=>{ if(e.date >= desde && e.date <= hasta) out.push(e); });
+    getExpensesForMonth(d, cta).forEach(e=>{ if(e.date >= desde && e.date <= hasta) out.push(e); });
   });
   return out;
 }
 function ingresosDelHistorial(){
-  if(!hRango) return getIncomesForMonth(currentDate);
+  const cta = ctaVista();
+  if(!hRango) return getIncomesForMonth(currentDate, cta);
   const { desde, hasta } = hRango;
   const out = [];
   mesesDelRango(desde, hasta).forEach(d=>{
-    getIncomesForMonth(d).forEach(i=>{ if(i.date >= desde && i.date <= hasta) out.push(i); });
+    getIncomesForMonth(d, cta).forEach(i=>{ if(i.date >= desde && i.date <= hasta) out.push(i); });
   });
   return out;
 }
 function cuotasVirtualesDelHistorial(){
-  if(!hRango) return cuotasVirtualesHistorial(currentDate);
+  const cta = ctaVista();
+  if(!hRango) return cuotasVirtualesHistorial(currentDate, cta);
   const { desde, hasta } = hRango;
   const out = [];
   mesesDelRango(desde, hasta).forEach(d=>{
-    cuotasVirtualesHistorial(d).forEach(c=>{ if(c.date >= desde && c.date <= hasta) out.push(c); });
+    cuotasVirtualesHistorial(d, cta).forEach(c=>{ if(c.date >= desde && c.date <= hasta) out.push(c); });
   });
   return out;
 }
@@ -6402,7 +6615,7 @@ function renderHistMonthTotals(){
   if(enLista){
     ({ gastos, ingresos } = histTotalesVisibles());
   } else {
-    const T = resumenTotalesDelMes(currentDate);
+    const T = resumenTotalesDelMes(currentDate, ctaVista());   // Tanda C3: respeta el selector de cuenta
     gastos = T.gastos; ingresos = T.ingresos;
   }
   const gEl = document.getElementById('hmtGastos');
@@ -6581,7 +6794,7 @@ function renderHistorialTodo(box){
   const [campo, dir] = hSortMode.split('-');
   // El "Saldo: $X" es un cierre mensual. Bajo un rango que cruza meses no hay un único
   // mes de referencia, así que con rango activo la columna no se calcula ni se muestra.
-  const saldoMap = hRango ? null : saldoPorMovimientoDelMes(currentDate);
+  const saldoMap = hRango ? null : saldoPorMovimientoDelMes(currentDate, ctaVista());
 
   const gastos = gastosDelHistorial().map(e=>({
     kind:'gasto', id:e.id, date:e.date, amount:e.amount,
@@ -6917,6 +7130,7 @@ function renderConfig(){
   renderConfigList('categorias','cfgCategorias');
   renderConfigList('metodos','cfgMetodos');
   renderConfigList('fuentes','cfgFuentes');
+  renderCuentasList();
   renderInicioRegistroRow();
   renderPaletteRow();
   renderFontScaleRow();
@@ -7222,6 +7436,179 @@ document.querySelectorAll('[data-addlist]').forEach(btn=>{
     input.value='';
     saveState(); renderConfig();
   });
+});
+
+/* ==================== TANDA C3 · CRUD DE CUENTAS (Configuración) ====================
+   Mismo patrón visual que Categorías/Métodos: lista + "Agregar", renombrado inline,
+   y borrar-con-reasignación cuando la cuenta tiene movimientos (igual que métodos/
+   fuentes). Extra propio de cuentas: reordenar (▲▼) y archivar (saca del selector y
+   de los formularios sin borrar datos). No se puede archivar/borrar la última cuenta
+   viva; borrar la cuenta activa vuelve la vista a "Total". */
+function renderCuentasList(){
+  const box = document.getElementById('cfgCuentas');
+  if(!box) return;
+  const orden = cuentasTodasOrden();
+  const vivas = orden.filter(a=> !a.archivada);
+  box.innerHTML = orden.map((a, idx)=>{
+    const esUltimaViva = !a.archivada && vivas.length === 1;
+    const subeDisabled = idx === 0;
+    const bajaDisabled = idx === orden.length - 1;
+    return `
+    <div class="config-item acc-cfg-item${a.archivada ? ' is-archived' : ''}" data-acccfg="${escAttr(a.id)}">
+      <span>${a.nombre}${a.archivada ? '<span class="acc-arch-tag">Archivada</span>' : ''}</span>
+      <div class="cfg-acc-actions">
+        <button data-accmove="up:${escAttr(a.id)}" aria-label="Subir ${escAttr(a.nombre)}" ${subeDisabled ? 'disabled' : ''}>${icon('chevron-up')}</button>
+        <button data-accmove="down:${escAttr(a.id)}" aria-label="Bajar ${escAttr(a.nombre)}" ${bajaDisabled ? 'disabled' : ''}>${icon('chevron-down')}</button>
+        <button data-accrename="${escAttr(a.id)}" aria-label="Renombrar ${escAttr(a.nombre)}">${icon('edit')}</button>
+        <button data-accarchive="${escAttr(a.id)}" aria-label="${a.archivada ? 'Reactivar' : 'Archivar'} ${escAttr(a.nombre)}" ${esUltimaViva ? 'disabled' : ''}>${icon(a.archivada ? 'check' : 'archive')}</button>
+        <button class="acc-del" data-accdelete="${escAttr(a.id)}" aria-label="Eliminar ${escAttr(a.nombre)}" ${(orden.length === 1 || esUltimaViva) ? 'disabled' : ''}>${icon('x')}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-accmove]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
+      const [dir, id] = btn.dataset.accmove.split(':');
+      const arr = cuentasTodasOrden();
+      const i = arr.findIndex(a=> a.id === id);
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if(i < 0 || j < 0 || j >= arr.length) return;
+      const tmp = arr[i].orden; arr[i].orden = arr[j].orden; arr[j].orden = tmp;
+      renumerarCuentas();
+      haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+    });
+  });
+
+  box.querySelectorAll('[data-accrename]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
+      iniciarRenombreCuenta(btn.dataset.accrename, box);
+    });
+  });
+
+  box.querySelectorAll('[data-accarchive]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
+      const a = cuentaById(btn.dataset.accarchive);
+      if(!a) return;
+      if(!a.archivada && cuentasVivas().length <= 1){
+        showToast('Debe quedar al menos una cuenta activa.', 'error'); return;
+      }
+      a.archivada = !a.archivada;
+      // Si se archivó la cuenta activa, la vista vuelve a Total.
+      if(a.archivada && state.config && state.config.cuentaActiva === a.id) state.config.cuentaActiva = 'total';
+      haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+      showToast(a.archivada ? `«${a.nombre}» archivada.` : `«${a.nombre}» reactivada.`, 'success');
+    });
+  });
+
+  box.querySelectorAll('[data-accdelete]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isReadOnly()){ blockReadOnly(); return; }
+      abrirBorrarCuenta(btn.dataset.accdelete);
+    });
+  });
+}
+
+function iniciarRenombreCuenta(id, box){
+  const row = box.querySelector(`[data-acccfg="${id}"]`);
+  const a = cuentaById(id);
+  if(!row || !a || row.querySelector('.cfg-rename-edit')) return;
+  row.innerHTML = `
+    <div class="cfg-rename-edit">
+      <input type="text" class="cfg-rename-input" value="${escAttr(a.nombre)}" autocomplete="off" aria-label="Nuevo nombre de la cuenta">
+      <button class="small-btn cfg-rename-ok" type="button">Guardar</button>
+      <button class="cfg-rename-cancel" type="button" aria-label="Cancelar">${icon('x')}</button>
+    </div>`;
+  const input = row.querySelector('.cfg-rename-input');
+  input.focus(); input.select();
+  const cancelar = ()=> renderConfig();
+  row.querySelector('.cfg-rename-cancel').addEventListener('click', cancelar);
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){ e.stopPropagation(); cancelar(); }
+    if(e.key === 'Enter'){ e.preventDefault(); row.querySelector('.cfg-rename-ok').click(); }
+  });
+  row.querySelector('.cfg-rename-ok').addEventListener('click', ()=>{
+    const val = input.value.trim().replace(/\s+/g, ' ');
+    if(!val){ fieldError(input); return; }
+    const dup = (state.accounts || []).find(x=> x.id !== id && normNombre(x.nombre) === normNombre(val));
+    if(dup){ showToast(`Ya existe una cuenta «${dup.nombre}».`, 'error'); fieldError(input); return; }
+    if(a.nombre === val){ renderConfig(); return; }
+    a.nombre = val;
+    haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+    showToast(`Cuenta renombrada a «${val}».`, 'success');
+  });
+}
+
+/* ---- Borrar una cuenta: si tiene movimientos, pide reasignarlos a otra ---- */
+let borrarCuentaCtx = null;   // { id }
+function abrirBorrarCuenta(id){
+  const a = cuentaById(id);
+  if(!a) return;
+  const todas = cuentasTodasOrden();
+  if(todas.length === 1){ showToast('No puedes eliminar la única cuenta.', 'error'); return; }
+  // Debe quedar al menos una cuenta activa: no se puede borrar la última no archivada.
+  if(!a.archivada && cuentasVivas().length <= 1){
+    showToast('Debe quedar al menos una cuenta activa. Reactiva o crea otra antes de eliminar esta.', 'error');
+    return;
+  }
+  borrarCuentaCtx = { id };
+  const n = contarUsoCuenta(id);
+  const destinos = todas.filter(x=> x.id !== id);
+  document.getElementById('ctaBorrarTitle').textContent = `Eliminar «${a.nombre}»`;
+  const field = document.getElementById('ctaBorrarReasignField');
+  const body = document.getElementById('ctaBorrarBody');
+  const confirm = document.getElementById('ctaBorrarConfirm');
+  if(n === 0){
+    body.textContent = `«${a.nombre}» no tiene movimientos. Se eliminará de la lista de cuentas.`;
+    field.hidden = true;
+    confirm.textContent = 'Eliminar cuenta';
+  } else {
+    body.textContent = `${n} ${n === 1 ? 'movimiento pertenece' : 'movimientos pertenecen'} a «${a.nombre}». `
+      + `Antes de eliminarla, muévelos a otra cuenta.`;
+    const sel = document.getElementById('ctaBorrarDestino');
+    sel.innerHTML = destinos.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
+    field.hidden = false;
+    confirm.textContent = `Mover ${n} ${n === 1 ? 'movimiento' : 'movimientos'} y eliminar`;
+  }
+  openSheet('sheetCuentaBorrar', n === 0 ? undefined : 'ctaBorrarDestino');
+}
+document.getElementById('ctaBorrarConfirm').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!borrarCuentaCtx) return;
+  const { id } = borrarCuentaCtx;
+  const a = cuentaById(id);
+  if(!a){ closeSheet('sheetCuentaBorrar'); borrarCuentaCtx = null; renderConfig(); return; }
+  const n = contarUsoCuenta(id);
+  let dest = null;
+  if(n > 0){
+    dest = document.getElementById('ctaBorrarDestino').value;
+    if(!dest || !cuentaById(dest) || dest === id){ showToast('Elige una cuenta de destino.', 'error'); return; }
+    let c = 0;
+    (state.expenses || []).forEach(e=>{ if(e && e.cuentaId === id){ e.cuentaId = dest; c++; } });
+    (state.incomes  || []).forEach(i=>{ if(i && i.cuentaId === id){ i.cuentaId = dest; c++; } });
+  }
+  state.accounts = (state.accounts || []).filter(x=> x.id !== id);
+  renumerarCuentas();
+  if(state.config && state.config.cuentaActiva === id) state.config.cuentaActiva = (n > 0 && dest) ? dest : 'total';
+  borrarCuentaCtx = null;
+  haptic(HAPTIC_DELETE); saveState(); renderConfig(); closeSheet('sheetCuentaBorrar'); renderAll();
+  showToast(n > 0 ? `${n} ${n === 1 ? 'movimiento movido' : 'movimientos movidos'} a «${cuentaNombre(dest)}». «${a.nombre}» eliminada.` : `«${a.nombre}» eliminada.`, 'success');
+};
+
+document.getElementById('btnAddCuenta').addEventListener('click', ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const input = document.getElementById('newCuenta');
+  const val = input.value.trim().replace(/\s+/g, ' ');
+  if(!val){ fieldError(input); return; }
+  const dup = (state.accounts || []).find(x=> normNombre(x.nombre) === normNombre(val));
+  if(dup){ showToast(`«${dup.nombre}» ya está en la lista.`, 'error'); fieldError(input); return; }
+  if(!Array.isArray(state.accounts)) state.accounts = [];
+  const maxOrden = state.accounts.reduce((m,a)=> Math.max(m, a.orden || 0), -1);
+  state.accounts.push({ id: uid(), nombre: val, orden: maxOrden + 1, archivada: false });
+  input.value = '';
+  haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
 });
 
 /* ==================== ÍCONO PERSONALIZADO POR CATEGORÍA ==================== */
@@ -7875,6 +8262,11 @@ document.getElementById('btnShareExport').onclick = async ()=>{
 
 function buildExportWorkbook(fromDate, toDate){
   const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
+  // Tanda C3: el filtro por cuenta activa aplica SÓLO a las hojas Gastos e Ingresos —
+  // son los únicos registros con dueño (cuentaId). La hoja "Deudas (Cuotas)" se incluye
+  // SIEMPRE y completa, igual que el tab Cuotas: las cuotas son globales hasta C5 y no
+  // cambian con la cuenta seleccionada (decisión C2). En vista Total no cambia nada.
+  const ctaExp = ctaVista();
 
   // Expande cada gasto (incluyendo las ocurrencias mensuales de los gastos Fijos)
   // mes por mes dentro del rango, para que el Excel refleje lo mismo que ves en la app.
@@ -7883,7 +8275,7 @@ function buildExportWorkbook(fromDate, toDate){
   let cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
   const endCursor = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
   while(cursor <= endCursor){
-    getExpensesForMonth(cursor).forEach(e=>{
+    getExpensesForMonth(cursor, ctaExp).forEach(e=>{
       const key = e.id + '-' + e.date;
       if(seenKeys.has(key)) return;
       seenKeys.add(key);
@@ -7899,7 +8291,7 @@ function buildExportWorkbook(fromDate, toDate){
   const seenIncomeKeys = new Set();
   let icursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
   while(icursor <= endCursor){
-    getIncomesForMonth(icursor).forEach(i=>{
+    getIncomesForMonth(icursor, ctaExp).forEach(i=>{
       const key = i.id + '-' + i.date;
       if(seenIncomeKeys.has(key)) return;
       seenIncomeKeys.add(key);
@@ -7909,6 +8301,7 @@ function buildExportWorkbook(fromDate, toDate){
   }
   const incomeRows = allIncomeRows.sort((a,b)=>a.date.localeCompare(b.date))
     .map(i=>({ Fecha:i.date, Nombre:i.nombre||'', Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
+  // Cuotas: SIEMPRE completas, sin filtrar por cuenta (globales hasta C5, como el tab Cuotas).
   const debtRows = state.debts.map(d=>({
     Descripción:d.description, "Fecha compra":d.purchaseDate, Categoría:d.category,
     "Monto total":d.totalAmount, "N° cuotas":d.numCuotas, "Monto por cuota": Math.round(d.totalAmount/d.numCuotas),
@@ -7927,8 +8320,9 @@ function buildExportWorkbook(fromDate, toDate){
   appendSheet(wb, "Resumen", summaryRows);
   appendSheet(wb, "Gastos", expenseRows);
   appendSheet(wb, "Ingresos", incomeRows);
-  appendSheet(wb, "Deudas (Cuotas)", debtRows);
-  const filename = `MisFinanzas_${new Date().toISOString().slice(0,10)}.xlsx`;
+  appendSheet(wb, "Deudas (Cuotas)", debtRows);   // siempre, sin filtrar por cuenta
+  const sufijoCuenta = ctaExp === 'total' ? '' : '_' + cuentaNombre(ctaExp).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+  const filename = `MisFinanzas${sufijoCuenta}_${new Date().toISOString().slice(0,10)}.xlsx`;
   return { wb, filename };
 }
 
@@ -8061,18 +8455,20 @@ function generarResumenImagen(){
   const SERIF = "Georgia, 'Times New Roman', serif";
 
   // --- Datos del mes (mismo cálculo que renderResumen) ---
-  const monthExpenses = getExpensesForMonth(currentDate);
-  const monthIncomes = getIncomesForMonth(currentDate);
+  // Tanda C3: la imagen refleja la cuenta activa del selector, igual que la pantalla.
+  const cta = ctaVista();
+  const monthExpenses = getExpensesForMonth(currentDate, cta);
+  const monthIncomes = getIncomesForMonth(currentDate, cta);
   const normalExpenses = monthExpenses.filter(e=> !e.debtId);
   const totalIngresos = monthIncomes.reduce((s,i)=> s + i.amount, 0);
   const totalGastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
   let totalCuotas = 0; const cuotasPorCat = {};
-  state.debts.forEach(d=>{
+  if(cta === 'total') state.debts.forEach(d=>{
     const info = cuotaInfoForMonth(d, currentDate);
     if(info){ totalCuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
   });
-  const totalMetas = totalAportesMetasDelMes(currentDate);
-  const saldoAnterior = saldoAcumuladoHasta(currentDate);
+  const totalMetas = totalAportesMetasDelMes(currentDate, cta);
+  const saldoAnterior = saldoAcumuladoHasta(currentDate, cta);
   const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalMetas;
 
   const catTotals = {};
@@ -8089,11 +8485,13 @@ function generarResumenImagen(){
     grouped = [...cats.slice(0,5), { label:'Otros', value:rest }];
   }
   const mesLabel = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
+  const ctaLabel = cta === 'total' ? '' : ('Cuenta: ' + cuentaNombre(cta));
 
   // --- Altura total ---
   let H = pad;
   H += 40;                       // marca
   H += 80;                       // mes
+  if(ctaLabel) H += 34;          // Tanda C3: subtítulo con la cuenta activa
   H += 30 + 2 + 30;              // divisor
   H += 150;                      // totales
   H += 34;
@@ -8133,6 +8531,14 @@ function generarResumenImagen(){
   ctx.fillStyle = COL.text;
   ctx.font = '700 62px ' + SERIF;
   ctx.fillText(mesLabel, pad, y);
+
+  // Tanda C3: subtítulo con la cuenta activa (sólo si no es la vista Total)
+  if(ctaLabel){
+    y += 34;
+    ctx.fillStyle = COL.goldDim;
+    ctx.font = '600 24px ' + SANS;
+    ctx.fillText(ctaLabel, pad, y);
+  }
 
   // Divisor
   y += 30;
@@ -8477,8 +8883,9 @@ const DD_LABELS = {
 const DD_ORDEN = ['ingresos', 'saldoAnterior', 'gastoContado', 'cuotas', 'metas'];
 function openDondeDisponible(){
   const refDate = currentDate;
-  const T = resumenTotalesDelMes(refDate);
-  const dsg = desgloseDisponible(refDate, true);              // los CINCO términos, con los $0
+  const cta = ctaVista();   // Tanda C3: audita el Disponible de la cuenta activa
+  const T = resumenTotalesDelMes(refDate, cta);
+  const dsg = desgloseDisponible(refDate, true, cta);         // los CINCO términos, con los $0
   const inicioMk = mesInicioRegistroMk();
   const esPreRegistro = inicioMk !== null && monthKey(refDate) < inicioMk;
 
@@ -8571,9 +8978,10 @@ function renderPieChart(container, data, opts){
 
 // Gasto por categoría del mes (normales + cuotas), como objeto {cat: total}. Solo para gráficos.
 function gastoPorCategoriaData(refDate){
+  const cta = ctaVista();   // Tanda C3: la torta del Historial respeta el selector de cuenta
   const ct = {};
-  getExpensesForMonth(refDate).filter(e=> !e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
+  getExpensesForMonth(refDate, cta).filter(e=> !e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
   return Object.entries(ct).filter(([,v])=> v>0).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
 }
 
@@ -8584,7 +8992,7 @@ function gastoPorCategoriaData(refDate){
 // "Sin fuente", igual que el agregado de Insights.
 function ingresoPorFuenteData(refDate){
   const by = {};
-  getIncomesForMonth(refDate).forEach(i=>{
+  getIncomesForMonth(refDate, ctaVista()).forEach(i=>{   // Tanda C3: respeta el selector de cuenta
     const k = (i.source && String(i.source).trim()) || 'Sin fuente';
     by[k] = (by[k] || 0) + i.amount;
   });
@@ -8646,20 +9054,22 @@ function svgWrap(w, h, body){
 
 // Total de gastos normales de los últimos 6 meses (incluye el mes visto), hacia atrás.
 function gastosUltimos6Meses(){
+  const cta = ctaVista();   // Tanda C3: la barra del Historial respeta el selector de cuenta
   const arr = [];
   for(let k = 5; k >= 0; k--){
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - k, 1);
-    const total = getExpensesForMonth(d).filter(e=> !e.debtId).reduce((s,e)=> s + e.amount, 0);
+    const total = getExpensesForMonth(d, cta).filter(e=> !e.debtId).reduce((s,e)=> s + e.amount, 0);
     arr.push({ label: MESES[d.getMonth()].slice(0,3), value: total });
   }
   return arr;
 }
 // Total de ingresos de los últimos 6 meses (incluye el mes visto), hacia atrás.
 function ingresosUltimos6Meses(){
+  const cta = ctaVista();
   const arr = [];
   for(let k = 5; k >= 0; k--){
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - k, 1);
-    const total = getIncomesForMonth(d).reduce((s,i)=> s + i.amount, 0);
+    const total = getIncomesForMonth(d, cta).reduce((s,i)=> s + i.amount, 0);
     arr.push({ label: MESES[d.getMonth()].slice(0,3), value: total });
   }
   return arr;
@@ -8811,6 +9221,76 @@ document.querySelectorAll('#fontScaleRow [data-fontscale]').forEach(el=>{
 aplicarFontScale((state.config && state.config.fontScale) || '1');
 
 /* ==================== RENDER GENERAL ==================== */
+/* ==================== TANDA C3 · RENDER DEL SELECTOR DE CUENTA ====================
+   Botón (etiqueta = cuenta activa) + menú desplegable con "Total" y cada cuenta no
+   archivada. Al final, si hay ≥2 cuentas vivas, el ítem "Transferir entre cuentas"
+   (placeholder hasta C4). renderAll() lo muestra sólo en Resumen e Historial. */
+let accountMenuOpen = false;
+function closeAccountMenu(){
+  accountMenuOpen = false;
+  const menu = document.getElementById('accountMenu');
+  const btn = document.getElementById('accountSelectBtn');
+  if(menu) menu.hidden = true;
+  if(btn) btn.setAttribute('aria-expanded', 'false');
+}
+function renderAccountSelector(){
+  const wrap = document.getElementById('accountSelect');
+  const nameEl = document.getElementById('accountSelectName');
+  const menu = document.getElementById('accountMenu');
+  if(!wrap || !nameEl || !menu) return;
+  const visible = currentScreen === 'resumen' || currentScreen === 'historial';
+  wrap.style.display = visible ? '' : 'none';
+  if(!visible){ closeAccountMenu(); return; }
+
+  const activa = ctaVista();   // 'total' | id (ya validada contra archivadas)
+  nameEl.textContent = activa === 'total' ? 'Total' : cuentaNombre(activa);
+
+  const vivas = cuentasVivas();
+  const check = `<svg class="am-check" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+  let html = `<button type="button" class="account-menu-item${activa === 'total' ? ' is-active' : ''}" data-acc="total" role="menuitem">`
+    + `<span class="am-name">Total</span>${activa === 'total' ? check : ''}</button>`;
+  vivas.forEach(a=>{
+    html += `<button type="button" class="account-menu-item${activa === a.id ? ' is-active' : ''}" data-acc="${escAttr(a.id)}" role="menuitem">`
+      + `<span class="am-name">${a.nombre}</span>${activa === a.id ? check : ''}</button>`;
+  });
+  if(vivas.length >= 2){
+    html += `<div class="account-menu-sep"></div>`
+      + `<button type="button" class="account-menu-item account-menu-transfer" data-acc="__transfer" role="menuitem">`
+      + `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>`
+      + `<span class="am-name">Transferir entre cuentas</span><span class="am-soon">Próximamente</span></button>`;
+  }
+  menu.innerHTML = html;
+  menu.querySelectorAll('[data-acc]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const v = el.dataset.acc;
+      if(v === '__transfer'){ closeAccountMenu(); openSheet('sheetTransferir'); return; }
+      if(!state.config) state.config = {};
+      state.config.cuentaActiva = v;
+      saveState();
+      closeAccountMenu();
+      renderAll();
+    });
+  });
+}
+(function initAccountSelector(){
+  const btn = document.getElementById('accountSelectBtn');
+  const menu = document.getElementById('accountMenu');
+  if(!btn || !menu) return;
+  btn.addEventListener('click', e=>{
+    e.stopPropagation();
+    accountMenuOpen = !accountMenuOpen;
+    menu.hidden = !accountMenuOpen;
+    btn.setAttribute('aria-expanded', accountMenuOpen ? 'true' : 'false');
+  });
+  // Un toque fuera del menú lo cierra (igual que el resto de popovers de la app).
+  document.addEventListener('click', e=>{
+    if(!accountMenuOpen) return;
+    if(e.target.closest && e.target.closest('#accountSelect')) return;
+    closeAccountMenu();
+  });
+  document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && accountMenuOpen) closeAccountMenu(); });
+})();
+
 function renderAll(){
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
@@ -8821,6 +9301,7 @@ function renderAll(){
   // navegación mensual (y el chip "Rango: …" indica cómo volver a "Este mes").
   const monthSel = document.querySelector('.month-select');
   if(monthSel) monthSel.style.display = (currentScreen === 'metas' || (currentScreen === 'historial' && hRango)) ? 'none' : '';
+  renderAccountSelector();   // Tanda C3: selector de cuenta (sólo Resumen/Historial)
   // El botón "guardar resumen como imagen" solo tiene sentido en la pantalla Resumen.
   const briBtn = document.getElementById('btnResumenImg');
   if(briBtn) briBtn.style.display = currentScreen === 'resumen' ? '' : 'none';
