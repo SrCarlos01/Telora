@@ -2407,9 +2407,13 @@ function migrarEstadoCuentas(st){
   if(!Array.isArray(st.transfers)) st.transfers = [];
 
   // 3. config.cuentaActiva: 'total' | <accountId> existente. Default 'total'.
+  //    Además: con ≤1 cuenta NO archivada se normaliza a 'total' aunque apunte a esa
+  //    única cuenta — no existe "filtrar por cuenta" en ese caso (bugfix C3). Silencioso.
   if(!st.config || typeof st.config !== 'object' || Array.isArray(st.config)) st.config = {};
   const idsValidos = st.accounts.map(a => a.id);
-  if(st.config.cuentaActiva !== 'total' && !idsValidos.includes(st.config.cuentaActiva)){
+  const vivasCount = st.accounts.filter(a => !a.archivada).length;
+  if(st.config.cuentaActiva !== 'total'
+     && (!idsValidos.includes(st.config.cuentaActiva) || vivasCount <= 1)){
     st.config.cuentaActiva = 'total';
   }
 
@@ -3075,9 +3079,23 @@ function cuentasTodasOrden(){
 function cuentaById(id){ return (state.accounts || []).find(a=> a.id === id) || null; }
 function cuentaNombre(id){ const a = cuentaById(id); return a ? a.nombre : 'Cuenta'; }
 function ctaVista(){
+  // Con 0 o 1 cuenta no archivada NO existe "filtrar por cuenta": la única cuenta ES
+  // el Total (mismos movimientos, y las cuotas/metas globales deben seguir contando).
+  // Se normaliza a 'total' aunque state.config.cuentaActiva haya quedado apuntando a
+  // esa única cuenta (p. ej. tras archivar/borrar la segunda) — ver normCuentaActiva().
+  if(cuentasVivas().length <= 1) return 'total';
   const v = state.config && state.config.cuentaActiva;
   if(v && v !== 'total' && (state.accounts || []).some(a=> a.id === v && !a.archivada)) return v;
   return 'total';
+}
+// Corrige en sitio state.config.cuentaActiva a 'total' cuando ya no hay forma de
+// filtrar por cuenta (≤1 cuenta viva). Silencioso. Lo llaman renderAll() y la
+// migración de carga, así que el valor guardado nunca queda "colgado".
+function normCuentaActiva(){
+  if(!state.config) return;
+  if(state.config.cuentaActiva !== 'total' && cuentasVivas().length <= 1){
+    state.config.cuentaActiva = 'total';
+  }
 }
 // Cuenta por defecto de un formulario de gasto/ingreso NUEVO: la cuenta activa si hay
 // una, o "Principal" (misma resolución que cuentaIdParaNuevoMovimiento) en vista Total.
@@ -9238,7 +9256,10 @@ function renderAccountSelector(){
   const nameEl = document.getElementById('accountSelectName');
   const menu = document.getElementById('accountMenu');
   if(!wrap || !nameEl || !menu) return;
-  const visible = currentScreen === 'resumen' || currentScreen === 'historial';
+  // Sólo hay algo que elegir con ≥2 cuentas no archivadas. Con ≤1 el selector no se
+  // renderiza en absoluto (ni como botón deshabilitado): la app se ve igual que pre-C3.
+  const visible = (currentScreen === 'resumen' || currentScreen === 'historial')
+    && cuentasVivas().length >= 2;
   wrap.style.display = visible ? '' : 'none';
   if(!visible){ closeAccountMenu(); return; }
 
@@ -9292,6 +9313,7 @@ function renderAccountSelector(){
 })();
 
 function renderAll(){
+  normCuentaActiva();   // bugfix C3: con ≤1 cuenta viva, cuentaActiva vuelve a 'total' sola
   resetMoneyCache();   // el estado pudo cambiar: recalcular la cuenta corriente desde cero
   resetSaldoRowCache();   // ídem para el saldo acumulado por movimiento de la pestaña "Todo"
   renderReadOnlyBanner();
