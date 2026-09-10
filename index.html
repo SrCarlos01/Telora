@@ -7809,10 +7809,57 @@ function fitColsForRows(rows){
     return { wch: Math.min(200, max + 2) };
   });
 }
+// Tanda H2 · formato numérico por celda. El escritor community de SheetJS descarta
+// fuente/relleno/borde/alineación/freeze/color de pestaña, pero SÍ respeta el
+// numFmt por celda (`cell.z`). Aplicamos:
+//   · Monto / Monto total / Monto por cuota → formato moneda con separador de miles
+//     y el signo ANTES del "$" en negativos (mismo criterio que money() de la app).
+//   · Fecha / Fecha compra → se convierten del string ISO a fecha serial real de
+//     Excel (celda numérica + numFmt de fecha), para que ordenen y filtren como
+//     fecha y no como texto.
+// No se toca ninguna otra celda, ni columnas, ni anchos (resueltos en Tanda H).
+function applyNumFmts(ws){
+  if(!ws || !ws['!ref']) return;
+  const MONEY_FMT = '"$"#,##0;-"$"#,##0';
+  const DATE_FMT  = 'dd-mm-yyyy';
+  const rg = XLSX.utils.decode_range(ws['!ref']);
+  // Fila superior = encabezados (json_to_sheet). Clasificamos cada columna por su título.
+  const kind = {};
+  for(let c = rg.s.c; c <= rg.e.c; c++){
+    const hc = ws[XLSX.utils.encode_cell({ r: rg.s.r, c })];
+    const h = hc && hc.v != null ? String(hc.v) : '';
+    if(/^Monto/.test(h)) kind[c] = 'money';
+    else if(/^Fecha/.test(h)) kind[c] = 'date';
+  }
+  for(let c = rg.s.c; c <= rg.e.c; c++){
+    const k = kind[c];
+    if(!k) continue;
+    for(let r = rg.s.r + 1; r <= rg.e.r; r++){
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if(!cell || cell.v == null || cell.v === '') continue;
+      if(k === 'money'){
+        cell.z = MONEY_FMT;   // solo formato: el valor numérico queda igual
+      } else {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(cell.v));
+        if(!m) continue;
+        // Serial de Excel: días desde 1899-12-30 (el epoch -30 ya absorbe el falso
+        // 29-feb-1900 para toda fecha moderna). En UTC para no depender de la zona.
+        const serial = Math.round(
+          (Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000
+        );
+        cell.t = 'n';
+        cell.v = serial;
+        cell.z = DATE_FMT;
+        delete cell.w;   // texto cacheado del string anterior, si lo hubiera
+      }
+    }
+  }
+}
 function appendSheet(wb, name, rows){
   const ws = XLSX.utils.json_to_sheet(rows);
   const cols = fitColsForRows(rows);
   if(cols.length) ws['!cols'] = cols;
+  applyNumFmts(ws);
   XLSX.utils.book_append_sheet(wb, ws, name);
 }
 // Descarga (comportamiento de siempre de "Generar Excel").
