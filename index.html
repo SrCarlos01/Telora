@@ -3100,6 +3100,24 @@ function ctaCalc(cuentaId){
   return (state.accounts || []).some(a=> a.id === cuentaId) ? cuentaId : 'total';
 }
 
+/* ==================== TANDA L2 · PREDICADO DE PERTENENCIA CUOTA/META ====================
+   ¿La deuda/meta `item` cuenta en la vista `cta` (ya normalizada por ctaCalc)?
+     · vista 'total'          -> siempre (se cuenta una sola vez).
+     · cuenta específica      -> lo propio (item.cuentaId === cta) + lo compartido.
+   Un ítem "pendiente" de la migración L1 (sin cuentaId) sólo cuenta en 'total',
+   igual que el comportamiento anterior a esta iniciativa. */
+function itemEnVista(item, cta){
+  if(cta === 'total') return true;
+  const c = item && item.cuentaId;
+  return c === 'compartida' || c === cta;
+}
+// Cuenta contra la que se mide una meta para el aporte automático % y el chequeo de "si
+// cabe": su propia cuenta, o 'total' si es compartida (o pendiente de migración).
+function ctaPresupuestoMeta(goal){
+  const c = goal && goal.cuentaId;
+  return (typeof c === 'string' && c !== 'compartida') ? c : 'total';
+}
+
 /* ==================== TANDA C3 · SELECTOR DE CUENTA (UI) ====================
    Helpers de la capa de UI multi-cuenta. La elección se guarda en
    state.config.cuentaActiva ('total' | <accountId>). ctaVista() es lo que leen
@@ -3316,7 +3334,9 @@ function flujoBrutoDelMes(refDate, cuentaId){
   const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
   const gastos = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0;
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  // Tanda L2: la cuota cuenta en esta vista si la deuda es propia de `cta` o compartida
+  // (en 'total', todas una vez).
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
   return ingresos - gastos - cuotas;
 }
 // disponibleBase de un mes = arrastre de meses anteriores + flujo bruto del mes (aún sin metas).
@@ -3339,11 +3359,12 @@ function totalAportesMetasDelMes(refDate, cuentaId){
   const ck = cta + ':' + mk;
   if(MONEY_CACHE.metas.has(ck)) return MONEY_CACHE.metas.get(ck);
   MONEY_CACHE.metas.set(ck, 0);
-  if(cta !== 'total' && !state.goals.some(g=> g.cuentaId === cta)){
+  // Tanda L2: en una cuenta específica, aportan las metas propias + las compartidas.
+  if(cta !== 'total' && !state.goals.some(g=> itemEnVista(g, cta))){
     MONEY_CACHE.metas.set(ck, 0);
     return 0;
   }
-  const goalsScope = cta === 'total' ? state.goals : state.goals.filter(g=> g.cuentaId === cta);
+  const goalsScope = cta === 'total' ? state.goals : state.goals.filter(g=> itemEnVista(g, cta));
   const pausadasAuto = calcularEstadoAportesDelMes(refDate);
   let total = 0;
   goalsScope.forEach(g=>{
@@ -3486,8 +3507,9 @@ function aporteAutomaticoVirtualParaMes(goal, refDate){
   const yyyy = refDate.getFullYear(), mm = String(refDate.getMonth()+1).padStart(2,'0'), dd = String(useDay).padStart(2,'0');
   let monto;
   if(aa.tipo === 'porcentaje'){
-    // % del disponibleBase de ESE mes (con el arrastre de la cuenta corriente).
-    monto = Math.max(0, Math.round(disponibleBaseDelMes(refDate) * (aa.valor || 0) / 100));
+    // Tanda L2: % del disponibleBase de ESE mes, medido contra la cuenta de la meta
+    // (o 'total' si es compartida / pendiente). Antes era siempre el disponible global.
+    monto = Math.max(0, Math.round(disponibleBaseDelMes(refDate, ctaPresupuestoMeta(goal)) * (aa.valor || 0) / 100));
   } else {
     monto = aa.monto || 0;
   }
@@ -3516,25 +3538,31 @@ function aporteAutomaticoAcumulado(goal, hastaDate){
 // antiguas (fechaCreacion asc); la primera que no cabe -y todas las siguientes-
 // quedan "pausadas ESTE MES". Es efímero: se recalcula en cada render, nunca se
 // escribe en aporteAutomatico.pausado. Devuelve un Set de goal.id pausados.
+// Tanda L2: el chequeo "si cabe" se hace por PRESUPUESTO — cada meta contra el
+// disponible de su propia cuenta, o de 'total' si es compartida/pendiente
+// (ctaPresupuestoMeta). Las metas de cuentas distintas no compiten entre sí.
 function calcularEstadoAportesDelMes(refDate){
-  // disponibleBase ahora incluye el arrastre de meses anteriores (cuenta corriente).
-  const disponibleBase = disponibleBaseDelMes(refDate);
-
   const conAuto = state.goals
     .map(g=> ({ g, va: aporteAutomaticoVirtualParaMes(g, refDate) }))
     .filter(x=> x.va)
     .sort((a,b)=> String(a.g.fechaCreacion||'').localeCompare(String(b.g.fechaCreacion||'')));
 
-  const totalAuto = conAuto.reduce((s,x)=> s + x.va.monto, 0);
   const pausadas = new Set();
-  if(totalAuto > disponibleBase){
-    let acc = 0, corte = false;
-    for(const { g, va } of conAuto){
-      if(corte){ pausadas.add(g.id); continue; }
-      if(acc + va.monto > disponibleBase){ pausadas.add(g.id); corte = true; }
-      else acc += va.monto;
+  const grupos = {};
+  conAuto.forEach(x=>{ const k = ctaPresupuestoMeta(x.g); (grupos[k] = grupos[k] || []).push(x); });
+  Object.keys(grupos).forEach(k=>{
+    const disponibleBase = disponibleBaseDelMes(refDate, k);
+    const lista = grupos[k];
+    const totalAuto = lista.reduce((s,x)=> s + x.va.monto, 0);
+    if(totalAuto > disponibleBase){
+      let acc = 0, corte = false;
+      for(const { g, va } of lista){
+        if(corte){ pausadas.add(g.id); continue; }
+        if(acc + va.monto > disponibleBase){ pausadas.add(g.id); corte = true; }
+        else acc += va.monto;
+      }
     }
-  }
+  });
   return pausadas;
 }
 // Ids de metas que estuvieron pausadas en ALGÚN mes entre su activación y el mes visto.
@@ -5314,9 +5342,13 @@ function cuotaPagadaDelMes(debt, refDate){
   return isManuallyPaid(debt, refDate);
 }
 // Suma de las cuotas de `refDate` que todavía NO están pagadas.
-function cuotasPendientesDelMes(refDate){
+// Tanda L2: `cuentaId` opcional al final — sin él (o 'total') suma todas; con una cuenta
+// específica, sólo las cuotas propias + compartidas.
+function cuotasPendientesDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
   let total = 0;
   state.debts.forEach(d=>{
+    if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, refDate);
     if(info && !cuotaPagadaDelMes(d, refDate)) total += info.monto;
   });
@@ -5345,10 +5377,11 @@ function resumenTotalesDelMes(refDate, cuentaId){
   const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
   const gastos = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0;
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  // Tanda L2: cuotas propias de `cta` + compartidas (en 'total', todas una vez).
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
   const aportesMetas = totalAportesMetasDelMes(refDate, cuentaId);
   const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
-  const cuotasPendientes = cta === 'total' ? cuotasPendientesDelMes(refDate) : 0;
+  const cuotasPendientes = cuotasPendientesDelMes(refDate, cuentaId);
   const cerrado = esMesCerrado(refDate);
   const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
   const dispLibre = dispConPendientes + (cerrado ? 0 : cuotasPendientes);
@@ -5401,7 +5434,7 @@ function donaResumenData(refDate, cuentaId){
   const totalGastos = T.gastos + T.cuotas;
   const ct = {};
   getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });   // Tanda L2
   const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
   const colorDeCat = {};
   orden.forEach(([cat], i)=>{ colorDeCat[cat] = sliceColor(i); });
@@ -5421,13 +5454,14 @@ function donaResumenData(refDate, cuentaId){
 // solo ocurre en meses POSTERIORES al de la compra. Es 100% de visualización/búsqueda:
 // el monto se LEE de cuotaInfoForMonth (no hay cálculo paralelo) y su fecha es el mismo
 // día del mes que la compra original (recortado al último día si el mes fuera más corto).
-// Tanda C2: `cuentaId` opcional al final. Las cuotas no se asignan a cuentas hasta C5, así
-// que para una cuenta específica esta lista es vacía; 'total' (o sin argumento) igual que hoy.
+// Tanda L2: `cuentaId` opcional al final. En 'total' lista todas las cuotas vigentes;
+// en una cuenta específica, las de deudas propias + compartidas (itemEnVista).
 function cuotasVirtualesHistorial(refDate, cuentaId){
-  if(ctaCalc(cuentaId) !== 'total') return [];
+  const cta = ctaCalc(cuentaId);
   const mk = monthKey(refDate);
   const out = [];
   state.debts.forEach(d=>{
+    if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, refDate);
     if(!info) return;
     const pd = new Date(d.purchaseDate+"T00:00:00");
@@ -5515,10 +5549,10 @@ function renderResumen(){
   const dispLibre = T.dispLibre;
 
   // Cuotas por categoría (para el desglose "Gasto por categoría" de más abajo).
-  // Tanda C3: las cuotas no tienen cuentaId hasta C5 → en una cuenta específica aportan
-  // $0 (igual que T.cuotas), sólo la vista Total las reparte por categoría.
+  // Tanda L2: cuotas de deudas propias de la vista + compartidas (en 'total', todas).
   const cuotasPorCategoria = {};
-  if(cta === 'total') state.debts.forEach(d=>{
+  state.debts.forEach(d=>{
+    if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, currentDate);
     if(info) cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto;
   });
@@ -5763,7 +5797,7 @@ function renderResumenDetalle(){
   host.classList.toggle('open', abierto);
 
   const refDate = currentDate;
-  const cta = ctaVista();   // Tanda C3: cuotas y metas son globales → $0 en cuenta específica
+  const cta = ctaVista();   // Tanda L2: cuotas/metas propias de la vista + compartidas
   const T = resumenTotalesDelMes(refDate, cta);
   const mk = monthKey(refDate);
 
@@ -5772,14 +5806,15 @@ function renderResumenDetalle(){
 
   const gastoByCat = {};
   getExpensesForMonth(refDate, cta).filter(e=>!e.debtId).forEach(e=> gastoByCat[e.category] = (gastoByCat[e.category]||0) + e.amount);
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) gastoByCat[d.category] = (gastoByCat[d.category]||0) + info.monto; });
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) gastoByCat[d.category] = (gastoByCat[d.category]||0) + info.monto; });
 
   const cuotaByDeuda = {};
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info){ const k = d.description || 'Compra a cuotas'; cuotaByDeuda[k] = (cuotaByDeuda[k]||0) + info.monto; } });
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info){ const k = d.description || 'Compra a cuotas'; cuotaByDeuda[k] = (cuotaByDeuda[k]||0) + info.monto; } });
 
   const metaByGoal = {};
   const pausadasAuto = calcularEstadoAportesDelMes(refDate);
-  if(cta === 'total') state.goals.forEach(g=>{
+  state.goals.forEach(g=>{
+    if(!itemEnVista(g, cta)) return;
     if(!goalNotCutOff(g, refDate)) return;
     let m = 0;
     (g.aportes||[]).forEach(a=>{ if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) m += a.monto; });
@@ -5818,7 +5853,8 @@ function insightsMesData(refDate, cuentaId){
   const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
   const gastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0; const cuotasPorCat = {};
-  if(cta === 'total') state.debts.forEach(d=>{
+  state.debts.forEach(d=>{   // Tanda L2: cuotas propias de la vista + compartidas
+    if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, refDate);
     if(info){ cuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
   });
@@ -5829,7 +5865,7 @@ function insightsMesData(refDate, cuentaId){
   // en curso / futuros reincorpora las cuotas del mes aún sin confirmar; en meses CERRADOS
   // NO (ya cuentan como gasto del mes). La comparación mes a mes usa este valor: el mes
   // anterior siempre está cerrado, así que se compara sin reincorporar de ese lado.
-  const disponibleLibre = disponible + (esMesCerrado(refDate) ? 0 : cuotasPendientesDelMes(refDate));
+  const disponibleLibre = disponible + (esMesCerrado(refDate) ? 0 : cuotasPendientesDelMes(refDate, cuentaId));
   const catTotals = {};
   normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
   Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
@@ -5844,7 +5880,7 @@ function mesTieneMovimientos(refDate, cuentaId){
   const cta = ctaCalc(cuentaId);
   if(getExpensesForMonth(refDate, cuentaId).length) return true;
   if(getIncomesForMonth(refDate, cuentaId).length) return true;
-  if(cta === 'total' && state.debts.some(d=> cuotaInfoForMonth(d, refDate))) return true;
+  if(state.debts.some(d=> itemEnVista(d, cta) && cuotaInfoForMonth(d, refDate))) return true;   // Tanda L2
   if(totalAportesMetasDelMes(refDate, cuentaId) > 0) return true;
   return false;
 }
@@ -8567,7 +8603,8 @@ function generarResumenImagen(){
   const totalIngresos = monthIncomes.reduce((s,i)=> s + i.amount, 0);
   const totalGastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
   let totalCuotas = 0; const cuotasPorCat = {};
-  if(cta === 'total') state.debts.forEach(d=>{
+  state.debts.forEach(d=>{   // Tanda L2: cuotas propias de la vista + compartidas
+    if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, currentDate);
     if(info){ totalCuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
   });
@@ -9085,7 +9122,7 @@ function gastoPorCategoriaData(refDate){
   const cta = ctaVista();   // Tanda C3: la torta del Historial respeta el selector de cuenta
   const ct = {};
   getExpensesForMonth(refDate, cta).filter(e=> !e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
-  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });
+  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });   // Tanda L2
   return Object.entries(ct).filter(([,v])=> v>0).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
 }
 
