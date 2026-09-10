@@ -2253,6 +2253,68 @@ function catTope(cat){
   return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.round(v) : null;
 }
 
+/* ==================== TANDA C1 · MODELO DE DATOS MULTI-CUENTA ====================
+   Primera de 5 tandas para soportar varias cuentas. Esta SOLO agrega el modelo de
+   datos y la migración — sin UI, sin motor por cuenta, sin cambiar ningún número
+   que la app muestre hoy. El selector de cuenta (header), el CRUD en Configuración
+   y "Transferir entre cuentas" son C3; el motor de transferencias es C4.
+
+   migrarEstadoCuentas(st) es la ÚNICA migración: la invocan loadState() y
+   migrateBackup() con el mismo objeto-función, así que son idénticas por
+   construcción (no dos copias que puedan divergir). Garantiza que el estado tenga:
+     · st.accounts  — array de { id, nombre, orden, archivada }. Si falta o queda
+                      vacío se crea una única cuenta "Principal" (orden 0).
+     · st.transfers — array vacío por ahora (el motor es C4).
+     · st.config.cuentaActiva — 'total' | <accountId>, default 'total'. Un id que
+                      apunte a una cuenta inexistente cae a 'total'.
+     · cada gasto/ingreso con un cuentaId que apunta a una cuenta existente; si
+       falta o apunta a una cuenta inexistente se reasigna a "Principal" — mismo
+       espíritu que la reconciliación no destructiva de métodos/fuentes de la
+       Tanda W (migrateBackup), adaptado a "reasignar al ancla" en vez de
+       "re-agregar a la lista". */
+function migrarEstadoCuentas(st){
+  if(!st || typeof st !== 'object' || Array.isArray(st)) return st;
+  const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // 1. st.accounts: array de cuentas bien formadas. Se descartan entradas sin id
+  //    string; a las demás se les completan nombre/orden/archivada.
+  if(!Array.isArray(st.accounts)) st.accounts = [];
+  st.accounts = st.accounts.filter(a => a && typeof a === 'object' && !Array.isArray(a)
+    && typeof a.id === 'string' && a.id !== '');
+  st.accounts.forEach((a, idx)=>{
+    if(typeof a.nombre !== 'string' || a.nombre.trim() === '') a.nombre = 'Cuenta';
+    if(!Number.isInteger(a.orden)) a.orden = idx;
+    if(typeof a.archivada !== 'boolean') a.archivada = false;
+  });
+  if(st.accounts.length === 0){
+    st.accounts.push({ id: nuevoId(), nombre: 'Principal', orden: 0, archivada: false });
+  }
+
+  // 2. st.transfers: array (vacío por ahora — sin UI ni motor, eso es C4).
+  if(!Array.isArray(st.transfers)) st.transfers = [];
+
+  // 3. config.cuentaActiva: 'total' | <accountId> existente. Default 'total'.
+  if(!st.config || typeof st.config !== 'object' || Array.isArray(st.config)) st.config = {};
+  const idsValidos = st.accounts.map(a => a.id);
+  if(st.config.cuentaActiva !== 'total' && !idsValidos.includes(st.config.cuentaActiva)){
+    st.config.cuentaActiva = 'total';
+  }
+
+  // 4. Guardarraíl de cuentaId en gastos/ingresos. "Principal" = la cuenta llamada
+  //    así, o (si se renombró en una tanda futura) la de menor orden. Tras migrar
+  //    datos viejos siempre es la única cuenta que hay.
+  const principal = st.accounts.find(a => a.nombre === 'Principal')
+    || st.accounts.slice().sort((a,b)=> a.orden - b.orden)[0];
+  const asignaCuenta = r => {
+    if(!r || typeof r !== 'object') return;
+    if(typeof r.cuentaId !== 'string' || !idsValidos.includes(r.cuentaId)) r.cuentaId = principal.id;
+  };
+  if(Array.isArray(st.expenses)) st.expenses.forEach(asignaCuenta);
+  if(Array.isArray(st.incomes))  st.incomes.forEach(asignaCuenta);
+
+  return st;
+}
+
 function loadState(){
   // Lectura defensiva (Tanda Q): si el navegador bloquea el acceso a localStorage
   // (algunos modos privados / permisos restringidos lanzan al solo tocarlo), la app
@@ -2351,9 +2413,9 @@ function loadState(){
         delete parsed.config.insightsDescartados;
       }
     }
-    return parsed;
+    return migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
   }
-  return { config: {...DEFAULTS, categoriaIconos: {}, categoriaTopes: {}}, expenses: [], incomes: [], debts: [], goals: [] };
+  return migrarEstadoCuentas({ config: {...DEFAULTS, categoriaIconos: {}, categoriaTopes: {}}, expenses: [], incomes: [], debts: [], goals: [] });
 }
 /* ==================== GUARDADO BLINDADO (Tanda Q · pto 1) ====================
    saveState() puede fallar: cuota excedida (QuotaExceededError), modo privado o
@@ -2488,6 +2550,16 @@ const money = n => {
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
 const monthKeyStr = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+// Tanda C1: cuentaId que se estampa en cada gasto/ingreso NUEVO. Por ahora siempre
+// "Principal" (la app tiene una sola cuenta hasta C3); el selector de cuenta real en
+// el formulario es trabajo de C3. migrarEstadoCuentas() garantiza que exista.
+function cuentaIdParaNuevoMovimiento(){
+  const accs = state.accounts || [];
+  const acc = accs.find(a => a.nombre === 'Principal')
+    || accs.slice().sort((a,b)=> a.orden - b.orden)[0];
+  return acc ? acc.id : null;
+}
 
 /* ==================== GASTOS/INGRESOS FIJOS CON RANGO DE DÍAS ====================
    Un fijo puede no tener día exacto sino un RANGO ("entre el 25 y el 30") para quien
@@ -3772,7 +3844,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     // Si tenía deuda y el método dejó de ser Crédito, se conserva la deuda intacta
     // (caso borde); para quitarla del todo hay que eliminar el gasto.
   } else {
-    const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null };
+    const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null, cuentaId:cuentaIdParaNuevoMovimiento() };
     if(rangoActivo) expense.diaHasta = diaHasta;
     if(esCredito){
       const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
@@ -3972,7 +4044,7 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
     i.date=fecha; i.nombre=nombre; i.source=fuente; i.amount=monto; i.description=descripcion; i.tipo=itipo;
     if(rangoActivo) i.diaHasta = diaHasta; else delete i.diaHasta;
   } else {
-    const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo};
+    const inc = {id:uid(), date:fecha, nombre:nombre, source:fuente, amount:monto, description:descripcion, tipo:itipo, cuentaId:cuentaIdParaNuevoMovimiento()};
     if(rangoActivo) inc.diaHasta = diaHasta;
     state.incomes.push(inc);
     nuevoIngresoId = inc.id;
@@ -7354,13 +7426,21 @@ function validExpenseShape(e){
     && isIsoDate(e.date) && isNum(e.amount)                                   // requeridos
     && optStr(e.id) && optStr(e.category) && optStr(e.method) && optStr(e.description)
     && optStr(e.nombre) && optStr(e.tipo) && (e.debtId == null || isStr(e.debtId))
+    && optStr(e.cuentaId)                                                     // Tanda C1: cuenta (opcional en respaldos viejos)
     && optNum(e.diaHasta) && optPlainObj(e.fechasConfirmadas);               // rango de días (opcional)
 }
 function validIncomeShape(i){
   return i && typeof i === 'object' && !Array.isArray(i)
     && isIsoDate(i.date) && isNum(i.amount)                                   // requeridos
     && optStr(i.id) && optStr(i.source) && optStr(i.description) && optStr(i.nombre) && optStr(i.tipo)
+    && optStr(i.cuentaId)                                                     // Tanda C1: cuenta (opcional en respaldos viejos)
     && optNum(i.diaHasta) && optPlainObj(i.fechasConfirmadas);               // rango de días (opcional)
+}
+// Tanda C1: forma de una cuenta. Laxa igual que el resto — todo opcional salvo que,
+// si viene, tenga el tipo correcto. Un respaldo sin `accounts` sigue siendo válido.
+function validAccountShape(a){
+  return a && typeof a === 'object' && !Array.isArray(a)
+    && optStr(a.id) && optStr(a.nombre) && optNum(a.orden) && optBool(a.archivada);
 }
 function validDebtShape(d){
   return d && typeof d === 'object' && !Array.isArray(d)
@@ -7404,6 +7484,8 @@ function validateBackupShape(parsed){
       || checkArr(parsed.incomes,  validIncomeShape,  'Algún ingreso del respaldo tiene datos inválidos (revisa fecha y monto).')
       || checkArr(parsed.debts,    validDebtShape,    'Alguna deuda o cuota del respaldo tiene datos inválidos.')
       || checkArr(parsed.goals,    validGoalShape,    'Alguna meta del respaldo tiene datos inválidos.')
+      || checkArr(parsed.accounts,  validAccountShape, 'Alguna cuenta del respaldo tiene datos inválidos.')  // Tanda C1 — ausente = OK
+      || checkArr(parsed.transfers, ()=>true,          'La lista de transferencias del respaldo tiene un formato inválido.')  // Tanda C1 — ausente = OK
       || ((parsed.config === undefined && parsed.expenses === undefined && parsed.incomes === undefined
            && parsed.debts === undefined && parsed.goals === undefined)
             ? 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.' : null);
@@ -7487,6 +7569,7 @@ function migrateBackup(parsed){
       tipo: (e.tipo === 'Fijo' || e.tipo === 'Casual') ? e.tipo : 'Casual',
       debtId: isStr(e.debtId) ? e.debtId : null
     };
+    if(isStr(e.cuentaId)) o.cuentaId = e.cuentaId;   // Tanda C1: se conserva; migrarEstadoCuentas lo valida/reasigna
     if(e.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = e.fixedEndMonthKey;
     aplicarFijoRango(o, e);
     return o;
@@ -7504,6 +7587,7 @@ function migrateBackup(parsed){
       description: desc,
       tipo: (i.tipo === 'Fijo' || i.tipo === 'Casual') ? i.tipo : 'Casual'   // `tipo` no existía en la alfa
     };
+    if(isStr(i.cuentaId)) o.cuentaId = i.cuentaId;   // Tanda C1: se conserva; migrarEstadoCuentas lo valida/reasigna
     if(i.fixedEndMonthKey !== undefined) o.fixedEndMonthKey = i.fixedEndMonthKey;
     aplicarFijoRango(o, i);
     return o;
@@ -7565,7 +7649,14 @@ function migrateBackup(parsed){
   });
   reconciliacionImport = { metodos: recMetodos, fuentes: recFuentes };
 
-  return { config, expenses, incomes, debts, goals };
+  // Tanda C1: modelo multi-cuenta. Se conservan accounts/transfers si el respaldo
+  // los trae; migrarEstadoCuentas() los normaliza, crea "Principal" si faltan,
+  // fija config.cuentaActiva y reasigna a "Principal" cualquier cuentaId huérfano
+  // — la MISMA función que usa loadState(), así la migración es idéntica.
+  const migrado = { config, expenses, incomes, debts, goals,
+    accounts: Array.isArray(src.accounts) ? src.accounts : [],
+    transfers: Array.isArray(src.transfers) ? src.transfers : [] };
+  return migrarEstadoCuentas(migrado);
 }
 let reconciliacionImport = null;   // {metodos:[], fuentes:[]} recuperado por la última migrateBackup()
 function fillRestoreCompare(backup){
