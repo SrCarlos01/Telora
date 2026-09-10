@@ -1965,6 +1965,18 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
+<!-- SHEET: migración L1 — deudas/metas de antes de esta versión, sin cuenta asignada,
+     con ≥2 cuentas ya creadas. Elección en bloque, obligatoria. -->
+<div class="sheet-overlay" id="sheetMigrarCuotasMetas" data-nodismiss>
+  <div class="sheet">
+    <h2>Asignar cuotas y metas a una cuenta</h2>
+    <p class="sheet-note" id="migCMBody"></p>
+    <p class="sheet-note">Podrás cambiar la cuenta de cada una después, una por una.</p>
+    <button class="btn-primary" id="migCMPrincipal">Asignar todas a «Principal»</button>
+    <button class="btn-primary" id="migCMCompartida">Marcarlas todas como Compartidas</button>
+  </div>
+</div>
+
 <!-- SHEET: aviso al cambiar el método de un gasto que es compra a cuotas (Tanda W · ajuste 1) -->
 <div class="sheet-overlay" id="sheetGastoMetodoAviso">
   <div class="sheet">
@@ -2429,7 +2441,32 @@ function migrarEstadoCuentas(st){
   if(Array.isArray(st.expenses)) st.expenses.forEach(asignaCuenta);
   if(Array.isArray(st.incomes))  st.incomes.forEach(asignaCuenta);
 
+  // 5. Tanda L1: cuentaId en deudas y metas. Valor válido = un id de cuenta que exista
+  //    (viva o archivada) o el centinela 'compartida'. Legacy (sin cuentaId, o con uno
+  //    huérfano) se resuelve así:
+  //      · Con ≤1 cuenta viva -> se asigna a esa cuenta, en silencio.
+  //      · Con ≥2 cuentas vivas -> NO se auto-asigna: queda "pendiente" (cuentaId
+  //        borrado), y checkMigracionCuotasMetasLegacy() abre un aviso único que obliga
+  //        a elegir "todas a Principal" o "todas compartidas" en bloque. Mientras tanto
+  //        el motor (match()) trata un ítem pendiente como sólo-Total, igual que hoy.
+  const idValidoItem = v => v === 'compartida' || (typeof v === 'string' && idsValidos.includes(v));
+  const asignaCuotaMeta = r => {
+    if(!r || typeof r !== 'object') return;
+    if(idValidoItem(r.cuentaId)) return;
+    if(vivasCount <= 1) r.cuentaId = principal.id;
+    else if(typeof r.cuentaId !== 'undefined') delete r.cuentaId;   // huérfano -> pendiente
+  };
+  if(Array.isArray(st.debts)) st.debts.forEach(asignaCuotaMeta);
+  if(Array.isArray(st.goals)) st.goals.forEach(asignaCuotaMeta);
+
   return st;
+}
+// Tanda L1: ¿el cuentaId de una deuda/meta apunta a algo real? (cuenta existente —
+// viva o archivada — o el centinela 'compartida'). Lo usan el aviso de migración y,
+// desde L2, el predicado match() del motor.
+function cuentaIdItemValido(v){
+  return v === 'compartida'
+    || (typeof v === 'string' && (state.accounts || []).some(a => a.id === v));
 }
 
 function loadState(){
@@ -3097,6 +3134,47 @@ function normCuentaActiva(){
     state.config.cuentaActiva = 'total';
   }
 }
+
+/* ==================== TANDA L1 · MIGRACIÓN DE CUOTAS/METAS LEGACY ====================
+   migrarEstadoCuentas() ya asignó las deudas/metas viejas a la única cuenta si había
+   una sola. Si había ≥2 cuentas vivas al migrar (caso raro), las dejó "pendientes"
+   (sin cuentaId) y este aviso obliga a elegir en bloque, sin auto-elegir en silencio.
+   Mientras no se resuelva, el motor (match(), L2) trata un ítem pendiente como
+   sólo-Total — igual que el comportamiento anterior a esta iniciativa. */
+function cuotasMetasLegacyPendientes(){
+  return [...(state.debts || []), ...(state.goals || [])].filter(it => it && !cuentaIdItemValido(it.cuentaId));
+}
+function checkMigracionCuotasMetasLegacy(){
+  const sheet = document.getElementById('sheetMigrarCuotasMetas');
+  if(!sheet || sheet.classList.contains('open')) return;
+  if(cuentasVivas().length < 2) return;   // con ≤1 cuenta la migración ya asignó en silencio
+  const pend = cuotasMetasLegacyPendientes();
+  if(pend.length === 0) return;
+  const nD = (state.debts || []).filter(d => d && !cuentaIdItemValido(d.cuentaId)).length;
+  const nG = (state.goals || []).filter(g => g && !cuentaIdItemValido(g.cuentaId)).length;
+  const partes = [];
+  if(nD) partes.push(nD === 1 ? '1 compra en cuotas' : `${nD} compras en cuotas`);
+  if(nG) partes.push(nG === 1 ? '1 meta' : `${nG} metas`);
+  document.getElementById('migCMBody').textContent =
+    `Tienes ${partes.join(' y ')} de antes de que la app manejara varias cuentas. `
+    + `Elige a qué cuenta pertenecen: a «Principal», o compartidas entre todas las cuentas.`;
+  openSheet('sheetMigrarCuotasMetas');
+}
+function resolverMigracionCuotasMetas(destino){   // destino: <accountId> | 'compartida'
+  cuotasMetasLegacyPendientes().forEach(it => { it.cuentaId = destino; });
+  saveState();
+  closeSheet('sheetMigrarCuotasMetas');
+  renderAll();
+}
+(function initMigracionCuotasMetas(){
+  const bP = document.getElementById('migCMPrincipal');
+  const bC = document.getElementById('migCMCompartida');
+  if(bP) bP.addEventListener('click', ()=>{
+    const principal = cuentasTodasOrden().find(a => a.nombre === 'Principal') || cuentasVivas()[0] || cuentasTodasOrden()[0];
+    if(principal) resolverMigracionCuotasMetas(principal.id);
+  });
+  if(bC) bC.addEventListener('click', ()=> resolverMigracionCuotasMetas('compartida'));
+})();
 // Cuenta por defecto de un formulario de gasto/ingreso NUEVO: la cuenta activa si hay
 // una, o "Principal" (misma resolución que cuentaIdParaNuevoMovimiento) en vista Total.
 function cuentaDefaultParaForm(){
@@ -3584,6 +3662,7 @@ document.getElementById('nextMonth').onclick = nextMonth;
      en window y timeout de seguridad. Así un pointerup/pointercancel perdido nunca
      deja el .sheet-overlay fijo capturando todos los toques. */
   document.querySelectorAll('.sheet-overlay').forEach(ov=>{
+    if(ov.hasAttribute('data-nodismiss')) return;   // Tanda L1: sheet de elección obligatoria — sin swipe-down
     const sheet = ov.querySelector('.sheet');
     if(!sheet) return;
     let vId=null, vy0=0, vx0=0, vt0=0, curDy=0, vTimer=0, vActive=false;
@@ -3693,7 +3772,7 @@ function closeSheet(id){ dismissSheet(document.getElementById(id)); }
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Escape') return;
   const top = sheetTopMost();
-  if(top) dismissSheet(top);
+  if(top && !top.hasAttribute('data-nodismiss')) dismissSheet(top);   // data-nodismiss: elección obligatoria (Tanda L1)
 });
 
 /* ==================== A11Y: toggles y tarjetas de opción ==================== */
@@ -3722,7 +3801,7 @@ document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=> dismissSheet(b.closest('.sheet-overlay')));
 });
 document.querySelectorAll('.sheet-overlay').forEach(ov=>{
-  ov.addEventListener('click', e=>{ if(e.target===ov) dismissSheet(ov); });
+  ov.addEventListener('click', e=>{ if(e.target===ov && !ov.hasAttribute('data-nodismiss')) dismissSheet(ov); });
 });
 
 document.getElementById('btnAdd').onclick = ()=>{
@@ -7911,6 +7990,7 @@ function validDebtShape(d){
   return d && typeof d === 'object' && !Array.isArray(d)
     && isIsoDate(d.purchaseDate) && isNum(d.totalAmount) && isNum(d.numCuotas) // requeridos
     && optStr(d.id) && optStr(d.description) && optStr(d.category)
+    && optStr(d.cuentaId)                                                     // Tanda L1: cuenta (opcional en respaldos viejos)
     && optArr(d.manualPaidMonthKeys) && optArr(d.manualUnpaidMonthKeys);
 }
 function validAporteShape(a){
@@ -7922,6 +8002,7 @@ function validGoalShape(g){
   if(!g || typeof g !== 'object' || Array.isArray(g)) return false;
   if(!optStr(g.id) || !optStr(g.name) || !optBool(g.indefinida)
      || !optNum(g.montoObjetivo) || !optStr(g.fechaLimite) || !optStr(g.fechaCreacion)
+     || !optStr(g.cuentaId)                                                    // Tanda L1: cuenta (opcional en respaldos viejos)
      || !optPlainObj(g.aporteAutomatico)) return false;
   if(g.aportes !== undefined && (!Array.isArray(g.aportes) || !g.aportes.every(validAporteShape))) return false;
   return true;
@@ -8058,16 +8139,20 @@ function migrateBackup(parsed){
     return o;
   });
 
-  const debts = arrOf(src.debts).map(d=>({
-    id: isStr(d.id) ? d.id : gen(),
-    description: isStr(d.description) ? d.description : '',
-    purchaseDate: d.purchaseDate,
-    category: isStr(d.category) ? d.category : 'Varios',
-    totalAmount: d.totalAmount,
-    numCuotas: d.numCuotas,
-    manualPaidMonthKeys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys.slice() : [],
-    manualUnpaidMonthKeys: Array.isArray(d.manualUnpaidMonthKeys) ? d.manualUnpaidMonthKeys.slice() : []
-  }));
+  const debts = arrOf(src.debts).map(d=>{
+    const o = {
+      id: isStr(d.id) ? d.id : gen(),
+      description: isStr(d.description) ? d.description : '',
+      purchaseDate: d.purchaseDate,
+      category: isStr(d.category) ? d.category : 'Varios',
+      totalAmount: d.totalAmount,
+      numCuotas: d.numCuotas,
+      manualPaidMonthKeys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys.slice() : [],
+      manualUnpaidMonthKeys: Array.isArray(d.manualUnpaidMonthKeys) ? d.manualUnpaidMonthKeys.slice() : []
+    };
+    if(isStr(d.cuentaId)) o.cuentaId = d.cuentaId;   // Tanda L1: se conserva; migrarEstadoCuentas lo valida/asigna
+    return o;
+  });
 
   const goals = arrOf(src.goals).map(g=>{
     const aa = (g.aporteAutomatico && typeof g.aporteAutomatico === 'object' && !Array.isArray(g.aporteAutomatico))
@@ -8097,6 +8182,7 @@ function migrateBackup(parsed){
     };
     if(aa.fechaActivacion !== undefined) o.aporteAutomatico.fechaActivacion = aa.fechaActivacion;
     if(g.goalEndMonthKey !== undefined) o.goalEndMonthKey = g.goalEndMonthKey;
+    if(isStr(g.cuentaId)) o.cuentaId = g.cuentaId;   // Tanda L1: se conserva; migrarEstadoCuentas lo valida/asigna
     return o;
   });
 
@@ -9331,6 +9417,7 @@ function renderAll(){
   if(currentScreen==='historial') renderHistorial();
   if(currentScreen==='cuotas') renderCuotas();
   if(currentScreen==='metas') renderMetas();
+  checkMigracionCuotasMetasLegacy();   // Tanda L1: aviso de deudas/metas legacy sin cuenta (≥2 cuentas)
 }
 renderAll();
 
