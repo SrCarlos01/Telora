@@ -2925,6 +2925,27 @@ function leerMontoPct(inputId, tipo){
 initMontoPctInput('autoMonto', '#sheetAutoMeta [data-autotipo].active');
 initMontoPctInput('mAutoValor', '#sheetMeta [data-mautotipo].active');
 
+/* ==================== TANDA C2 · MOTOR MULTI-CUENTA (PARAMETRIZACIÓN) ====================
+   Segunda de 5 tandas. Las funciones de cálculo de la cuenta corriente aceptan ahora un
+   `cuentaId` OPCIONAL como ÚLTIMO parámetro. Sin él (o con 'total') el resultado es
+   BYTE-IDÉNTICO al de antes de esta tanda: ningún llamador existente pasa el argumento.
+   Con un id de cuenta válido, cada función mira sólo los movimientos de esa cuenta.
+
+   Reglas de esta tanda (decisiones ya cerradas en el plan C1–C5):
+     · Ingresos y gastos SÍ llevan cuentaId (Tanda C1) -> se filtran de verdad.
+     · Cuotas y Metas son GLOBALES hasta C5: para una cuenta específica aportan $0
+       (ninguna deuda/meta tiene cuentaId todavía). Sólo 'total' las cuenta, igual que hoy.
+     · La caché de la cuenta corriente (MONEY_CACHE / SALDO_ROW_CACHE) se re-indexa por
+       `cuentaId + ':' + monthKey`, con 'total' como clave reservada, para que los
+       números de una cuenta nunca contaminen los de otra.
+   Sin UI: el selector de cuenta (header y formulario) es Tanda C3; las transferencias, C4. */
+// Normaliza el cuentaId que reciben las funciones de cálculo: 'total' (o ausente, o un id
+// que no corresponde a ninguna cuenta viva) -> 'total'; un id de cuenta válido pasa tal cual.
+function ctaCalc(cuentaId){
+  if(cuentaId == null || cuentaId === 'total') return 'total';
+  return (state.accounts || []).some(a=> a.id === cuentaId) ? cuentaId : 'total';
+}
+
 /* ==================== GASTOS FIJOS RECURRENTES ==================== */
 // Un gasto marcado como "Fijo" (y que no sea una cuota) se repite automáticamente
 // cada mes posterior a su fecha de registro, el mismo día del mes, hasta que se
@@ -2932,7 +2953,11 @@ initMontoPctInput('mAutoValor', '#sheetMeta [data-mautotipo].active');
 // se genera una "ocurrencia virtual" en cada mes siguiente a partir del mismo dato.
 // Si se elimina, se guarda `fixedEndMonthKey`: el gasto deja de aparecer desde ese
 // mes en adelante, pero los meses anteriores (donde sí ocurrió) quedan intactos.
-function getExpensesForMonth(refDate){
+// Tanda C2: `cuentaId` opcional al final — sin él devuelve todo (comportamiento de
+// siempre); con un id válido filtra a las ocurrencias de esa cuenta (las virtuales
+// heredan el cuentaId del registro base vía el spread).
+function getExpensesForMonth(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
   const mk = monthKey(refDate);
   const notCutOff = e => e.fixedEndMonthKey == null || mk < e.fixedEndMonthKey;
 
@@ -2956,7 +2981,8 @@ function getExpensesForMonth(refDate){
       return applyFixedRangeMeta({ ...e, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true }, refDate);
     });
 
-  return [...real, ...virtualFixed];
+  const todas = [...real, ...virtualFixed];
+  return cta === 'total' ? todas : todas.filter(e=> e.cuentaId === cta);
 }
 
 /* ==================== INGRESOS FIJOS RECURRENTES ==================== */
@@ -2964,7 +2990,9 @@ function getExpensesForMonth(refDate){
 // posterior a su fecha de registro, el mismo día, generando una "ocurrencia
 // virtual" (no se duplica el registro). Al eliminarlo se guarda fixedEndMonthKey
 // y deja de aparecer desde ese mes en adelante; los meses previos quedan intactos.
-function getIncomesForMonth(refDate){
+// Tanda C2: `cuentaId` opcional al final, mismo criterio que getExpensesForMonth().
+function getIncomesForMonth(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
   const mk = monthKey(refDate);
   const notCutOff = i => i.fixedEndMonthKey == null || mk < i.fixedEndMonthKey;
 
@@ -2985,7 +3013,8 @@ function getIncomesForMonth(refDate){
       return applyFixedRangeMeta({ ...i, date: `${yyyy}-${mm}-${dd}`, isVirtualFixed:true }, refDate);
     });
 
-  return [...real, ...virtualFixed];
+  const todas = [...real, ...virtualFixed];
+  return cta === 'total' ? todas : todas.filter(i=> i.cuentaId === cta);
 }
 
 /* ==================== CUENTA CORRIENTE: saldo acumulado entre meses ==================== */
@@ -3032,31 +3061,45 @@ function primerMesConDatos(){
   return mk;
 }
 // Ingresos - Gastos - Cuotas de un mes (sin metas, sin arrastre).
-function flujoBrutoDelMes(refDate){
-  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
-  const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
+// Tanda C2: sin `cuentaId` (o 'total'), idéntico a hoy. Con un id de cuenta, sólo los
+// ingresos/gastos de esa cuenta; las cuotas no tienen cuentaId hasta C5, así que aportan
+// $0 a una cuenta específica (sólo la vista Total las descuenta).
+function flujoBrutoDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
+  const gastos = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0;
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
   return ingresos - gastos - cuotas;
 }
 // disponibleBase de un mes = arrastre de meses anteriores + flujo bruto del mes (aún sin metas).
 // Es el número contra el que se miden los aportes automáticos (incluidos los de tipo %).
-function disponibleBaseDelMes(refDate){
-  const mk = monthKey(refDate);
-  if(MONEY_CACHE.base.has(mk)) return MONEY_CACHE.base.get(mk);
-  MONEY_CACHE.base.set(mk, 0);
-  const val = saldoAcumuladoHasta(refDate) + flujoBrutoDelMes(refDate);
-  MONEY_CACHE.base.set(mk, val);
+function disponibleBaseDelMes(refDate, cuentaId){
+  const ck = ctaCalc(cuentaId) + ':' + monthKey(refDate);   // Tanda C2: caché por cuenta
+  if(MONEY_CACHE.base.has(ck)) return MONEY_CACHE.base.get(ck);
+  MONEY_CACHE.base.set(ck, 0);
+  const val = saldoAcumuladoHasta(refDate, cuentaId) + flujoBrutoDelMes(refDate, cuentaId);
+  MONEY_CACHE.base.set(ck, val);
   return val;
 }
 // Aportes a metas que caen en un mes: manuales reales + automáticos virtuales que caben (Día 11).
-function totalAportesMetasDelMes(refDate){
+// Tanda C2: las metas son GLOBALES hasta C5. Con 'total' suma todas (idéntico a hoy); con
+// un id de cuenta filtra a las metas asignadas a esa cuenta (g.cuentaId === cuenta) —
+// conjunto hoy vacío, así que el aporte de metas por cuenta es $0 hasta que exista C5.
+function totalAportesMetasDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
   const mk = monthKey(refDate);
-  if(MONEY_CACHE.metas.has(mk)) return MONEY_CACHE.metas.get(mk);
-  MONEY_CACHE.metas.set(mk, 0);
+  const ck = cta + ':' + mk;
+  if(MONEY_CACHE.metas.has(ck)) return MONEY_CACHE.metas.get(ck);
+  MONEY_CACHE.metas.set(ck, 0);
+  if(cta !== 'total' && !state.goals.some(g=> g.cuentaId === cta)){
+    MONEY_CACHE.metas.set(ck, 0);
+    return 0;
+  }
+  const goalsScope = cta === 'total' ? state.goals : state.goals.filter(g=> g.cuentaId === cta);
   const pausadasAuto = calcularEstadoAportesDelMes(refDate);
   let total = 0;
-  state.goals.forEach(g=>{
+  goalsScope.forEach(g=>{
     if(!goalNotCutOff(g, refDate)) return;
     (g.aportes||[]).forEach(a=>{
       if(monthKey(new Date(a.fecha+"T00:00:00")) === mk) total += a.monto;
@@ -3064,24 +3107,25 @@ function totalAportesMetasDelMes(refDate){
     const va = aporteAutomaticoVirtualParaMes(g, refDate);
     if(va && !pausadasAuto.has(g.id)) total += va.monto;
   });
-  MONEY_CACHE.metas.set(mk, total);
+  MONEY_CACHE.metas.set(ck, total);
   return total;
 }
 // Flujo neto COMPLETO de un mes (ya con metas), sin el arrastre.
-function flujoNetoDelMes(refDate){
-  const mk = monthKey(refDate);
-  if(MONEY_CACHE.flujo.has(mk)) return MONEY_CACHE.flujo.get(mk);
-  MONEY_CACHE.flujo.set(mk, 0);
-  const val = flujoBrutoDelMes(refDate) - totalAportesMetasDelMes(refDate);
-  MONEY_CACHE.flujo.set(mk, val);
+function flujoNetoDelMes(refDate, cuentaId){
+  const ck = ctaCalc(cuentaId) + ':' + monthKey(refDate);   // Tanda C2: caché por cuenta
+  if(MONEY_CACHE.flujo.has(ck)) return MONEY_CACHE.flujo.get(ck);
+  MONEY_CACHE.flujo.set(ck, 0);
+  const val = flujoBrutoDelMes(refDate, cuentaId) - totalAportesMetasDelMes(refDate, cuentaId);
+  MONEY_CACHE.flujo.set(ck, val);
   return val;
 }
 // Suma del flujo neto de todos los meses ANTERIORES a refDate (exclusivo), desde el primer
 // mes con datos. Puede ser negativo. 0 si no hay meses previos.
-function saldoAcumuladoHasta(refDate){
+function saldoAcumuladoHasta(refDate, cuentaId){
   const mk = monthKey(refDate);
-  if(MONEY_CACHE.saldo.has(mk)) return MONEY_CACHE.saldo.get(mk);
-  MONEY_CACHE.saldo.set(mk, 0);
+  const ck = ctaCalc(cuentaId) + ':' + mk;   // Tanda C2: caché por cuenta
+  if(MONEY_CACHE.saldo.has(ck)) return MONEY_CACHE.saldo.get(ck);
+  MONEY_CACHE.saldo.set(ck, 0);
   const first = primerMesConDatos();
   let total = 0;
   if(first !== null){
@@ -3094,15 +3138,15 @@ function saldoAcumuladoHasta(refDate){
     const inicioMk = mesInicioRegistroMk();
     if(inicioMk !== null && mk >= inicioMk) startMk = Math.max(startMk, inicioMk);
     for(let k = startMk; k <= endMk; k++){
-      total += flujoNetoDelMes(new Date(Math.floor(k / 12), k % 12, 1));
+      total += flujoNetoDelMes(new Date(Math.floor(k / 12), k % 12, 1), cuentaId);
     }
   }
-  MONEY_CACHE.saldo.set(mk, total);
+  MONEY_CACHE.saldo.set(ck, total);
   return total;
 }
 // Disponible mostrado de un mes = arrastre + flujo bruto - metas.
-function disponibleDelMes(refDate){
-  return disponibleBaseDelMes(refDate) - totalAportesMetasDelMes(refDate);
+function disponibleDelMes(refDate, cuentaId){
+  return disponibleBaseDelMes(refDate, cuentaId) - totalAportesMetasDelMes(refDate, cuentaId);
 }
 
 /* ==================== SALDO ACUMULADO POR MOVIMIENTO (pestaña "Todo") ==================== */
@@ -3122,8 +3166,10 @@ function disponibleDelMes(refDate){
 // su fecha. Los aportes a metas no son fila, así que esa única salida sí se descuenta
 // por adelantado del saldo de apertura (con el mismo número que totalAportesMetasDelMes).
 // Efecto: el saldo de la ÚLTIMA fila del mes vuelve a cerrar igual que disponibleDelMes().
-let SALDO_ROW_CACHE = { mk:null, map:null };
-function resetSaldoRowCache(){ SALDO_ROW_CACHE = { mk:null, map:null }; }
+// Tanda C2: la clave es `cuentaId + ':' + monthKey` (antes sólo el monthKey), para que
+// el saldo por movimiento de una cuenta no se sirva por el de otra.
+let SALDO_ROW_CACHE = { key:null, map:null };
+function resetSaldoRowCache(){ SALDO_ROW_CACHE = { key:null, map:null }; }
 function saldoRowKey(kind, id, date){
   const p = kind === 'ingreso' ? 'i:' : (kind === 'cuota' ? 'c:' : 'g:');
   return p + id + ':' + date;
@@ -3142,31 +3188,31 @@ const CRONO_RANK = k => k === 'ingreso' ? 0 : (k === 'cuota' ? 2 : 1);
 // descuentan "en bloque" del saldo de apertura: entran aquí como una fila más, en su
 // fecha (mismo día del mes que la compra), leyendo el monto de cuotaInfoForMonth — el
 // mismo número que usa el Resumen. La suma total no cambia; sí su lugar cronológico.
-function movimientosCronoAsc(refDate){
-  const ingresos = getIncomesForMonth(refDate).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
-  const gastos   = getExpensesForMonth(refDate).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e), _ord:idx }));
-  const cuotas   = cuotasVirtualesHistorial(refDate).map((c,idx)=>({ kind:'cuota', id:c.id, date:c.date, delta:-c.amount, _ord:idx }));
+function movimientosCronoAsc(refDate, cuentaId){
+  const ingresos = getIncomesForMonth(refDate, cuentaId).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
+  const gastos   = getExpensesForMonth(refDate, cuentaId).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e), _ord:idx }));
+  const cuotas   = cuotasVirtualesHistorial(refDate, cuentaId).map((c,idx)=>({ kind:'cuota', id:c.id, date:c.date, delta:-c.amount, _ord:idx }));
   return [...ingresos, ...gastos, ...cuotas].sort((a,b)=>
     a.date.localeCompare(b.date)
     || (CRONO_RANK(a.kind) - CRONO_RANK(b.kind))
     || (a._ord - b._ord)
   );
 }
-function saldoPorMovimientoDelMes(refDate){
-  const mk = monthKey(refDate);
-  if(SALDO_ROW_CACHE.mk === mk && SALDO_ROW_CACHE.map) return SALDO_ROW_CACHE.map;
+function saldoPorMovimientoDelMes(refDate, cuentaId){
+  const ck = ctaCalc(cuentaId) + ':' + monthKey(refDate);
+  if(SALDO_ROW_CACHE.key === ck && SALDO_ROW_CACHE.map) return SALDO_ROW_CACHE.map;
   const map = new Map();
   // saldo de meses anteriores (arrastre) − aportes a metas del mes: la única salida del
   // mes que el Resumen descuenta y que NO es fila de esta lista. Las cuotas de meses
   // posteriores al de origen ahora SÍ son filas (cuotasVirtualesHistorial) y se
   // descuentan en su lugar cronológico dentro de la pasada de abajo.
-  let run = saldoAcumuladoHasta(refDate);
-  run -= totalAportesMetasDelMes(refDate);
-  movimientosCronoAsc(refDate).forEach(m=>{
+  let run = saldoAcumuladoHasta(refDate, cuentaId);
+  run -= totalAportesMetasDelMes(refDate, cuentaId);
+  movimientosCronoAsc(refDate, cuentaId).forEach(m=>{
     run += m.delta;
     map.set(saldoRowKey(m.kind, m.id, m.date), run);
   });
-  SALDO_ROW_CACHE = { mk, map };
+  SALDO_ROW_CACHE = { key: ck, map };
   return map;
 }
 
@@ -4995,14 +5041,18 @@ function esMesCerrado(refDate){
 //    NO reincorpora: dispLibre === dispConPendientes, y así coincide con lo que ese mes
 //    aportó al arrastre y con el saldo de la última fila del Historial.
 // Fuente única: lo consumen renderResumen() y la fila de totales del Historial.
-function resumenTotalesDelMes(refDate){
-  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
-  const gastos = getExpensesForMonth(refDate).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
+// Tanda C2: `cuentaId` opcional al final. Sin él (o 'total') es idéntico a hoy. Con un id
+// de cuenta, ingresos/gastos se filtran a esa cuenta y cuotas/metas (globales hasta C5)
+// aportan $0 — el residual de cuotas y metas vive sólo en la vista Total.
+function resumenTotalesDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
+  const gastos = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0;
-  state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
-  const aportesMetas = totalAportesMetasDelMes(refDate);
-  const saldoAnterior = saldoAcumuladoHasta(refDate);
-  const cuotasPendientes = cuotasPendientesDelMes(refDate);
+  if(cta === 'total') state.debts.forEach(d=>{ const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
+  const aportesMetas = totalAportesMetasDelMes(refDate, cuentaId);
+  const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
+  const cuotasPendientes = cta === 'total' ? cuotasPendientesDelMes(refDate) : 0;
   const cerrado = esMesCerrado(refDate);
   const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
   const dispLibre = dispConPendientes + (cerrado ? 0 : cuotasPendientes);
@@ -5019,8 +5069,8 @@ function resumenTotalesDelMes(refDate){
      los quiere TODOS: pasa incluirCeros=true. `suma` y `cuadra` no cambian (sumar $0 no
      altera nada), así que ese parámetro no afecta a ningún otro consumidor.
    · Si Σ(términos) ≠ dispLibre se marca `cuadra:false` para reportarlo como bug, no maquillarlo. */
-function desgloseDisponible(refDate, incluirCeros){
-  const T = resumenTotalesDelMes(refDate);
+function desgloseDisponible(refDate, incluirCeros, cuentaId){
+  const T = resumenTotalesDelMes(refDate, cuentaId);   // Tanda C2: `cuentaId` opcional al final
   // Mes CERRADO: la cifra grande ya no reincorpora → el término de cuotas es el total
   // del mes ("cuotas del mes"). Mes en curso / futuro: solo las confirmadas ("cuotas
   // pagadas"), porque las pendientes se reincorporan y no son término del desglose.
@@ -5072,7 +5122,10 @@ function donaResumenData(refDate){
 // solo ocurre en meses POSTERIORES al de la compra. Es 100% de visualización/búsqueda:
 // el monto se LEE de cuotaInfoForMonth (no hay cálculo paralelo) y su fecha es el mismo
 // día del mes que la compra original (recortado al último día si el mes fuera más corto).
-function cuotasVirtualesHistorial(refDate){
+// Tanda C2: `cuentaId` opcional al final. Las cuotas no se asignan a cuentas hasta C5, así
+// que para una cuenta específica esta lista es vacía; 'total' (o sin argumento) igual que hoy.
+function cuotasVirtualesHistorial(refDate, cuentaId){
+  if(ctaCalc(cuentaId) !== 'total') return [];
   const mk = monthKey(refDate);
   const out = [];
   state.debts.forEach(d=>{
@@ -5454,17 +5507,20 @@ function renderResumenDetalle(){
 // totalAportesMetasDelMes) para derivar comparaciones, proyección y alertas.
 
 // Agregados de un mes, con el mismo criterio que renderResumen().
-function insightsMesData(refDate){
-  const normalExpenses = getExpensesForMonth(refDate).filter(e=>!e.debtId);
-  const ingresos = getIncomesForMonth(refDate).reduce((s,i)=> s + i.amount, 0);
+// Tanda C2: `cuentaId` opcional al final, mismo criterio que resumenTotalesDelMes()
+// (cuotas y metas globales -> $0 para una cuenta específica, íntegras sólo en 'total').
+function insightsMesData(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const normalExpenses = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId);
+  const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
   const gastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
   let cuotas = 0; const cuotasPorCat = {};
-  state.debts.forEach(d=>{
+  if(cta === 'total') state.debts.forEach(d=>{
     const info = cuotaInfoForMonth(d, refDate);
     if(info){ cuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
   });
-  const aportesMetas = totalAportesMetasDelMes(refDate);
-  const saldoAnterior = saldoAcumuladoHasta(refDate);
+  const aportesMetas = totalAportesMetasDelMes(refDate, cuentaId);
+  const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
   const disponible = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
   // Tanda R · pto 6 + Tanda R3: mismo criterio que la cifra grande del Resumen. En el mes
   // en curso / futuros reincorpora las cuotas del mes aún sin confirmar; en meses CERRADOS
@@ -5478,11 +5534,15 @@ function insightsMesData(refDate){
   return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, disponible, disponibleLibre, catTotals, gastoTotal };
 }
 // ¿El mes tiene algún movimiento propio? (define si se puede comparar contra él).
-function mesTieneMovimientos(refDate){
-  if(getExpensesForMonth(refDate).length) return true;
-  if(getIncomesForMonth(refDate).length) return true;
-  if(state.debts.some(d=> cuotaInfoForMonth(d, refDate))) return true;
-  if(totalAportesMetasDelMes(refDate) > 0) return true;
+// Tanda C2: `cuentaId` opcional al final. Sin él (o 'total') es idéntico a hoy. Con un id
+// de cuenta, sólo cuentan los ingresos/gastos de esa cuenta; deudas y metas son globales
+// hasta C5, así que sólo aportan al chequeo en la vista Total.
+function mesTieneMovimientos(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  if(getExpensesForMonth(refDate, cuentaId).length) return true;
+  if(getIncomesForMonth(refDate, cuentaId).length) return true;
+  if(cta === 'total' && state.debts.some(d=> cuotaInfoForMonth(d, refDate))) return true;
+  if(totalAportesMetasDelMes(refDate, cuentaId) > 0) return true;
   return false;
 }
 // Tanda R4 · pto 4: guardarraíl de la proyección. Cuando el mes visto no tiene NINGÚN
@@ -5491,7 +5551,7 @@ function mesTieneMovimientos(refDate){
 // devuelve su mediana como ingreso estimado. null si no hay ningún mes anterior con
 // ingresos (usuario nuevo / sin historial). No lee ni altera resumenTotalesDelMes() ni
 // desgloseDisponible(): solo alimenta proyeccionFinDeMes() más abajo.
-function mesesConIngresosAnteriores(refDate, maxCount){
+function mesesConIngresosAnteriores(refDate, maxCount, cuentaId){
   const primerMk = primerMesConDatos();
   if(primerMk === null) return [];
   const inicioMk = mesInicioRegistroMk();
@@ -5500,7 +5560,7 @@ function mesesConIngresosAnteriores(refDate, maxCount){
   const out = [];
   for(let k = mkRef - 1; k >= lowerBound && out.length < maxCount; k--){
     const d = new Date(Math.floor(k / 12), k % 12, 1);
-    const ing = getIncomesForMonth(d).reduce((s,i)=> s + i.amount, 0);
+    const ing = getIncomesForMonth(d, cuentaId).reduce((s,i)=> s + i.amount, 0);
     if(Math.round(ing) > 0) out.push({ mk:k, date:d, ingresos:ing });
   }
   return out;   // más reciente primero
@@ -5512,16 +5572,16 @@ function medianaValores(arr){
 }
 // esHabitual=true con 3 meses de historial ("tu ingreso habitual"); con 1-2 meses el
 // dato existe pero no es un patrón todavía ("según [mes]" — ver renderInsights).
-function ingresoEstimadoInfo(refDate){
-  const meses = mesesConIngresosAnteriores(refDate, 3);
+function ingresoEstimadoInfo(refDate, cuentaId){
+  const meses = mesesConIngresosAnteriores(refDate, 3, cuentaId);
   if(!meses.length) return null;
   return { meses, estimado: medianaValores(meses.map(m=> m.ingresos)), esHabitual: meses.length === 3 };
 }
 // e) Proyección de fin de mes. Dos partes: (1) fijos/cuotas restantes conocidos con
 // certeza; (2) gasto variable estimado = promedio diario de gasto NO fijo / NO cuota
 // extrapolado a los días que quedan. Total = ya realizado + restante conocido + estimado.
-function proyeccionFinDeMes(refDate){
-  const data = insightsMesData(refDate);
+function proyeccionFinDeMes(refDate, cuentaId){
+  const data = insightsMesData(refDate, cuentaId);   // Tanda C2: `cuentaId` opcional al final
   const hoy = new Date();
   const mkRef = monthKey(refDate), mkHoy = monthKey(hoy);
   const diasEnMes = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
@@ -5544,7 +5604,7 @@ function proyeccionFinDeMes(refDate){
   };
 
   let gastosRealizados = 0, fijosCuotasRestantes = 0, variableOcurrido = 0;
-  getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=>{
+  getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=>{
     if(yaOcurrio(e)){
       gastosRealizados += e.amount;
       if(e.tipo !== 'Fijo') variableOcurrido += e.amount;   // base del promedio diario
@@ -5561,10 +5621,10 @@ function proyeccionFinDeMes(refDate){
     const push = (o, tipo)=>{ if(o && o.esRangoFijo) rangosPendientes.push({
       nombre: o.nombre || o.description || 'Movimiento', diaInicio: o.rangoDiaInicio, diaFin: o.rangoDiaFin, tipo
     }); };
-    getExpensesForMonth(refDate).filter(e=>!e.debtId).forEach(e=> push(e, 'gasto'));
-    getIncomesForMonth(refDate).forEach(i=> push(i, 'ingreso'));
+    getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=> push(e, 'gasto'));
+    getIncomesForMonth(refDate, cuentaId).forEach(i=> push(i, 'ingreso'));
   }
-  cuotasVirtualesHistorial(refDate).forEach(c=>{
+  cuotasVirtualesHistorial(refDate, cuentaId).forEach(c=>{
     if(yaOcurrio(c.date)) gastosRealizados += c.amount;
     else fijosCuotasRestantes += c.amount;
   });
@@ -5580,7 +5640,7 @@ function proyeccionFinDeMes(refDate){
   let ingresosProy = data.ingresos;
   let ingresoEstimado = null;
   if(Math.round(data.ingresos) === 0){
-    ingresoEstimado = ingresoEstimadoInfo(refDate);
+    ingresoEstimado = ingresoEstimadoInfo(refDate, cuentaId);
     if(ingresoEstimado) ingresosProy = ingresoEstimado.estimado;
   }
   // Ingresos y aportes a metas ya vienen proyectados al mes completo (fijos + automáticos).
