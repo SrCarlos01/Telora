@@ -2005,7 +2005,8 @@ button:active{ transform:scale(0.97); }
   </div>
 </div>
 
-<!-- SHEET: eliminar una cuenta con movimientos → reasignar a otra (Tanda C3) -->
+<!-- SHEET: eliminar una cuenta con movimientos → reasignar a otra (Tanda C3);
+     con transferencias asociadas → elección explícita reapuntar/eliminar (Tanda C4 · ajuste) -->
 <div class="sheet-overlay" id="sheetCuentaBorrar">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -2015,18 +2016,44 @@ button:active{ transform:scale(0.97); }
       <label for="ctaBorrarDestino">Mover sus movimientos a</label>
       <select id="ctaBorrarDestino"></select>
     </div>
+    <div class="field" id="ctaBorrarTransferField" hidden>
+      <label>¿Qué hacer con sus transferencias?</label>
+      <div class="toggle-row" id="ctaBorrarTransferModo">
+        <div class="toggle-opt active" data-tdel="reapuntar">Reapuntar</div>
+        <div class="toggle-opt" data-tdel="eliminar">Eliminar</div>
+      </div>
+      <select id="ctaBorrarTransferDestino" style="margin-top:8px;"></select>
+      <p class="sheet-note" id="ctaBorrarTransferNota" style="margin-top:6px;"></p>
+    </div>
     <button class="btn-danger" id="ctaBorrarConfirm">Eliminar cuenta</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
 
-<!-- SHEET: transferir entre cuentas — placeholder hasta C4 (Tanda C3) -->
+<!-- SHEET: transferir entre cuentas (Tanda C4) -->
 <div class="sheet-overlay" id="sheetTransferir">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Transferir entre cuentas</h2>
-    <p class="sheet-note">Mover dinero de una cuenta a otra sin que cuente como gasto ni como ingreso. Esta función llega en la próxima actualización.</p>
-    <button class="btn-ghost" data-close>Entendido</button>
+    <h2 id="transferirTitle">Transferir entre cuentas</h2>
+    <p class="sheet-note">Mueve dinero de una cuenta a otra. No cuenta como gasto ni como ingreso: sólo cambia el saldo de cada cuenta. En la vista “Total” no afecta nada.</p>
+    <div class="field"><label>Fecha</label><input type="date" id="tFecha"></div>
+    <div class="field">
+      <label>Desde</label>
+      <select id="tOrigen"></select>
+    </div>
+    <div class="field">
+      <label>Hacia</label>
+      <select id="tDestino"></select>
+    </div>
+    <div class="field">
+      <label>Monto</label>
+      <input type="text" id="tMonto" placeholder="0" inputmode="numeric" autocomplete="off">
+      <div class="chip-row chip-carousel chips-monto" id="montoChipsT"></div>
+    </div>
+    <div class="field"><label>Nombre (opcional)</label><input type="text" id="tNombre" placeholder="Ej: Pago de arriendo, Ahorro del mes" autocomplete="off"></div>
+    <button class="btn-primary" id="btnSaveTransfer">Guardar transferencia</button>
+    <button class="btn-danger" id="btnDeleteTransfer" style="display:none;">Eliminar transferencia</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
 
@@ -2508,8 +2535,33 @@ function migrarEstadoCuentas(st){
     st.accounts.push({ id: nuevoId(), nombre: 'Principal', orden: 0, archivada: false });
   }
 
-  // 2. st.transfers: array (vacío por ahora — sin UI ni motor, eso es C4).
+  // 2. st.transfers: transferencias entre cuentas (Tanda C4). Cada entrada:
+  //    { id, origen:<accountId>, destino:<accountId>, monto:int>0, fecha:'YYYY-MM-DD', nombre:string }.
+  //    Se conserva sólo lo bien formado cuyas DOS cuentas existan y sean distintas; el
+  //    resto se descarta (mismo criterio "reasignar/limpiar al ancla" del resto de la
+  //    migración — una transferencia que apunta a una cuenta que ya no está no tiene
+  //    sentido financiero). No hay 'compartida' acá: una transferencia siempre es entre
+  //    dos cuentas concretas.
   if(!Array.isArray(st.transfers)) st.transfers = [];
+  {
+    const accIds = new Set(st.accounts.map(a => a.id));
+    st.transfers = st.transfers
+      .filter(t => t && typeof t === 'object' && !Array.isArray(t)
+        && typeof t.id === 'string' && t.id !== ''
+        && typeof t.monto === 'number' && isFinite(t.monto) && t.monto > 0
+        && typeof t.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.fecha)
+        && typeof t.origen === 'string' && accIds.has(t.origen)
+        && typeof t.destino === 'string' && accIds.has(t.destino)
+        && t.origen !== t.destino)
+      .map(t => ({
+        id: t.id,
+        origen: t.origen,
+        destino: t.destino,
+        monto: Math.round(t.monto),
+        fecha: t.fecha,
+        nombre: (typeof t.nombre === 'string') ? t.nombre : ''
+      }));
+  }
 
   // 3. config.cuentaActiva: 'total' | <accountId> existente. Default 'total'.
   //    Además: con ≤1 cuenta NO archivada se normaliza a 'total' aunque apunte a esa
@@ -2765,6 +2817,7 @@ function restoreDeleteSnapshot(snap){
   reinsert('expenses', snap.expenses);
   reinsert('incomes', snap.incomes);
   reinsert('debts', snap.debts);
+  reinsert('transfers', snap.transfers);   // Tanda C4
   (snap.mutations || []).forEach(m=>{
     const arr = state[m.coll];
     const idx = arr ? arr.findIndex(x=> x.id === m.id) : -1;
@@ -3083,7 +3136,7 @@ document.addEventListener('click', e=>{
 // Los inputs de dinero son type="text": se muestran con separador de miles
 // (1.000.000) mientras se escribe y se parsean sin puntos al guardar.
 // No se aplica a inputs que no son dinero (tasa, día del mes, nº de cuotas, meses).
-const MONEY_INPUT_IDS = ['gMonto','iMonto','mMonto','apMonto'];
+const MONEY_INPUT_IDS = ['gMonto','iMonto','mMonto','apMonto','tMonto'];
 function soloDigitos(str){ return String(str==null?'':str).replace(/\D+/g, ''); }
 function formatMiles(str){
   const d = soloDigitos(str).replace(/^0+(?=\d)/, '');
@@ -3142,6 +3195,7 @@ function initMontoChips(boxId, targetId){
 }
 initMontoChips('montoChipsG', 'gMonto');
 initMontoChips('montoChipsI', 'iMonto');
+initMontoChips('montoChipsT', 'tMonto');   // Tanda C4
 
 /* ==================== INPUT DUAL "MONTO / %" (aporte automático) ==================== */
 // El mismo input sirve para un monto fijo (formateo de miles) o un porcentaje
@@ -3209,6 +3263,59 @@ function itemEnVista(item, cta){
 function ctaPresupuestoMeta(goal){
   const c = goal && goal.cuentaId;
   return (typeof c === 'string' && c !== 'compartida') ? c : 'total';
+}
+
+/* ==================== TANDA C4 · TRANSFERENCIAS ENTRE CUENTAS ====================
+   Una transferencia es un tipo de movimiento NUEVO, aparte de gasto e ingreso: mueve
+   saldo de una cuenta a otra y NO toca `expenses` ni `incomes`. Reglas cerradas:
+     · No suma ni resta en el cálculo de gasto/ingreso real.
+     · En la vista 'total' NETEA a $0 (sale de una cuenta, entra a otra; el conjunto
+       no cambia).
+     · En una cuenta concreta: −monto si es el origen, +monto si es el destino.
+   Estructura de cada entrada de state.transfers (la fija migrarEstadoCuentas()):
+     { id, origen:<accountId>, destino:<accountId>, monto:int>0, fecha:'YYYY-MM-DD', nombre }
+   `transferValida()` es el guardarraíl de runtime (además de la migración): una entrada
+   con cuentas huérfanas o mal formada se ignora en todos los cálculos. */
+function transferValida(t){
+  return t && typeof t === 'object' && !Array.isArray(t)
+    && typeof t.monto === 'number' && isFinite(t.monto) && t.monto > 0
+    && typeof t.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.fecha)
+    && typeof t.origen === 'string' && typeof t.destino === 'string'
+    && t.origen !== t.destino;
+}
+// Transferencias con fecha dentro del mes de `refDate`, ya resueltas para la vista `cta`
+// (normalizada por ctaCalc). Devuelve filas con `impacto` (lo que mueve el saldo de esa
+// vista):
+//   · 'total'          -> impacto 0 en TODAS (la transferencia netea a $0).
+//   · cuenta = destino -> impacto +monto.
+//   · cuenta = origen  -> impacto −monto.
+//   · cuenta ajena a la transferencia -> no aparece.
+// Fuente única: la usan el motor de flujo del mes, el desglose del Disponible y el
+// Historial "Todo" (filas + saldo acumulado), así nunca se calculan por caminos distintos.
+function transferenciasDelMesParaVista(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const mk = monthKey(refDate);
+  const out = [];
+  (state.transfers || []).forEach(t=>{
+    if(!transferValida(t)) return;
+    if(monthKey(new Date(t.fecha+"T00:00:00")) !== mk) return;
+    let impacto;
+    if(cta === 'total') impacto = 0;
+    else if(t.destino === cta) impacto = t.monto;
+    else if(t.origen === cta) impacto = -t.monto;
+    else return;
+    out.push({
+      id: 'transfer-'+t.id, transferId: t.id, date: t.fecha,
+      monto: t.monto, impacto, origen: t.origen, destino: t.destino,
+      nombre: t.nombre || ''
+    });
+  });
+  return out;
+}
+// Transferencias netas del mes para la vista `cta`: $0 en 'total', ± en una cuenta.
+// Es el término nuevo que entra a flujoBrutoDelMes() y a desgloseDisponible().
+function transferenciasNetasDelMes(refDate, cuentaId){
+  return transferenciasDelMesParaVista(refDate, cuentaId).reduce((s,t)=> s + t.impacto, 0);
 }
 
 /* ==================== TANDA C3 · SELECTOR DE CUENTA (UI) ====================
@@ -3434,7 +3541,11 @@ function flujoBrutoDelMes(refDate, cuentaId){
   // Tanda L2: la cuota cuenta en esta vista si la deuda es propia de `cta` o compartida
   // (en 'total', todas una vez).
   state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) cuotas += info.monto; });
-  return ingresos - gastos - cuotas;
+  // Tanda C4: transferencias netas del mes. NO son ingreso ni gasto — sólo mueven saldo
+  // entre las dos cuentas. En 'total' esto es 0 (netean); en una cuenta concreta suma al
+  // destino y resta al origen, así el arrastre de la cuenta corriente por cuenta cuadra.
+  const transferencias = transferenciasNetasDelMes(refDate, cuentaId);
+  return ingresos - gastos - cuotas + transferencias;
 }
 // disponibleBase de un mes = arrastre de meses anteriores + flujo bruto del mes (aún sin metas).
 // Es el número contra el que se miden los aportes automáticos (incluidos los de tipo %).
@@ -3536,7 +3647,7 @@ function disponibleDelMes(refDate, cuentaId){
 let SALDO_ROW_CACHE = { key:null, map:null };
 function resetSaldoRowCache(){ SALDO_ROW_CACHE = { key:null, map:null }; }
 function saldoRowKey(kind, id, date){
-  const p = kind === 'ingreso' ? 'i:' : (kind === 'cuota' ? 'c:' : 'g:');
+  const p = kind === 'ingreso' ? 'i:' : (kind === 'cuota' ? 'c:' : (kind === 'transfer' ? 't:' : 'g:'));
   return p + id + ':' + date;
 }
 // Impacto de un gasto en el saldo acumulado del mes = su monto. Una compra a crédito no
@@ -3546,8 +3657,9 @@ function saldoRowKey(kind, id, date){
 function impactoGastoEnSaldo(e){
   return (e && e.debtId) ? 0 : e.amount;
 }
-// Prioridad dentro de un mismo día: ingresos, luego gastos, luego cuotas virtuales.
-const CRONO_RANK = k => k === 'ingreso' ? 0 : (k === 'cuota' ? 2 : 1);
+// Prioridad dentro de un mismo día: ingresos, luego gastos, luego cuotas virtuales,
+// luego transferencias (Tanda C4).
+const CRONO_RANK = k => k === 'ingreso' ? 0 : (k === 'cuota' ? 2 : (k === 'transfer' ? 3 : 1));
 // Movimientos del mes (gastos + ingresos + cuotas virtuales) en orden cronológico
 // ascendente canónico. Las cuotas de meses posteriores al de la compra ya no se
 // descuentan "en bloque" del saldo de apertura: entran aquí como una fila más, en su
@@ -3557,7 +3669,11 @@ function movimientosCronoAsc(refDate, cuentaId){
   const ingresos = getIncomesForMonth(refDate, cuentaId).map((i,idx)=>({ kind:'ingreso', id:i.id, date:i.date, delta:i.amount, _ord:idx }));
   const gastos   = getExpensesForMonth(refDate, cuentaId).map((e,idx)=>({ kind:'gasto',  id:e.id, date:e.date, delta:-impactoGastoEnSaldo(e), _ord:idx }));
   const cuotas   = cuotasVirtualesHistorial(refDate, cuentaId).map((c,idx)=>({ kind:'cuota', id:c.id, date:c.date, delta:-c.amount, _ord:idx }));
-  return [...ingresos, ...gastos, ...cuotas].sort((a,b)=>
+  // Tanda C4: transferencias del mes. `impacto` ya viene resuelto para la vista (0 en
+  // 'total', ± en una cuenta), así el saldo de la última fila sigue cerrando en
+  // disponibleDelMes().
+  const transfers = transferenciasDelMesParaVista(refDate, cuentaId).map((t,idx)=>({ kind:'transfer', id:t.id, date:t.date, delta:t.impacto, _ord:idx }));
+  return [...ingresos, ...gastos, ...cuotas, ...transfers].sort((a,b)=>
     a.date.localeCompare(b.date)
     || (CRONO_RANK(a.kind) - CRONO_RANK(b.kind))
     || (a._ord - b._ord)
@@ -4530,6 +4646,19 @@ document.getElementById('btnConfirmDeleteDebt').onclick = ()=>{
     return;
   }
 
+  if(tipo === 'transfer'){   // Tanda C4
+    const t = (state.transfers || []).find(x=> x.id === pendingDeleteTransferId);
+    if(t){
+      const snap = { transfers:[snapItem(state.transfers, t)] };
+      state.transfers = state.transfers.filter(x=> x.id !== t.id);
+      saveState(); closeSheet('sheetConfirmDebt');
+      fadeRow(document.querySelector('[data-edittransfer="' + t.id + '"]'), renderAll);
+      showToast('Transferencia eliminada.', null, 10000, { label:'Deshacer', onClick:()=> restoreDeleteSnapshot(snap) });
+    }
+    pendingDeleteType = null; pendingDeleteTransferId = null;
+    return;
+  }
+
   const e = state.expenses.find(x=>x.id===pendingDeleteExpenseId);
   if(e){
     if(tipo==='cuota'){
@@ -4674,6 +4803,105 @@ document.getElementById('btnDeleteIngreso').onclick = ()=>{
     closeSheet('sheetIngreso');
     openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
   }
+};
+
+/* ==================== TANDA C4 · FORMULARIO DE TRANSFERENCIA ====================
+   Crear / editar / eliminar una transferencia entre cuentas. Se abre desde el ítem
+   "Transferir entre cuentas" del selector de cuenta (sólo con ≥2 cuentas vivas) y desde
+   cada fila de transferencia del Historial "Todo". Guarda en state.transfers con la
+   forma que valida migrarEstadoCuentas(): { id, origen, destino, monto, fecha, nombre }.
+   No toca expenses ni incomes. */
+let editingTransferId = null;
+let pendingDeleteTransferId = null;
+// Puebla #tOrigen y #tDestino con las cuentas vivas. Al editar, si una cuenta guardada
+// quedó archivada/huérfana se agrega como opción para no moverla en silencio al guardar.
+function poblarSelectTransferCuenta(actualOrigen, actualDestino){
+  const vivas = cuentasVivas();
+  const arma = (selId, objetivo)=>{
+    const sel = document.getElementById(selId);
+    if(!sel) return;
+    const opts = vivas.slice();
+    if(objetivo && !vivas.some(a=> a.id === objetivo)){
+      const arch = cuentaById(objetivo);
+      opts.push(arch ? { id: arch.id, nombre: arch.nombre + ' (archivada)' } : { id: objetivo, nombre: 'Cuenta anterior' });
+    }
+    sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${a.nombre}</option>`).join('');
+    if(objetivo) sel.value = objetivo;
+  };
+  arma('tOrigen', actualOrigen);
+  arma('tDestino', actualDestino);
+}
+function openTransferForm(transferId){
+  if(!transferId && isReadOnly()){ blockReadOnly(); return; }
+  editingTransferId = transferId || null;
+  const vivas = cuentasVivas();
+  document.getElementById('tFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('tMonto').value = '';
+  document.getElementById('tNombre').value = '';
+  document.getElementById('btnDeleteTransfer').style.display = 'none';
+  document.getElementById('transferirTitle').textContent = 'Transferir entre cuentas';
+
+  // Defaults al crear: origen = cuenta activa (o la primera viva), destino = la primera
+  // viva distinta del origen.
+  const activa = ctaVista();
+  let defOrigen = (activa !== 'total' && vivas.some(a=> a.id === activa)) ? activa : (vivas[0] ? vivas[0].id : '');
+  let defDestino = (vivas.find(a=> a.id !== defOrigen) || {}).id || '';
+
+  if(transferId){
+    const t = (state.transfers || []).find(x=> x.id === transferId);
+    if(!t){ editingTransferId = null; return; }
+    document.getElementById('transferirTitle').textContent = 'Editar transferencia';
+    document.getElementById('tFecha').value = t.fecha;
+    setMonto('tMonto', t.monto);
+    document.getElementById('tNombre').value = t.nombre || '';
+    defOrigen = t.origen; defDestino = t.destino;
+    document.getElementById('btnDeleteTransfer').style.display = 'block';
+  }
+  poblarSelectTransferCuenta(defOrigen, defDestino);
+  applyReadOnlyLock('sheetTransferir');
+  openSheet('sheetTransferir');
+}
+document.getElementById('btnSaveTransfer').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const fecha = document.getElementById('tFecha').value || new Date().toISOString().slice(0,10);
+  const origen = document.getElementById('tOrigen').value;
+  const destino = document.getElementById('tDestino').value;
+  const monto = parseMonto('tMonto');
+  const nombre = document.getElementById('tNombre').value.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){ showToast('Elige una fecha.', 'error'); fieldError(document.getElementById('tFecha')); return; }
+  if(!origen || !cuentaById(origen)){ showToast('Elige la cuenta de origen.', 'error'); fieldError(document.getElementById('tOrigen')); return; }
+  if(!destino || !cuentaById(destino)){ showToast('Elige la cuenta de destino.', 'error'); fieldError(document.getElementById('tDestino')); return; }
+  if(origen === destino){ showToast('La cuenta de origen y la de destino deben ser distintas.', 'error'); fieldError(document.getElementById('tDestino')); return; }
+  if(!monto || monto <= 0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('tMonto')); return; }
+
+  let nuevoId = null;
+  if(editingTransferId){
+    const t = (state.transfers || []).find(x=> x.id === editingTransferId);
+    if(t){ t.fecha = fecha; t.origen = origen; t.destino = destino; t.monto = monto; t.nombre = nombre; }
+  } else {
+    if(!Array.isArray(state.transfers)) state.transfers = [];
+    const tr = { id: uid(), origen, destino, monto, fecha, nombre };
+    state.transfers.push(tr);
+    nuevoId = 'transfer-' + tr.id;
+  }
+  haptic(HAPTIC_OK);
+  saveState();
+  if(nuevoId) lastCreatedMovementId = nuevoId;
+  flashSaveButton(document.getElementById('btnSaveTransfer'), ()=>{ closeSheet('sheetTransferir'); renderAll(); });
+};
+document.getElementById('btnDeleteTransfer').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const t = (state.transfers || []).find(x=> x.id === editingTransferId);
+  if(!t) return;
+  pendingDeleteTransferId = editingTransferId;
+  pendingDeleteType = 'transfer';
+  document.getElementById('confirmDeleteTitle').textContent =
+    fraseQueSeBorra(t.nombre || `Transferencia ${cuentaNombre(t.origen)} → ${cuentaNombre(t.destino)}`, t.monto, t.fecha);
+  document.getElementById('confirmDeleteText').textContent = 'Se quita de las dos cuentas: el saldo de cada una vuelve a como estaba antes de la transferencia.';
+  document.getElementById('confirmDeleteText').style.display = '';
+  document.getElementById('btnConfirmDeleteDebt').textContent = 'Eliminar';
+  closeSheet('sheetTransferir');
+  openSheet('sheetConfirmDebt', 'btnCancelConfirmDelete');
 };
 
 /* ==================== CONFIRMAR FECHA DE UN FIJO CON RANGO ====================
@@ -5626,9 +5854,12 @@ function resumenTotalesDelMes(refDate, cuentaId){
   const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
   const cuotasPendientes = cuotasPendientesDelMes(refDate, cuentaId);
   const cerrado = esMesCerrado(refDate);
-  const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
+  // Tanda C4: transferencias netas del mes. $0 en 'total' (netean); ± en una cuenta.
+  // Entra a las dos versiones del Disponible SIN tocar ingresos/gastos/cuotas/metas.
+  const transferenciasNetas = transferenciasNetasDelMes(refDate, cuentaId);
+  const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas + transferenciasNetas;
   const dispLibre = dispConPendientes + (cerrado ? 0 : cuotasPendientes);
-  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, cuotasPendientes, cerrado, dispConPendientes, dispLibre };
+  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, cuotasPendientes, cerrado, transferenciasNetas, dispConPendientes, dispLibre };
 }
 
 /* ==================== TANDA R · DESGLOSE AUDITABLE DEL DISPONIBLE (pto 1) ====================
@@ -5654,7 +5885,12 @@ function desgloseDisponible(refDate, incluirCeros, cuentaId){
     { clave:'ingresos',      label:'ingresos',       signo:+1, monto: T.ingresos },
     { clave:'gastoContado',  label:'contado',        signo:-1, monto: T.gastos },
     { ...cuotasTermino, signo:-1 },
-    { clave:'metas',         label:'metas',          signo:-1, monto: T.aportesMetas }
+    { clave:'metas',         label:'metas',          signo:-1, monto: T.aportesMetas },
+    // Tanda C4: término nuevo. $0 en vista 'total' (las transferencias netean); distinto
+    // de $0 sólo en una cuenta. El chequeo `cuadra` lo incluye por venir de este mismo
+    // `raw` — dispLibre ya lo trae vía resumenTotalesDelMes(), así que Σ(términos) sigue
+    // igualando el Disponible.
+    { clave:'transferencias', label:'transferencias netas', signo:+1, monto: T.transferenciasNetas }
   ];
   const terminos = incluirCeros ? raw : raw.filter(t=> Math.round(t.monto) !== 0);
   const suma = terminos.reduce((s,t)=> s + t.signo * t.monto, 0);
@@ -6103,7 +6339,12 @@ function insightsMesData(refDate, cuentaId){
   });
   const aportesMetas = totalAportesMetasDelMes(refDate, cuentaId);
   const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
-  const disponible = saldoAnterior + ingresos - gastos - cuotas - aportesMetas;
+  // Tanda C4: transferencias netas del mes ($0 en 'total'). Se incluye para que el
+  // "Disponible" que compara Insights coincida con la cifra grande del Resumen en la
+  // vista por cuenta — si no, una transferencia haría divergir dos números de la misma
+  // pantalla.
+  const transferenciasNetas = transferenciasNetasDelMes(refDate, cuentaId);
+  const disponible = saldoAnterior + ingresos - gastos - cuotas - aportesMetas + transferenciasNetas;
   // Tanda R · pto 6 + Tanda R3: mismo criterio que la cifra grande del Resumen. En el mes
   // en curso / futuros reincorpora las cuotas del mes aún sin confirmar; en meses CERRADOS
   // NO (ya cuentan como gasto del mes). La comparación mes a mes usa este valor: el mes
@@ -6113,7 +6354,7 @@ function insightsMesData(refDate, cuentaId){
   normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
   Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
   const gastoTotal = Object.values(catTotals).reduce((s,v)=> s + v, 0);
-  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, disponible, disponibleLibre, catTotals, gastoTotal };
+  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, transferenciasNetas, disponible, disponibleLibre, catTotals, gastoTotal };
 }
 // ¿El mes tiene algún movimiento propio? (define si se puede comparar contra él).
 // Tanda C2: `cuentaId` opcional al final. Sin él (o 'total') es idéntico a hoy. Con un id
@@ -6125,6 +6366,7 @@ function mesTieneMovimientos(refDate, cuentaId){
   if(getIncomesForMonth(refDate, cuentaId).length) return true;
   if(state.debts.some(d=> itemEnVista(d, cta) && cuotaInfoForMonth(d, refDate))) return true;   // Tanda L2
   if(totalAportesMetasDelMes(refDate, cuentaId) > 0) return true;
+  if(transferenciasDelMesParaVista(refDate, cuentaId).some(t=> t.impacto !== 0)) return true;   // Tanda C4
   return false;
 }
 // Tanda R4 · pto 4: guardarraíl de la proyección. Cuando el mes visto no tiene NINGÚN
@@ -6226,7 +6468,8 @@ function proyeccionFinDeMes(refDate, cuentaId){
     if(ingresoEstimado) ingresosProy = ingresoEstimado.estimado;
   }
   // Ingresos y aportes a metas ya vienen proyectados al mes completo (fijos + automáticos).
-  const dispProyectado = data.saldoAnterior + ingresosProy - proyGastos - data.aportesMetas;
+  // Tanda C4: + transferencias netas del mes ($0 en 'total'), igual que la cifra grande.
+  const dispProyectado = data.saldoAnterior + ingresosProy - proyGastos - data.aportesMetas + data.transferenciasNetas;
 
   return {
     diasTranscurridos, diasRestantes, diasEnMes,
@@ -6662,6 +6905,18 @@ function cuotasVirtualesDelHistorial(){
   const out = [];
   mesesDelRango(desde, hasta).forEach(d=>{
     cuotasVirtualesHistorial(d, cta).forEach(c=>{ if(c.date >= desde && c.date <= hasta) out.push(c); });
+  });
+  return out;
+}
+// Tanda C4: transferencias del Historial (sólo la pestaña "Todo" las lista). Mismo patrón
+// que las otras tres: respeta el selector de cuenta y el rango de fechas.
+function transferenciasDelHistorial(){
+  const cta = ctaVista();
+  if(!hRango) return transferenciasDelMesParaVista(currentDate, cta);
+  const { desde, hasta } = hRango;
+  const out = [];
+  mesesDelRango(desde, hasta).forEach(d=>{
+    transferenciasDelMesParaVista(d, cta).forEach(t=>{ if(t.date >= desde && t.date <= hasta) out.push(t); });
   });
   return out;
 }
@@ -7205,21 +7460,35 @@ function renderHistorialTodo(box){
     if(!histPasaKind(c)) return false;
     return true;
   });
+  // Tanda C4: transferencias entre cuentas — filas propias, un tipo nuevo (ni gasto ni
+  // ingreso). `impacto` ya viene resuelto para la vista: ± en una cuenta, 0 en Total.
+  // No tienen categoría (fuera con filtro de categoría) ni son cuota/crédito/contado
+  // (fuera con cualquier filtro de tipo), igual que hoy quedan fuera los ingresos.
+  const transfers = transferenciasDelHistorial().map(t=>({
+    kind:'transfer', id:t.id, transferId:t.transferId, date:t.date,
+    amount:t.monto, impacto:t.impacto, origen:t.origen, destino:t.destino,
+    name:t.nombre || ''
+  })).filter(t=>{
+    if(!histMatchTexto(t.name + ' ' + cuentaNombre(t.origen) + ' ' + cuentaNombre(t.destino))) return false;
+    if(hFilterCats.size > 0) return false;
+    if(hKindFilter !== 'all') return false;
+    return true;
+  });
 
-  updateHistCount(gastos.length + ingresos.length + cuotasV.length);
+  updateHistCount(gastos.length + ingresos.length + cuotasV.length + transfers.length);
 
   let items, agrupaPorDia;
   if(campo === 'fecha'){
     // Mismo orden canónico (asc) que usa el saldo acumulado; para "recientes primero"
     // se invierte tal cual, así el "Saldo" de cada fila calza leyendo de arriba abajo.
-    const asc = [...ingresos, ...gastos, ...cuotasV].sort((a,b)=>
+    const asc = [...ingresos, ...gastos, ...cuotasV, ...transfers].sort((a,b)=>
       a.date.localeCompare(b.date)
       || (CRONO_RANK(a.kind) - CRONO_RANK(b.kind))
     );
     items = dir === 'asc' ? asc : asc.reverse();
     agrupaPorDia = true;
   } else {
-    items = applySort([...gastos, ...ingresos, ...cuotasV], 'name', 'amount', 'date');
+    items = applySort([...gastos, ...ingresos, ...cuotasV, ...transfers], 'name', 'amount', 'date');
     agrupaPorDia = false;
   }
   if(items.length===0){
@@ -7243,6 +7512,32 @@ function renderHistorialTodo(box){
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount income">+${money(it.amount)}</span>
+          ${saldoTxt}
+        </div>
+        <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
+      </div>`;
+    }
+    if(it.kind==='transfer'){
+      // Tanda C4: fila de transferencia. En una cuenta concreta el signo pesa en el saldo
+      // (+ destino / − origen); en vista Total impacta $0 y se muestra en tono neutro
+      // (igual que la fila de origen de una compra a crédito), con una nota que lo aclara.
+      const tIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+      const ruta = `${cuentaNombre(it.origen)} → ${cuentaNombre(it.destino)}`;
+      let amtHtml, nota = '';
+      if(it.impacto > 0)      amtHtml = `<span class="li-amount income">+${money(it.amount)}</span>`;
+      else if(it.impacto < 0) amtHtml = `<span class="li-amount li-amount-gasto">−${money(it.amount)}</span>`;
+      else { amtHtml = `<span class="li-amount li-amount-cuota-origen">${money(it.amount)}</span>`;
+             nota = `<p class="li-cuota-note">Sin impacto en el total: sólo mueve saldo entre cuentas.</p>`; }
+      return `
+      <div class="list-item${expCls}" data-edittransfer="${it.transferId}">
+        <div class="li-icon">${tIcon}</div>
+        <div class="li-body">
+          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Transferencia</span>'}</span><span class="li-badge">Transferencia</span></p>
+          <p class="li-sub">${fmtDate(it.date)} · ${ruta}</p>
+          ${nota}
+        </div>
+        <div class="li-amount-wrap">
+          ${amtHtml}
           ${saldoTxt}
         </div>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -7309,6 +7604,9 @@ function renderHistorialTodo(box){
   });
   box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
     el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
+  });
+  box.querySelectorAll('[data-edittransfer]').forEach(el=>{   // Tanda C4
+    el.addEventListener('click', ()=> openTransferForm(el.dataset.edittransfer));
   });
   wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
 }
@@ -7935,8 +8233,42 @@ function iniciarRenombreCuenta(id, box){
   });
 }
 
-/* ---- Borrar una cuenta: si tiene movimientos, pide reasignarlos a otra ---- */
+/* ---- Borrar una cuenta: si tiene movimientos, pide reasignarlos a otra ----
+   Tanda C4 · ajuste: si además (o sólo) tiene transferencias asociadas (como origen o
+   destino), el sheet ofrece una elección EXPLÍCITA — "Reapuntar" esas transferencias a
+   una cuenta viva que el usuario elige, o "Eliminar" esos registros por completo. Ya no
+   se reapunta en silencio a "la primera cuenta restante". Sin transferencias asociadas,
+   el flujo es idéntico al de antes de C4. */
 let borrarCuentaCtx = null;   // { id }
+// Nº de transferencias que involucran a la cuenta `id` (como origen o destino).
+function contarTransfersCuenta(id){
+  return (state.transfers || []).filter(t=> t && (t.origen === id || t.destino === id)).length;
+}
+// Muestra/oculta el selector de destino de transferencias según el modo activo
+// (reapuntar → visible; eliminar → oculto) y actualiza la nota explicativa.
+function syncCtaBorrarTransfer(){
+  const modoEl = document.querySelector('#ctaBorrarTransferModo [data-tdel].active');
+  const modo = modoEl ? modoEl.dataset.tdel : 'reapuntar';
+  const sel = document.getElementById('ctaBorrarTransferDestino');
+  const nota = document.getElementById('ctaBorrarTransferNota');
+  const nombre = (borrarCuentaCtx && cuentaById(borrarCuentaCtx.id)) ? cuentaById(borrarCuentaCtx.id).nombre : 'esta cuenta';
+  if(modo === 'eliminar'){
+    sel.style.display = 'none';
+    nota.textContent = `Se eliminarán por completo las transferencias que involucran a «${nombre}». La otra cuenta de cada una no se toca; su saldo se recalcula sin ellas.`;
+  } else {
+    sel.style.display = '';
+    nota.textContent = `El lado que apunta a «${nombre}» pasará a la cuenta que elijas. El monto y la fecha no cambian.`;
+  }
+}
+(function initCtaBorrarTransferModo(){
+  document.querySelectorAll('#ctaBorrarTransferModo [data-tdel]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      document.querySelectorAll('#ctaBorrarTransferModo [data-tdel]').forEach(x=> x.classList.remove('active'));
+      el.classList.add('active');
+      syncCtaBorrarTransfer();
+    });
+  });
+})();
 function abrirBorrarCuenta(id){
   const a = cuentaById(id);
   if(!a) return;
@@ -7953,29 +8285,56 @@ function abrirBorrarCuenta(id){
   const nCM  = (state.debts || []).filter(d=> d && d.cuentaId === id).length
              + (state.goals || []).filter(g=> g && g.cuentaId === id).length;
   const n = nMov + nCM;
+  const nT = contarTransfersCuenta(id);
   const destinos = todas.filter(x=> x.id !== id);
   document.getElementById('ctaBorrarTitle').textContent = `Eliminar «${a.nombre}»`;
   const field = document.getElementById('ctaBorrarReasignField');
+  const tField = document.getElementById('ctaBorrarTransferField');
   const body = document.getElementById('ctaBorrarBody');
   const confirm = document.getElementById('ctaBorrarConfirm');
+
+  // Bloque de movimientos (gastos/ingresos/cuotas/metas) — igual que siempre.
   if(n === 0){
-    body.textContent = `«${a.nombre}» no tiene movimientos ni cuotas o metas. Se eliminará de la lista de cuentas.`;
     field.hidden = true;
-    confirm.textContent = 'Eliminar cuenta';
   } else {
-    const partes = [];
-    if(nMov) partes.push(nMov === 1 ? '1 gasto o ingreso' : `${nMov} gastos e ingresos`);
-    if(nCM)  partes.push(nCM === 1 ? '1 cuota o meta' : `${nCM} cuotas y metas`);
-    body.textContent = `${partes.join(' y ')} pertenecen a «${a.nombre}». Elige a dónde moverlos antes de eliminarla.`;
     const sel = document.getElementById('ctaBorrarDestino');
     let opts = destinos.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
     // Tanda L3: "Compartida" sólo aplica a cuotas/metas; se ofrece si la cuenta tiene alguna.
     if(nCM) opts += `<option value="compartida">Compartida (solo las cuotas y metas)</option>`;
     sel.innerHTML = opts;
     field.hidden = false;
-    confirm.textContent = 'Mover y eliminar';
   }
-  openSheet('sheetCuentaBorrar', n === 0 ? undefined : 'ctaBorrarDestino');
+
+  // Bloque de transferencias (Tanda C4 · ajuste) — sólo si hay alguna asociada.
+  if(nT === 0){
+    tField.hidden = true;
+  } else {
+    const tSel = document.getElementById('ctaBorrarTransferDestino');
+    // Sólo cuentas VIVAS restantes como destino del reapuntado (siempre hay ≥1).
+    const vivasRest = cuentasVivas().filter(x=> x.id !== id);
+    tSel.innerHTML = `<option value="" disabled selected>Elige una cuenta…</option>`
+      + vivasRest.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}</option>`).join('');
+    // Reset a "Reapuntar" cada vez que se abre (no arrastra la elección anterior).
+    document.querySelectorAll('#ctaBorrarTransferModo [data-tdel]').forEach(x=> x.classList.toggle('active', x.dataset.tdel === 'reapuntar'));
+    tField.hidden = false;
+    syncCtaBorrarTransfer();
+  }
+
+  // Texto del cuerpo + etiqueta del botón según lo que haya que resolver.
+  const partes = [];
+  if(nMov) partes.push(nMov === 1 ? '1 gasto o ingreso' : `${nMov} gastos e ingresos`);
+  if(nCM)  partes.push(nCM === 1 ? '1 cuota o meta' : `${nCM} cuotas y metas`);
+  if(nT)   partes.push(nT === 1 ? '1 transferencia' : `${nT} transferencias`);
+  if(partes.length === 0){
+    body.textContent = `«${a.nombre}» no tiene movimientos, cuotas, metas ni transferencias. Se eliminará de la lista de cuentas.`;
+    confirm.textContent = 'Eliminar cuenta';
+  } else {
+    const listado = partes.length <= 1 ? (partes[0] || '')
+      : partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
+    body.textContent = `«${a.nombre}» tiene ${listado}. Elige qué hacer con ${partes.length === 1 ? 'eso' : 'cada cosa'} antes de eliminarla.`;
+    confirm.textContent = n > 0 ? 'Mover y eliminar' : 'Eliminar cuenta';
+  }
+  openSheet('sheetCuentaBorrar', n > 0 ? 'ctaBorrarDestino' : undefined);
 }
 document.getElementById('ctaBorrarConfirm').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
@@ -7984,12 +8343,29 @@ document.getElementById('ctaBorrarConfirm').onclick = ()=>{
   const a = cuentaById(id);
   if(!a){ closeSheet('sheetCuentaBorrar'); borrarCuentaCtx = null; renderConfig(); return; }
   const n = contarUsoCuenta(id);
-  let dest = null, msg;
+  const nT = contarTransfersCuenta(id);
+
+  // 1) Validaciones (antes de mutar nada): destino de movimientos y modo/destino de
+  //    transferencias.
+  let dest = null, aCompartida = false;
   if(n > 0){
     dest = document.getElementById('ctaBorrarDestino').value;
-    const aCompartida = dest === 'compartida';
+    aCompartida = dest === 'compartida';
     if(!aCompartida && (!dest || !cuentaById(dest) || dest === id)){ showToast('Elige una cuenta de destino.', 'error'); return; }
-    // Cuotas y metas: al destino elegido, o 'compartida'.
+  }
+  let tModo = null, tDest = null;
+  if(nT > 0){
+    const modoEl = document.querySelector('#ctaBorrarTransferModo [data-tdel].active');
+    tModo = modoEl ? modoEl.dataset.tdel : 'reapuntar';
+    if(tModo === 'reapuntar'){
+      tDest = document.getElementById('ctaBorrarTransferDestino').value;
+      if(!tDest || !cuentaById(tDest) || tDest === id){ showToast('Elige a qué cuenta reapuntar las transferencias.', 'error'); fieldError(document.getElementById('ctaBorrarTransferDestino')); return; }
+    }
+  }
+
+  // 2) Movimientos, cuotas y metas — igual que siempre.
+  let msg;
+  if(n > 0){
     const destCM = aCompartida ? 'compartida' : dest;
     (state.debts || []).forEach(d=>{ if(d && d.cuentaId === id) d.cuentaId = destCM; });
     (state.goals || []).forEach(g=>{ if(g && g.cuentaId === id) g.cuentaId = destCM; });
@@ -8010,6 +8386,23 @@ document.getElementById('ctaBorrarConfirm').onclick = ()=>{
   } else {
     msg = `«${a.nombre}» eliminada.`;
   }
+
+  // 3) Transferencias (Tanda C4 · ajuste): reapuntar a la cuenta elegida, o eliminar los
+  //    registros por completo. Sin default automático.
+  if(nT > 0){
+    if(tModo === 'eliminar'){
+      state.transfers = (state.transfers || []).filter(t=> t && t.origen !== id && t.destino !== id);
+    } else {
+      (state.transfers || []).forEach(t=>{
+        if(!t) return;
+        if(t.origen === id) t.origen = tDest;
+        if(t.destino === id) t.destino = tDest;
+      });
+      // Defensivo: si alguna quedara de una cuenta a sí misma, se descarta.
+      state.transfers = (state.transfers || []).filter(t=> t && t.origen !== t.destino);
+    }
+  }
+
   state.accounts = (state.accounts || []).filter(x=> x.id !== id);
   renumerarCuentas();
   if(state.config && state.config.cuentaActiva === id) state.config.cuentaActiva = (n > 0 && dest && cuentaById(dest)) ? dest : 'total';
@@ -8310,6 +8703,14 @@ function validAccountShape(a){
   return a && typeof a === 'object' && !Array.isArray(a)
     && optStr(a.id) && optStr(a.nombre) && optNum(a.orden) && optBool(a.archivada);
 }
+// Tanda C4: forma de una transferencia. Laxa igual que las cuentas — sólo rechaza lo
+// genuinamente corrupto; migrarEstadoCuentas() descarta después lo semánticamente
+// inválido (cuentas huérfanas, origen === destino, monto ≤ 0).
+function validTransferShape(t){
+  return t && typeof t === 'object' && !Array.isArray(t)
+    && optStr(t.id) && optStr(t.origen) && optStr(t.destino)
+    && optStr(t.nombre) && optStr(t.fecha) && optNum(t.monto);
+}
 function validDebtShape(d){
   return d && typeof d === 'object' && !Array.isArray(d)
     && isIsoDate(d.purchaseDate) && isNum(d.totalAmount) && isNum(d.numCuotas) // requeridos
@@ -8355,7 +8756,7 @@ function validateBackupShape(parsed){
       || checkArr(parsed.debts,    validDebtShape,    'Alguna deuda o cuota del respaldo tiene datos inválidos.')
       || checkArr(parsed.goals,    validGoalShape,    'Alguna meta del respaldo tiene datos inválidos.')
       || checkArr(parsed.accounts,  validAccountShape, 'Alguna cuenta del respaldo tiene datos inválidos.')  // Tanda C1 — ausente = OK
-      || checkArr(parsed.transfers, ()=>true,          'La lista de transferencias del respaldo tiene un formato inválido.')  // Tanda C1 — ausente = OK
+      || checkArr(parsed.transfers, validTransferShape, 'La lista de transferencias del respaldo tiene un formato inválido.')  // Tanda C1/C4 — ausente = OK
       || ((parsed.config === undefined && parsed.expenses === undefined && parsed.incomes === undefined
            && parsed.debts === undefined && parsed.goals === undefined)
             ? 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.' : null);
@@ -9300,16 +9701,21 @@ function syncHistDetalleBtn(){
 /* ==================== TANDA R2 · pto 4 · HOJA "¿DE DÓNDE SALE?" ====================
    Auditoría de la cifra grande del Resumen. Reemplaza al desglose en línea. Muestra los
    CINCO términos SIEMPRE (incluidos los $0), en ORDEN FIJO idéntico todos los meses, y
-   el total tras una línea divisoria. Los términos y la suma salen de desgloseDisponible()
+   el total tras una línea divisoria. Tanda C4: un SEXTO término, "Transferencias netas",
+   aparece sólo en una cuenta con transferencias ese mes (en vista Total netea a $0 y no
+   se dibuja). Los términos y la suma salen de desgloseDisponible()
    con incluirCeros=true: aquí NO se calcula nada nuevo. Tras R3, en un mes cerrado el
    término de cuotas es "Cuotas del mes" (todas); en el mes en curso / futuros es "Cuotas
    pagadas" (solo las confirmadas). Si la suma no cuadra con el Disponible, se muestra el
    descuadre en rojo, sin maquillar. */
 const DD_LABELS = {
   ingresos:'Ingresos', saldoAnterior:'Saldo mes anterior', gastoContado:'Contado',
-  cuotasPagadas:'Cuotas pagadas', cuotasMes:'Cuotas del mes', metas:'Aportes a metas'
+  cuotasPagadas:'Cuotas pagadas', cuotasMes:'Cuotas del mes', metas:'Aportes a metas',
+  transferencias:'Transferencias netas'
 };
-const DD_ORDEN = ['ingresos', 'saldoAnterior', 'gastoContado', 'cuotas', 'metas'];
+// Tanda C4: 'transferencias' al final. Sólo se dibuja cuando ≠ $0 — en vista Total (y en
+// meses sin transferencias) no aparece, así el desglose de siempre no cambia.
+const DD_ORDEN = ['ingresos', 'saldoAnterior', 'gastoContado', 'cuotas', 'metas', 'transferencias'];
 function openDondeDisponible(){
   const refDate = currentDate;
   const cta = ctaVista();   // Tanda C3: audita el Disponible de la cuenta activa
@@ -9318,8 +9724,11 @@ function openDondeDisponible(){
   const inicioMk = mesInicioRegistroMk();
   const esPreRegistro = inicioMk !== null && monthKey(refDate) < inicioMk;
 
+  // Tanda C4: en una cuenta con transferencias del mes son SEIS términos; si no, cinco.
+  const hayTransfer = dsg.terminos.some(t=> t.clave === 'transferencias' && Math.round(t.monto) !== 0);
   document.getElementById('ddSubtitulo').textContent =
-    MESES[refDate.getMonth()] + ' ' + refDate.getFullYear() + ' · los cinco términos que suman tu Disponible.';
+    MESES[refDate.getMonth()] + ' ' + refDate.getFullYear()
+    + ` · los ${hayTransfer ? 'seis' : 'cinco'} términos que suman tu Disponible.`;
 
   // Reagrupa por clave estable (la de cuotas puede venir como cuotasPagadas o cuotasMes).
   const porGrupo = {};
@@ -9331,6 +9740,8 @@ function openDondeDisponible(){
   const filas = DD_ORDEN.map(g=>{
     const t = porGrupo[g];
     if(!t) return '';
+    // Tanda C4: la fila de transferencias sólo cuando ≠ $0 (vista Total no la muestra).
+    if(t.clave === 'transferencias' && Math.round(t.monto) === 0) return '';
     const signo = t.signo > 0 ? (t.monto < 0 ? '−' : '+') : '−';
     return `<div class="dd-row">`
       + `<span class="dd-k">${DD_LABELS[t.clave] || t.label}</span>`
@@ -9352,7 +9763,7 @@ function openDondeDisponible(){
   if(dsg.cuadra){
     descEl.style.display = 'none';
   } else {
-    descEl.textContent = `⚠ Los cinco términos suman ${money(dsg.suma)}, que no coincide con el Disponible (${money(dsg.disponible)}). Reporta este error.`;
+    descEl.textContent = `⚠ El desglose suma ${money(dsg.suma)}, que no coincide con el Disponible (${money(dsg.disponible)}). Reporta este error.`;
     descEl.style.display = '';
   }
 
@@ -9653,7 +10064,8 @@ aplicarFontScale((state.config && state.config.fontScale) || '1');
 /* ==================== TANDA C3 · RENDER DEL SELECTOR DE CUENTA ====================
    Botón (etiqueta = cuenta activa) + menú desplegable con "Total" y cada cuenta no
    archivada. Al final, si hay ≥2 cuentas vivas, el ítem "Transferir entre cuentas"
-   (placeholder hasta C4). renderAll() lo muestra sólo en Resumen e Historial. */
+   (Tanda C4: abre el formulario de transferencia). renderAll() lo muestra sólo en
+   Resumen e Historial. */
 let accountMenuOpen = false;
 function closeAccountMenu(){
   accountMenuOpen = false;
@@ -9691,13 +10103,13 @@ function renderAccountSelector(){
     html += `<div class="account-menu-sep"></div>`
       + `<button type="button" class="account-menu-item account-menu-transfer" data-acc="__transfer" role="menuitem">`
       + `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>`
-      + `<span class="am-name">Transferir entre cuentas</span><span class="am-soon">Próximamente</span></button>`;
+      + `<span class="am-name">Transferir entre cuentas</span></button>`;
   }
   menu.innerHTML = html;
   menu.querySelectorAll('[data-acc]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const v = el.dataset.acc;
-      if(v === '__transfer'){ closeAccountMenu(); openSheet('sheetTransferir'); return; }
+      if(v === '__transfer'){ closeAccountMenu(); openTransferForm(null); return; }
       if(!state.config) state.config = {};
       state.config.cuentaActiva = v;
       saveState();
