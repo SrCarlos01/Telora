@@ -506,6 +506,20 @@ button{font-family:inherit;}
   font-size:11.5px; color:var(--gold-dim); margin:2px 0 0; display:flex; align-items:center; gap:5px;
 }
 .debt-manual-note .icon{width:13px; height:13px;}
+/* Tanda J: fila de total al pie de la lista de Cuotas (Activas / Pagadas). Contenedor
+   como .debt-card; tipografía de la clave/valor tomada de .dd-row.dd-total del Resumen. */
+.cuotas-total{
+  display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+  padding:13px 16px; margin-top:4px;
+}
+.cuotas-total-k{
+  font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--cream);
+}
+.cuotas-total-v{
+  font-size:17px; font-weight:700; color:var(--gold); white-space:nowrap; font-variant-numeric:tabular-nums;
+}
+:root.hc .cuotas-total{border-width:2px;}
 
 /* ---------- METAS (reutiliza .debt-card) ---------- */
 .goal-card{animation:fadeIn .3s ease; cursor:pointer;}
@@ -915,6 +929,34 @@ button{font-family:inherit;}
   font-size:16px;   /* evita el auto-zoom de iOS al enfocar */
 }
 .check-row small{color:var(--cream-dim); font-size:12.5px;}
+
+/* TANDA K — Calendario propio para "Hasta el día" de un fijo con rango.
+   Cuadrícula de los días del mes de la fecha "Desde" (sin navegación de mes).
+   Punto de partida no tocable, días previos deshabilitados y resaltado del
+   rango 1..N al elegir "Hasta". */
+.hasta-cal{
+  display:grid; grid-template-columns:repeat(7, 1fr); gap:4px;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:8px;
+}
+.hasta-cal .hc-dow{
+  text-align:center; font-size:10.5px; font-weight:600; letter-spacing:0.04em;
+  color:var(--gold-dim); text-transform:uppercase; padding-bottom:2px;
+}
+.hasta-cal .hc-day{
+  appearance:none; -webkit-appearance:none; border:1px solid transparent;
+  background:var(--surface-3); color:var(--cream); font-family:inherit; font-size:14px;
+  font-weight:500; border-radius:8px; min-height:40px; min-width:0; padding:0;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.hasta-cal .hc-day.is-empty{background:transparent; border-color:transparent; cursor:default;}
+.hasta-cal .hc-day.is-disabled{color:var(--cream-dim); opacity:0.35; background:transparent; cursor:not-allowed;}
+.hasta-cal .hc-day.is-inicio{background:var(--gold-dim); border-color:var(--gold); color:var(--bg); font-weight:700; cursor:default;}
+.hasta-cal .hc-day.in-rango{background:rgba(201,166,107,0.18); border-color:var(--gold-dim); color:var(--cream);}
+.hasta-cal .hc-day.is-hasta{background:var(--gold); border-color:var(--gold); color:var(--bg); font-weight:700;}
+.hasta-cal .hc-day:not(:disabled):not(.is-inicio):active{transform:scale(0.92);}
+:root.hc .hasta-cal .hc-day{border-color:var(--border);}
+:root.hc .hasta-cal .hc-day.is-disabled{opacity:0.5;}
 
 /* aviso no bloqueante en el aporte manual */
 .aportar-warn{
@@ -1749,8 +1791,8 @@ button:active{ transform:scale(0.97); }
         <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
       </label>
       <div class="field" id="gRangoField" style="display:none; margin:8px 0 0;">
-        <label for="gDiaHasta">Hasta el día</label>
-        <input type="number" id="gDiaHasta" min="1" max="31" inputmode="numeric" placeholder="Ej: 30">
+        <label>Hasta el día</label>
+        <div class="hasta-cal" id="gHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
       </div>
     </div>
     <div class="cuota-fields" id="cuotaFields">
@@ -1800,8 +1842,8 @@ button:active{ transform:scale(0.97); }
         <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
       </label>
       <div class="field" id="iRangoField" style="display:none; margin:8px 0 0;">
-        <label for="iDiaHasta">Hasta el día</label>
-        <input type="number" id="iDiaHasta" min="1" max="31" inputmode="numeric" placeholder="Ej: 30">
+        <label>Hasta el día</label>
+        <div class="hasta-cal" id="iHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
       </div>
     </div>
     <button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button>
@@ -3933,6 +3975,76 @@ document.getElementById('btnExport').onclick = ()=>{
   openSheet('sheetExportar');
 };
 
+/* ==================== TANDA K · CALENDARIO PROPIO PARA "HASTA EL DÍA" ====================
+   Reemplaza el <input type=number> del rango de un fijo por una cuadrícula de los días
+   del mes de la fecha "Desde" (sin navegación de mes/año: es fija a ese mes). El día de
+   "Desde" es el punto de partida (no tocable), los días anteriores salen deshabilitados,
+   y al tocar un día válido se marca como "Hasta" y se resalta todo el rango intermedio.
+   El valor que se guarda sigue siendo diaHasta (entero 1-31): sólo cambió cómo se elige.
+   Mes corto: se replica el criterio de applyFixedRangeMeta() — el "hasta" se recorta con
+   Math.min(sel, últimoDíaDelMes) y si eso no supera el día de inicio, no hay rango que
+   resaltar. El valor guardado no se toca salvo que el usuario elija otro día. */
+const HC_DOW = ['L','M','X','J','V','S','D'];   // etiquetas de columna, semana desde lunes
+let gHastaSel = null;   // día del mes (1-31) elegido como "Hasta" en el form de gasto
+let iHastaSel = null;   // idem, form de ingreso
+
+// Datos del mes de la fecha "Desde" (o del mes actual si el campo está vacío).
+function hcFechaInfo(inputId){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(document.getElementById(inputId).value || '');
+  const hoy = new Date();
+  const y  = m ? +m[1] : hoy.getFullYear();
+  const mo = m ? +m[2] - 1 : hoy.getMonth();
+  const lastDay = new Date(y, mo + 1, 0).getDate();
+  const startDay = Math.min(m ? +m[3] : hoy.getDate(), lastDay);
+  const firstWd = (new Date(y, mo, 1).getDay() + 6) % 7;   // 0 = lunes
+  return { lastDay, startDay, firstWd };
+}
+
+// Dibuja la cuadrícula. `sel` es el día 1-31 elegido (o null); se recorta al mes con
+// el mismo Math.min que el motor, y el resaltado sólo aparece si supera al día de inicio.
+function renderHastaCal(calId, fechaId, sel){
+  const cal = document.getElementById(calId);
+  if(!cal) return;
+  const { lastDay, startDay, firstWd } = hcFechaInfo(fechaId);
+  const hasta = Number.isInteger(sel) ? Math.min(sel, lastDay) : null;
+  const hayRango = hasta !== null && hasta > startDay;   // = criterio de applyFixedRangeMeta
+  let html = HC_DOW.map(d => `<div class="hc-dow">${d}</div>`).join('');
+  for(let i = 0; i < firstWd; i++) html += '<div class="hc-day is-empty" aria-hidden="true"></div>';
+  for(let d = 1; d <= lastDay; d++){
+    const cls = ['hc-day'];
+    let dis = false;
+    if(d === startDay){ cls.push('is-inicio'); dis = true; }
+    else if(d < startDay){ cls.push('is-disabled'); dis = true; }
+    else if(hayRango && d < hasta){ cls.push('in-rango'); }
+    if(hayRango && d === hasta) cls.push('is-hasta');
+    html += `<button type="button" class="${cls.join(' ')}"${dis ? ' disabled' : ''}`
+          + ` data-hc-day="${d}" role="gridcell"`
+          + ` aria-pressed="${hayRango && d === hasta ? 'true' : 'false'}">${d}</button>`;
+  }
+  cal.innerHTML = html;
+}
+document.getElementById('gHastaCal').addEventListener('click', e => {
+  const btn = e.target.closest('[data-hc-day]');
+  if(!btn || btn.disabled) return;
+  gHastaSel = parseInt(btn.dataset.hcDay, 10);
+  renderHastaCal('gHastaCal', 'gFecha', gHastaSel);
+});
+document.getElementById('iHastaCal').addEventListener('click', e => {
+  const btn = e.target.closest('[data-hc-day]');
+  if(!btn || btn.disabled) return;
+  iHastaSel = parseInt(btn.dataset.hcDay, 10);
+  renderHastaCal('iHastaCal', 'iFecha', iHastaSel);
+});
+// Si se cambia la fecha "Desde" con el calendario abierto, se reencuadra a ese mes.
+document.getElementById('gFecha').addEventListener('change', () => {
+  if(document.getElementById('gRangoField').style.display !== 'none')
+    renderHastaCal('gHastaCal', 'gFecha', gHastaSel);
+});
+document.getElementById('iFecha').addEventListener('change', () => {
+  if(document.getElementById('iRangoField').style.display !== 'none')
+    renderHastaCal('iHastaCal', 'iFecha', iHastaSel);
+});
+
 /* ==================== TOGGLES en formulario gasto ==================== */
 // Rango de días (solo visible con tipo "Fijo"): el checkbox muestra/oculta "Hasta el día".
 // Al salir de "Fijo" se apaga y se limpia para no guardar un rango en un gasto casual.
@@ -3942,8 +4054,10 @@ function syncGastoRango(){
   const wrap = document.getElementById('gRangoWrap');
   const chk = document.getElementById('gRangoChk');
   wrap.style.display = esFijo ? 'flex' : 'none';
-  if(!esFijo){ chk.checked = false; document.getElementById('gDiaHasta').value = ''; }
-  document.getElementById('gRangoField').style.display = (esFijo && chk.checked) ? 'block' : 'none';
+  if(!esFijo){ chk.checked = false; gHastaSel = null; }
+  const mostrar = esFijo && chk.checked;
+  document.getElementById('gRangoField').style.display = mostrar ? 'block' : 'none';
+  if(mostrar) renderHastaCal('gHastaCal', 'gFecha', gHastaSel);
 }
 document.querySelectorAll('#sheetGasto [data-tipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
@@ -3978,8 +4092,10 @@ function syncIngresoRango(){
   const wrap = document.getElementById('iRangoWrap');
   const chk = document.getElementById('iRangoChk');
   wrap.style.display = esFijo ? 'flex' : 'none';
-  if(!esFijo){ chk.checked = false; document.getElementById('iDiaHasta').value = ''; }
-  document.getElementById('iRangoField').style.display = (esFijo && chk.checked) ? 'block' : 'none';
+  if(!esFijo){ chk.checked = false; iHastaSel = null; }
+  const mostrar = esFijo && chk.checked;
+  document.getElementById('iRangoField').style.display = mostrar ? 'block' : 'none';
+  if(mostrar) renderHastaCal('iHastaCal', 'iFecha', iHastaSel);
 }
 document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(el=>{
   el.addEventListener('click', ()=>{
@@ -4119,7 +4235,7 @@ function openGastoForm(expenseId){
   document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo==='Casual'));
   document.getElementById('fijoNote').style.display = 'none';
   document.getElementById('gRangoChk').checked = false;
-  document.getElementById('gDiaHasta').value = '';
+  gHastaSel = null;   // Tanda K: calendario propio de "Hasta el día"
   document.getElementById('cuotaFields').classList.remove('open');
   document.getElementById('gNumCuotas').value = '';
   document.getElementById('gCuotaCompartida').checked = false;   // Tanda L3
@@ -4144,7 +4260,7 @@ function openGastoForm(expenseId){
     // Rango de días de un fijo (diaHasta): solo aplica a fijos sin cuota.
     if(e.tipo==='Fijo' && !e.debtId && Number.isInteger(e.diaHasta)){
       document.getElementById('gRangoChk').checked = true;
-      document.getElementById('gDiaHasta').value = e.diaHasta;
+      gHastaSel = e.diaHasta;   // Tanda K: el calendario abre con el rango ya resaltado
     }
     if(e.debtId){
       const debt = state.debts.find(d=>d.id===e.debtId);
@@ -4240,13 +4356,13 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   const rangoActivo = tipo === 'Fijo' && !esCredito && document.getElementById('gRangoChk').checked;
   let diaHasta = null;
   if(rangoActivo){
-    diaHasta = parseInt(document.getElementById('gDiaHasta').value, 10);
+    diaHasta = gHastaSel;   // Tanda K: día tocado en el calendario propio
     const diaBase = parseInt(fecha.split('-')[2], 10);
     if(!Number.isInteger(diaHasta) || diaHasta < 1 || diaHasta > 31){
-      showToast('El "hasta el día" debe ser un día del mes (1 a 31).', 'error'); fieldError(document.getElementById('gDiaHasta')); return;
+      showToast('Elige en el calendario hasta qué día llega el rango.', 'error'); fieldError(document.getElementById('gRangoField')); return;
     }
     if(diaHasta <= diaBase){
-      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('gDiaHasta')); return;
+      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('gRangoField')); return;
     }
   }
 
@@ -4457,7 +4573,7 @@ function openIngresoForm(incomeId){
   document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo==='Casual'));
   document.getElementById('iFijoNote').style.display = 'none';
   document.getElementById('iRangoChk').checked = false;
-  document.getElementById('iDiaHasta').value = '';
+  iHastaSel = null;   // Tanda K: calendario propio de "Hasta el día"
   document.getElementById('btnDeleteIngreso').style.display = 'none';
   document.getElementById('ingresoTitle').textContent = 'Nuevo ingreso';
   poblarSelectCuenta('iCuenta', 'iCuentaField', null);   // Tanda C3: default = cuenta activa / Principal
@@ -4475,7 +4591,7 @@ function openIngresoForm(incomeId){
     document.getElementById('iFijoNote').style.display = itipo==='Fijo' ? 'block' : 'none';
     if(itipo==='Fijo' && Number.isInteger(i.diaHasta)){
       document.getElementById('iRangoChk').checked = true;
-      document.getElementById('iDiaHasta').value = i.diaHasta;
+      iHastaSel = i.diaHasta;   // Tanda K: el calendario abre con el rango ya resaltado
     }
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
@@ -4505,13 +4621,13 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   const rangoActivo = itipo === 'Fijo' && document.getElementById('iRangoChk').checked;
   let diaHasta = null;
   if(rangoActivo){
-    diaHasta = parseInt(document.getElementById('iDiaHasta').value, 10);
+    diaHasta = iHastaSel;   // Tanda K: día tocado en el calendario propio
     const diaBase = parseInt(fecha.split('-')[2], 10);
     if(!Number.isInteger(diaHasta) || diaHasta < 1 || diaHasta > 31){
-      showToast('El "hasta el día" debe ser un día del mes (1 a 31).', 'error'); fieldError(document.getElementById('iDiaHasta')); return;
+      showToast('Elige en el calendario hasta qué día llega el rango.', 'error'); fieldError(document.getElementById('iRangoField')); return;
     }
     if(diaHasta <= diaBase){
-      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('iDiaHasta')); return;
+      showToast(`El "hasta el día" debe ser mayor al día de la fecha (${diaBase}).`, 'error'); fieldError(document.getElementById('iRangoField')); return;
     }
   }
 
@@ -7272,6 +7388,17 @@ function renderCuotas(){
   // Activas con el aviso "Por confirmar" — ya no salta a Pagadas por fecha.
   const filtered = debtsVista.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
 
+  // Tanda J: fila de total al pie de la lista. Suma el monto "por cuota" (d.totalAmount/
+  // d.numCuotas, lo mismo que muestra .debt-amt de cada tarjeta) de EXACTAMENTE las
+  // tarjetas visibles — `filtered` ya viene filtrado por la cuenta activa (debtsVista =
+  // itemEnVista), así que el total hereda ese filtro sin volver a tocarlo. El texto
+  // depende de la pestaña; el tipo visual reutiliza el de .dd-row.dd-total del Resumen.
+  const cuotasTotalRow = monto => {
+    const k = cTab === 'activas' ? 'Total cuotas activas' : 'Total cuotas pagadas';
+    return `<div class="cuotas-total"><span class="cuotas-total-k">${k}</span>`
+      + `<span class="cuotas-total-v">${money(monto)}</span></div>`;
+  };
+
   if(filtered.length===0){
     // Tanda G: si NO hay ninguna compra en cuotas registrada, la pantalla no puede
     // quedar muerta — se muestra un estado vacío accionable (mismo patrón que Metas /
@@ -7288,7 +7415,8 @@ function renderCuotas(){
       if(b) b.addEventListener('click', abrirFormPrimeraCuota);
       return;
     }
-    box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.');
+    box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.')
+      + cuotasTotalRow(0);
     return;
   }
 
@@ -7340,7 +7468,8 @@ function renderCuotas(){
         ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${d.id}">Ir a la compra original</button>` : ''}
       </div>
     </div>`;
-  }).join('');
+  }).join('')
+  + cuotasTotalRow(filtered.reduce((s,d)=> s + d.totalAmount/d.numCuotas, 0));
 
   // Barra de progreso de cada cuota: crece desde 0 hacia su valor al mostrarse (igual que Metas).
   const fills = box.querySelectorAll('.progress-fill');
