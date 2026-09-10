@@ -1044,7 +1044,7 @@ button{font-family:inherit;}
 .cuota-fields{
   max-height:0; overflow:hidden; transition:max-height .25s ease, opacity .2s ease; opacity:0;
 }
-.cuota-fields.open{max-height:200px; opacity:1;}
+.cuota-fields.open{max-height:340px; opacity:1;}
 
 .cfg-group{border-bottom:1px solid var(--border);}
 .cfg-group > summary{
@@ -1741,6 +1741,10 @@ button:active{ transform:scale(0.97); }
     <div class="cuota-fields" id="cuotaFields">
       <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
       <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Las cuotas se cobran a partir del mes siguiente a esta fecha. Déjalo vacío o en 1 para un pago único a una sola cuota.</p>
+      <label class="check-row" id="gCuotaCompartidaWrap" style="display:none; margin-bottom:6px;">
+        <input type="checkbox" id="gCuotaCompartida">
+        <span>Compartida <small>— las cuotas cuentan para todas las cuentas, no solo para la de la compra</small></span>
+      </label>
     </div>
     <button class="btn-primary" id="btnSaveGasto">Guardar gasto</button>
     <button class="btn-danger" id="btnDeleteGasto" style="display:none;">Eliminar gasto</button>
@@ -1805,6 +1809,10 @@ button:active{ transform:scale(0.97); }
     <div class="field" id="mMontoField">
       <label>Monto objetivo</label>
       <input type="text" id="mMonto" class="input-lg" placeholder="0" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="field" id="mCuentaField" style="display:none;">
+      <label for="mCuenta">Cuenta</label>
+      <select id="mCuenta"></select>
     </div>
 
     <details class="cfg-group" id="mAutoGroup" style="margin-bottom:16px;">
@@ -3199,11 +3207,15 @@ function cuentaDefaultParaForm(){
   const v = ctaVista();
   return v !== 'total' ? v : cuentaIdParaNuevoMovimiento();
 }
-// Nº de gastos + ingresos asignados a una cuenta (para decidir si borrar pide reasignar).
+// Nº de movimientos asignados a una cuenta (para decidir si borrar pide reasignar).
+// Tanda L3: cuenta también las deudas y metas PROPIAS de esa cuenta (no las compartidas,
+// que siguen contando en Total y en las demás sin tocar nada).
 function contarUsoCuenta(id){
   let n = 0;
   (state.expenses || []).forEach(e=>{ if(e && e.cuentaId === id) n++; });
   (state.incomes  || []).forEach(i=>{ if(i && i.cuentaId === id) n++; });
+  (state.debts    || []).forEach(d=>{ if(d && d.cuentaId === id) n++; });
+  (state.goals    || []).forEach(g=>{ if(g && g.cuentaId === id) n++; });
   return n;
 }
 // Renumera `orden` 0..n-1 según el orden actual del array (tras reordenar/crear/borrar).
@@ -3847,13 +3859,13 @@ document.getElementById('btnConfig').onclick = ()=>{
 document.getElementById('btnExport').onclick = ()=>{
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
-  // Tanda C3: el filtro por cuenta aplica sólo a Gastos e Ingresos; las Cuotas van
-  // completas siempre. Se avisa aquí para que no sea un comportamiento silencioso.
+  // Tanda L3: el Excel respeta la cuenta activa (gastos, ingresos y cuotas propias +
+  // compartidas). Se avisa aquí para que no sea silencioso.
   const expNota = document.getElementById('expCuentaNota');
   if(expNota){
     const cv = ctaVista();
     if(cv === 'total'){ expNota.hidden = true; expNota.textContent = ''; }
-    else { expNota.hidden = false; expNota.textContent = `Se exportarán sólo los gastos e ingresos de «${cuentaNombre(cv)}» (la cuenta activa en el selector). Las cuotas se incluyen completas: son las mismas para todas las cuentas. Cambia a “Total” para exportar los gastos e ingresos de todas.`; }
+    else { expNota.hidden = false; expNota.textContent = `Se exportará sólo lo de la cuenta «${cuentaNombre(cv)}» (la activa en el selector): sus gastos, ingresos y cuotas, más lo marcado como Compartido. Cambia a “Total” para exportar todas las cuentas.`; }
   }
   // Tanda E: si el Historial tiene un rango de fechas activo, la exportación abre ya
   // apuntando a ESE rango (opción "Rango de fechas" preseleccionada y fechas cargadas).
@@ -3906,6 +3918,13 @@ function syncCuotaFields(){
   const isCredito = document.getElementById('gMetodo').value === 'Crédito';
   document.getElementById('cuotaFields').classList.toggle('open', isCredito);
   if(!isCredito) document.getElementById('gNumCuotas').value = '';
+  // Tanda L3: interruptor "Compartida" de la cuota — sólo con ≥2 cuentas vivas.
+  const wrap = document.getElementById('gCuotaCompartidaWrap');
+  if(wrap){
+    const mostrar = isCredito && cuentasVivas().length >= 2;
+    wrap.style.display = mostrar ? '' : 'none';
+    if(!mostrar) document.getElementById('gCuotaCompartida').checked = false;
+  }
 }
 document.getElementById('gMetodo').addEventListener('change', syncCuotaFields);
 
@@ -3960,6 +3979,42 @@ function poblarSelectCuenta(selId, fieldId, actualId){
   // Visible si hay ≥2 cuentas vivas, o si el movimiento editado está en una cuenta que
   // no aparece en la lista corta (archivada/huérfana).
   field.style.display = (vivas.length >= 2 || (editando && !enVivas)) ? '' : 'none';
+}
+
+/* Tanda L3: selector de cuenta del formulario de META. Como el de gasto/ingreso, más
+   la opción "Compartida (todas)". `actualId` = cuentaId de la meta editada ('<id>' |
+   'compartida'), o null al crear. Crear con una cuenta específica activa -> esa cuenta
+   preseleccionada. Crear desde "Total" (≥2 cuentas) -> placeholder sin elegir; el
+   guardado se bloquea hasta elegir. Con <2 cuentas vivas el campo se oculta y la meta
+   queda en la única cuenta. Devuelve nada; el valor se lee de #mCuenta al guardar. */
+const META_CUENTA_COMPARTIDA = 'compartida';
+function poblarSelectMetaCuenta(actualId){
+  const sel = document.getElementById('mCuenta');
+  const field = document.getElementById('mCuentaField');
+  if(!sel || !field) return;
+  const vivas = cuentasVivas();
+  if(vivas.length < 2){ field.style.display = 'none'; sel.innerHTML = ''; return; }
+  field.style.display = '';
+  const editando = actualId != null;
+  // Objetivo inicial: al editar, lo guardado; al crear desde una cuenta específica, esa
+  // cuenta; al crear desde "Total", vacío (fuerza elegir).
+  let objetivo = '';
+  if(editando) objetivo = actualId;
+  else if(ctaVista() !== 'total') objetivo = ctaVista();
+
+  const opts = [];
+  if(!objetivo) opts.push({ id:'', nombre:'Elige una cuenta…', disabled:true });
+  vivas.forEach(a=> opts.push({ id:a.id, nombre:a.nombre }));
+  opts.push({ id: META_CUENTA_COMPARTIDA, nombre:'Compartida (todas las cuentas)' });
+  // Meta en una cuenta archivada/huérfana: añadir como opción para no moverla en silencio.
+  if(objetivo && objetivo !== META_CUENTA_COMPARTIDA && !vivas.some(a=> a.id === objetivo)){
+    const arch = cuentaById(objetivo);
+    opts.push({ id: objetivo, nombre: (arch ? arch.nombre + ' (archivada)' : 'Cuenta anterior') });
+  }
+  sel.innerHTML = opts.map(o=>
+    `<option value="${escAttr(o.id)}"${o.disabled ? ' disabled' : ''}${o.id === objetivo ? ' selected' : ''}>${o.nombre}</option>`
+  ).join('');
+  sel.value = objetivo;
 }
 
 /* ==================== CATEGORÍAS FRECUENTES (chips, solo en "Nuevo gasto") ==================== */
@@ -4024,6 +4079,7 @@ function openGastoForm(expenseId){
   document.getElementById('gDiaHasta').value = '';
   document.getElementById('cuotaFields').classList.remove('open');
   document.getElementById('gNumCuotas').value = '';
+  document.getElementById('gCuotaCompartida').checked = false;   // Tanda L3
   document.getElementById('btnDeleteGasto').style.display = 'none';
   document.getElementById('gastoTitle').textContent = 'Nuevo gasto';
   poblarSelectCuenta('gCuenta', 'gCuentaField', null);   // Tanda C3: default = cuenta activa / Principal
@@ -4049,7 +4105,10 @@ function openGastoForm(expenseId){
     }
     if(e.debtId){
       const debt = state.debts.find(d=>d.id===e.debtId);
-      if(debt) document.getElementById('gNumCuotas').value = debt.numCuotas;
+      if(debt){
+        document.getElementById('gNumCuotas').value = debt.numCuotas;
+        document.getElementById('gCuotaCompartida').checked = debt.cuentaId === 'compartida';   // Tanda L3
+      }
     }
     document.getElementById('btnDeleteGasto').style.display = 'block';
   }
@@ -4122,6 +4181,11 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   // (pago único a crédito), tal como antes con "¿Es cuota? = Sí" y 1 cuota.
   const esCredito = metodo === 'Crédito';
   const numCuotas = esCredito ? (parseInt(document.getElementById('gNumCuotas').value, 10) || 1) : 0;
+  // Tanda L3: cuenta de la DEUDA (puede diferir del gasto): 'compartida' si el interruptor
+  // está marcado, si no la misma cuenta de la compra. Con <2 cuentas vivas el interruptor
+  // no se muestra y toda deuda es de esa única cuenta.
+  const debtCuentaId = (esCredito && cuentasVivas().length >= 2 && document.getElementById('gCuotaCompartida').checked)
+    ? 'compartida' : cuentaSel;
 
   if(!nombre){ showToast('Ponle un nombre al gasto.', 'error'); fieldError(document.getElementById('gNombre')); return; }
   if(!monto || monto<=0){ showToast('Ingresa un monto mayor a 0.', 'error'); fieldError(document.getElementById('gMonto')); return; }
@@ -4200,9 +4264,10 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
       const debt = e.debtId ? state.debts.find(d=>d.id===e.debtId) : null;
       if(debt){
         debt.description=descripcion; debt.category=categoria; debt.purchaseDate=fecha; debt.totalAmount=monto; debt.numCuotas=numCuotas;
+        debt.cuentaId = debtCuentaId;   // Tanda L3: propia de la compra o 'compartida'
       } else {
         // Cambió a Crédito en la edición: ahora es una cuota.
-        const nd = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
+        const nd = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[], cuentaId:debtCuentaId };
         state.debts.push(nd);
         e.debtId = nd.id;
       }
@@ -4213,7 +4278,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
     const expense = { id:uid(), date:fecha, nombre:nombre, amount:monto, category:categoria, method:metodo, description:descripcion, tipo:tipo, debtId:null, cuentaId:cuentaSel };
     if(rangoActivo) expense.diaHasta = diaHasta;
     if(esCredito){
-      const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] };
+      const debt = { id:uid(), description:descripcion, purchaseDate:fecha, category:categoria, totalAmount:monto, numCuotas:numCuotas, manualPaidMonthKeys:[], manualUnpaidMonthKeys:[], cuentaId:debtCuentaId };
       state.debts.push(debt);
       expense.debtId = debt.id;
     }
@@ -4560,6 +4625,8 @@ function openMetaForm(goalId){
   document.getElementById('btnDeleteMeta').style.display = 'none';
   let aa = { activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1 };
 
+  poblarSelectMetaCuenta(null);   // Tanda L3: default = cuenta activa; "Total" -> sin elegir
+
   if(editingGoalId){
     const g = state.goals.find(x=>x.id===editingGoalId);
     if(!g) return;
@@ -4571,6 +4638,7 @@ function openMetaForm(goalId){
       document.getElementById('mFecha').value = g.fechaLimite || '';
     }
     if(g.aporteAutomatico) aa = g.aporteAutomatico;
+    poblarSelectMetaCuenta(g.cuentaId || null);
     document.getElementById('btnDeleteMeta').style.display = 'block';
   }
 
@@ -4603,8 +4671,18 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   const autoTipo = document.querySelector('#sheetMeta [data-mautotipo].active').dataset.mautotipo;
   const autoValor = leerMontoPct('mAutoValor', autoTipo);
   const autoDia = parseInt(document.getElementById('mAutoDia').value, 10);
+  // Tanda L3: cuenta de la meta. Campo oculto (<2 cuentas vivas) -> la única cuenta.
+  // Visible pero sin elegir (creada desde "Total") -> se bloquea el guardado.
+  const cuentaFieldVisible = document.getElementById('mCuentaField').style.display !== 'none';
+  const metaCuentaId = cuentaFieldVisible
+    ? document.getElementById('mCuenta').value
+    : (cuentasVivas()[0] ? cuentasVivas()[0].id : cuentaIdParaNuevoMovimiento());
 
   if(!nombre){ showToast('Ponle un nombre a la meta.', 'error'); return; }
+  if(cuentaFieldVisible && !metaCuentaId){
+    showToast('Elige la cuenta de la meta (o "Compartida").', 'error');
+    fieldError(document.getElementById('mCuenta')); return;
+  }
   if(!indefinida && (!montoObjetivo || montoObjetivo <= 0)){
     showToast('Completa un monto objetivo válido (o marca la meta como indefinida).', 'error'); return;
   }
@@ -4648,6 +4726,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     g.montoObjetivo = indefinida ? 0 : montoObjetivo;
     g.fechaLimite = indefinida ? "" : (fechaLimite || "");
     g.aporteAutomatico = construirAA(g.aporteAutomatico);
+    if(metaCuentaId) g.cuentaId = metaCuentaId;   // Tanda L3: mueve la meta entre vistas
     haptic(HAPTIC_OK);
     saveState(); closeSheet('sheetMeta'); renderAll();
     return;
@@ -4665,7 +4744,8 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     fechaLimite: indefinida ? "" : (fechaLimite || ""),
     fechaCreacion: new Date().toISOString().slice(0,10),
     aportes: [],
-    aporteAutomatico: construirAA(null)
+    aporteAutomatico: construirAA(null),
+    cuentaId: metaCuentaId   // Tanda L3
   });
   haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetMeta'); renderAll();
@@ -4719,7 +4799,7 @@ function aporteMetaObjetivoEnMes(g, d){
   if(aa.tipo === 'porcentaje'){
     const va = aporteAutomaticoVirtualParaMes(g, d);
     if(va) return va.monto;
-    return Math.max(0, Math.round(disponibleBaseDelMes(d) * (aa.valor || 0) / 100));
+    return Math.max(0, Math.round(disponibleBaseDelMes(d, ctaPresupuestoMeta(g)) * (aa.valor || 0) / 100));   // Tanda L3
   }
   return aa.monto || 0;
 }
@@ -4789,8 +4869,11 @@ function renderMetas(){
 
   // La pestaña Metas es independiente del selector de mes: muestra SIEMPRE las metas
   // activas (no eliminadas), y todos sus cálculos usan el mes real de hoy.
+  // Tanda L3: hereda la cuenta activa del selector — metas propias + compartidas; en
+  // 'total', todas.
   const hoy = mesActualReal();
-  const visibles = state.goals.filter(g=> g.goalEndMonthKey == null);
+  const ctaMetas = ctaVista();
+  const visibles = state.goals.filter(g=> g.goalEndMonthKey == null && itemEnVista(g, ctaMetas));
   const pausadasAuto = calcularEstadoAportesDelMes(hoy);           // Día 11
   const everPaused = metasAlgunaVezPausadas();                     // pausa en cualquier mes pasado
   const topGasto = topGastoCategoria(hoy);
@@ -4878,6 +4961,7 @@ function renderMetas(){
       `<button class="debt-action" data-auto="${g.id}">${aa.activo ? 'Editar aporte automático' : 'Activar aporte automático'}</button>` +
       `<button class="debt-action" data-calc="${g.id}">Calculadora</button>`;
     const pauseBadge = pausada ? `<span class="goal-pause-badge">${icon('pause')} pausada</span>` : '';
+    const compBadge = g.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : '';   // Tanda L3
 
     if(g.indefinida){
       return `
@@ -4885,7 +4969,7 @@ function renderMetas(){
       ${editBtn}
       <div class="debt-top">
         <div>
-          <p class="debt-title">${g.name}</p>
+          <p class="debt-title">${g.name}${compBadge}</p>
           <p class="debt-cat">Meta indefinida · sin fecha límite</p>
           ${pauseBadge}
         </div>
@@ -4906,7 +4990,7 @@ function renderMetas(){
       ${editBtn}
       <div class="debt-top">
         <div>
-          <p class="debt-title">${g.name}</p>
+          <p class="debt-title">${g.name}${compBadge}</p>
           <p class="debt-cat">${g.fechaLimite ? 'Meta para ' + fmtDate(g.fechaLimite) : 'Sin fecha límite'}</p>
           ${done ? '<span class="goal-done-badge">Meta cumplida</span>' : ''}
           ${pauseBadge}
@@ -4996,7 +5080,7 @@ function aportePactadoDeMeta(g){
     const hoy = mesActualReal();   // Metas es independiente del selector de mes
     const va = aporteAutomaticoVirtualParaMes(g, hoy);
     if(va) return va.monto;
-    return Math.max(0, Math.round(disponibleBaseDelMes(hoy) * (aa.valor || 0) / 100));
+    return Math.max(0, Math.round(disponibleBaseDelMes(hoy, ctaPresupuestoMeta(g)) * (aa.valor || 0) / 100));   // Tanda L3
   }
   return aa.monto ? aa.monto : null;
 }
@@ -5186,7 +5270,7 @@ function calcInteres(){
     // Se usa el estimado del mes actual como aproximación.
     const hoy = mesActualReal();
     const va = aporteAutomaticoVirtualParaMes(g, hoy);
-    const est = va ? va.monto : Math.max(0, Math.round(disponibleBaseDelMes(hoy) * (aa.valor || 0) / 100));
+    const est = va ? va.monto : Math.max(0, Math.round(disponibleBaseDelMes(hoy, ctaPresupuestoMeta(g)) * (aa.valor || 0) / 100));   // Tanda L3
     aporteMensual = est;
     notaPct = `<br>El aporte varía según tu Disponible; se usó ${money(est)} (estimado del mes actual).`;
   } else {
@@ -7135,17 +7219,22 @@ function renderCuotas(){
   const box = document.getElementById('cList');
   const refDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
 
+  // Tanda L3: la pantalla Cuotas hereda la cuenta activa del selector — muestra las
+  // deudas propias de esa cuenta + las compartidas; en 'total', todas.
+  const cta = ctaVista();
+  const debtsVista = state.debts.filter(d=> itemEnVista(d, cta));
+
   // Tanda P: la clasificación Activas / Pagadas se basa EXCLUSIVAMENTE en la confirmación
   // manual de ESE mes (cuotaEstadoMes). Una cuota vencida sin confirmar se queda en
   // Activas con el aviso "Por confirmar" — ya no salta a Pagadas por fecha.
-  const filtered = state.debts.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
+  const filtered = debtsVista.filter(d=> cuotaEstadoMes(d, refDate).tab === cTab);
 
   if(filtered.length===0){
     // Tanda G: si NO hay ninguna compra en cuotas registrada, la pantalla no puede
     // quedar muerta — se muestra un estado vacío accionable (mismo patrón que Metas /
     // Resumen: ícono + texto + acción). Las cuotas nacen de un gasto con método
     // Crédito, así que la acción abre ese formulario ya en "Crédito".
-    if(state.debts.length === 0){
+    if(debtsVista.length === 0){
       box.innerHTML = `
         <div class="empty-state">
           ${icon('credit-card')}
@@ -7191,7 +7280,7 @@ function renderCuotas(){
     <div class="debt-card" data-cuotacard>
       <div class="debt-top">
         <div>
-          <p class="debt-title">${d.description}</p>
+          <p class="debt-title">${d.description}${d.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : ''}</p>
           <p class="debt-cat">${d.category}</p>
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
@@ -7687,23 +7776,32 @@ function abrirBorrarCuenta(id){
     return;
   }
   borrarCuentaCtx = { id };
-  const n = contarUsoCuenta(id);
+  const nMov = (state.expenses || []).filter(e=> e && e.cuentaId === id).length
+             + (state.incomes  || []).filter(i=> i && i.cuentaId === id).length;
+  const nCM  = (state.debts || []).filter(d=> d && d.cuentaId === id).length
+             + (state.goals || []).filter(g=> g && g.cuentaId === id).length;
+  const n = nMov + nCM;
   const destinos = todas.filter(x=> x.id !== id);
   document.getElementById('ctaBorrarTitle').textContent = `Eliminar «${a.nombre}»`;
   const field = document.getElementById('ctaBorrarReasignField');
   const body = document.getElementById('ctaBorrarBody');
   const confirm = document.getElementById('ctaBorrarConfirm');
   if(n === 0){
-    body.textContent = `«${a.nombre}» no tiene movimientos. Se eliminará de la lista de cuentas.`;
+    body.textContent = `«${a.nombre}» no tiene movimientos ni cuotas o metas. Se eliminará de la lista de cuentas.`;
     field.hidden = true;
     confirm.textContent = 'Eliminar cuenta';
   } else {
-    body.textContent = `${n} ${n === 1 ? 'movimiento pertenece' : 'movimientos pertenecen'} a «${a.nombre}». `
-      + `Antes de eliminarla, muévelos a otra cuenta.`;
+    const partes = [];
+    if(nMov) partes.push(nMov === 1 ? '1 gasto o ingreso' : `${nMov} gastos e ingresos`);
+    if(nCM)  partes.push(nCM === 1 ? '1 cuota o meta' : `${nCM} cuotas y metas`);
+    body.textContent = `${partes.join(' y ')} pertenecen a «${a.nombre}». Elige a dónde moverlos antes de eliminarla.`;
     const sel = document.getElementById('ctaBorrarDestino');
-    sel.innerHTML = destinos.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
+    let opts = destinos.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
+    // Tanda L3: "Compartida" sólo aplica a cuotas/metas; se ofrece si la cuenta tiene alguna.
+    if(nCM) opts += `<option value="compartida">Compartida (solo las cuotas y metas)</option>`;
+    sel.innerHTML = opts;
     field.hidden = false;
-    confirm.textContent = `Mover ${n} ${n === 1 ? 'movimiento' : 'movimientos'} y eliminar`;
+    confirm.textContent = 'Mover y eliminar';
   }
   openSheet('sheetCuentaBorrar', n === 0 ? undefined : 'ctaBorrarDestino');
 }
@@ -7714,20 +7812,38 @@ document.getElementById('ctaBorrarConfirm').onclick = ()=>{
   const a = cuentaById(id);
   if(!a){ closeSheet('sheetCuentaBorrar'); borrarCuentaCtx = null; renderConfig(); return; }
   const n = contarUsoCuenta(id);
-  let dest = null;
+  let dest = null, msg;
   if(n > 0){
     dest = document.getElementById('ctaBorrarDestino').value;
-    if(!dest || !cuentaById(dest) || dest === id){ showToast('Elige una cuenta de destino.', 'error'); return; }
+    const aCompartida = dest === 'compartida';
+    if(!aCompartida && (!dest || !cuentaById(dest) || dest === id)){ showToast('Elige una cuenta de destino.', 'error'); return; }
+    // Cuotas y metas: al destino elegido, o 'compartida'.
+    const destCM = aCompartida ? 'compartida' : dest;
+    (state.debts || []).forEach(d=>{ if(d && d.cuentaId === id) d.cuentaId = destCM; });
+    (state.goals || []).forEach(g=>{ if(g && g.cuentaId === id) g.cuentaId = destCM; });
+    // Gastos e ingresos SIEMPRE necesitan una cuenta real. Si se eligió "Compartida",
+    // van a la primera cuenta restante (por orden).
+    const destMov = aCompartida
+      ? (cuentasTodasOrden().find(x=> x.id !== id) || {}).id
+      : dest;
     let c = 0;
-    (state.expenses || []).forEach(e=>{ if(e && e.cuentaId === id){ e.cuentaId = dest; c++; } });
-    (state.incomes  || []).forEach(i=>{ if(i && i.cuentaId === id){ i.cuentaId = dest; c++; } });
+    if(destMov){
+      (state.expenses || []).forEach(e=>{ if(e && e.cuentaId === id){ e.cuentaId = destMov; c++; } });
+      (state.incomes  || []).forEach(i=>{ if(i && i.cuentaId === id){ i.cuentaId = destMov; c++; } });
+    }
+    dest = aCompartida ? destMov : dest;   // para normalizar cuentaActiva más abajo
+    msg = aCompartida
+      ? `Cuotas y metas de «${a.nombre}» ahora son Compartidas${c ? `; ${c} ${c === 1 ? 'gasto/ingreso movido' : 'gastos e ingresos movidos'} a «${cuentaNombre(destMov)}»` : ''}. Cuenta eliminada.`
+      : `Movimientos de «${a.nombre}» movidos a «${cuentaNombre(dest)}». Cuenta eliminada.`;
+  } else {
+    msg = `«${a.nombre}» eliminada.`;
   }
   state.accounts = (state.accounts || []).filter(x=> x.id !== id);
   renumerarCuentas();
-  if(state.config && state.config.cuentaActiva === id) state.config.cuentaActiva = (n > 0 && dest) ? dest : 'total';
+  if(state.config && state.config.cuentaActiva === id) state.config.cuentaActiva = (n > 0 && dest && cuentaById(dest)) ? dest : 'total';
   borrarCuentaCtx = null;
   haptic(HAPTIC_DELETE); saveState(); renderConfig(); closeSheet('sheetCuentaBorrar'); renderAll();
-  showToast(n > 0 ? `${n} ${n === 1 ? 'movimiento movido' : 'movimientos movidos'} a «${cuentaNombre(dest)}». «${a.nombre}» eliminada.` : `«${a.nombre}» eliminada.`, 'success');
+  showToast(msg, 'success');
 };
 
 document.getElementById('btnAddCuenta').addEventListener('click', ()=>{
@@ -8402,10 +8518,9 @@ document.getElementById('btnShareExport').onclick = async ()=>{
 
 function buildExportWorkbook(fromDate, toDate){
   const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
-  // Tanda C3: el filtro por cuenta activa aplica SÓLO a las hojas Gastos e Ingresos —
-  // son los únicos registros con dueño (cuentaId). La hoja "Deudas (Cuotas)" se incluye
-  // SIEMPRE y completa, igual que el tab Cuotas: las cuotas son globales hasta C5 y no
-  // cambian con la cuenta seleccionada (decisión C2). En vista Total no cambia nada.
+  // Tanda L3: la exportación respeta la cuenta activa igual que la app. En una cuenta
+  // específica, las hojas Gastos, Ingresos y Deudas (Cuotas) traen lo propio + lo
+  // compartido; en "Total", todo. La hoja Deudas lleva una columna "Compartida".
   const ctaExp = ctaVista();
 
   // Expande cada gasto (incluyendo las ocurrencias mensuales de los gastos Fijos)
@@ -8441,10 +8556,11 @@ function buildExportWorkbook(fromDate, toDate){
   }
   const incomeRows = allIncomeRows.sort((a,b)=>a.date.localeCompare(b.date))
     .map(i=>({ Fecha:i.date, Nombre:i.nombre||'', Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
-  // Cuotas: SIEMPRE completas, sin filtrar por cuenta (globales hasta C5, como el tab Cuotas).
-  const debtRows = state.debts.map(d=>({
+  // Tanda L3: cuotas propias de la cuenta activa + compartidas (en 'total', todas).
+  const debtRows = state.debts.filter(d=> itemEnVista(d, ctaExp)).map(d=>({
     Descripción:d.description, "Fecha compra":d.purchaseDate, Categoría:d.category,
     "Monto total":d.totalAmount, "N° cuotas":d.numCuotas, "Monto por cuota": Math.round(d.totalAmount/d.numCuotas),
+    Compartida: d.cuentaId === 'compartida' ? 'Sí' : 'No',
     Estado: debtStatusForMonth(d, new Date())==='pagada' ? 'Pagada':'Activa'
   }));
 
@@ -8460,7 +8576,7 @@ function buildExportWorkbook(fromDate, toDate){
   appendSheet(wb, "Resumen", summaryRows);
   appendSheet(wb, "Gastos", expenseRows);
   appendSheet(wb, "Ingresos", incomeRows);
-  appendSheet(wb, "Deudas (Cuotas)", debtRows);   // siempre, sin filtrar por cuenta
+  appendSheet(wb, "Deudas (Cuotas)", debtRows);   // Tanda L3: filtrada a propias + compartidas
   const sufijoCuenta = ctaExp === 'total' ? '' : '_' + cuentaNombre(ctaExp).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
   const filename = `MisFinanzas${sufijoCuenta}_${new Date().toISOString().slice(0,10)}.xlsx`;
   return { wb, filename };
@@ -9381,7 +9497,9 @@ function renderAccountSelector(){
   if(!wrap || !nameEl || !menu) return;
   // Sólo hay algo que elegir con ≥2 cuentas no archivadas. Con ≤1 el selector no se
   // renderiza en absoluto (ni como botón deshabilitado): la app se ve igual que pre-C3.
-  const visible = (currentScreen === 'resumen' || currentScreen === 'historial')
+  // Tanda L3: también en Cuotas y Metas — filtran a lo propio + lo compartido de la
+  // cuenta activa (en 'total', todo, sin cambios).
+  const visible = ['resumen','historial','cuotas','metas'].includes(currentScreen)
     && cuentasVivas().length >= 2;
   wrap.style.display = visible ? '' : 'none';
   if(!visible){ closeAccountMenu(); return; }
