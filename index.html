@@ -280,6 +280,13 @@ button{font-family:inherit;}
 :root.hc .bx-line .bx-k, :root.hc .bx-line .bx-v, :root.hc .bx-tag{color:#fff;}
 :root.hc .bx-line .bx-v.neg{color:#FFC9C0;}
 :root.hc .bx-tag{border-color:#fff;}
+/* Tanda AC · pto g: "Cuotas pendientes" (estado de alerta, no bx-cerrado) con más peso
+   visual que el resto de la tarjeta — es la única cifra que NO está descontada del
+   Disponible. var(--danger) sigue la paleta activa + su redefinición en alto contraste,
+   sin variable nueva. El formato atenuado de mes CERRADO (Tanda R3, arriba) no se toca. */
+#rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:var(--danger); font-weight:800; font-size:16px;}
+#rDisponiblePendRow:not(.bx-cerrado) .bx-tag{background:var(--danger); color:#fff; border-color:var(--danger); font-weight:700;}
+:root.hc #rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:#fff;}
 /* Tanda R3 — en meses CERRADOS "Cuotas pendientes" es una nota informativa atenuada:
    esas cuotas ya cuentan como gasto del mes. Sin píldora, sin monto, sin rojo — el
    pto 2 pide respetar este formato y no devolverlo a alerta. */
@@ -315,7 +322,10 @@ button{font-family:inherit;}
    Tonos aclarados para que se lean sobre el burdeos de la tarjeta. */
 #rIngresos{color:#A7D18C;}   /* ingreso → verde  */
 #rGastos{color:#F0A79E;}     /* gasto   → rojo   */
-#rCuotas{color:#E6A56B;}     /* cuota   → naranjo*/
+/* Tanda AC · pto c: var(--gold) en vez del naranjo fijo de antes — la cifra principal
+   ahora destaca "Pagadas" en mes en curso/futuro (var(--gold) ya sigue la paleta activa
+   + alto contraste, a diferencia del hex fijo anterior). */
+#rCuotas{color:var(--gold);} /* cuota   → dorado */
 #rMetas{color:#E8CE7E;}      /* aporte  → amarillo */
 :root.hc #rIngresos, :root.hc #rGastos, :root.hc #rCuotas, :root.hc #rMetas{color:#fff;}
 
@@ -5870,7 +5880,14 @@ function resumenTotalesDelMes(refDate, cuentaId){
   const transferenciasNetas = transferenciasNetasDelMes(refDate, cuentaId);
   const dispConPendientes = saldoAnterior + ingresos - gastos - cuotas - aportesMetas + transferenciasNetas;
   const dispLibre = dispConPendientes + (cerrado ? 0 : cuotasPendientes);
-  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, cuotasPendientes, cerrado, transferenciasNetas, dispConPendientes, dispLibre };
+  // Tanda AC · FUENTE ÚNICA: cuotas que CUENTAN como gasto este mes — TODAS si el mes
+  // está cerrado (ya no se reincorporan pendientes); solo las CONFIRMADAS si no (las
+  // pendientes se reincorporan arriba y no son gasto todavía). Reutiliza `cuotas` y
+  // `cuotasPendientes` de esta misma función (cuotasPendientesDelMes ya usa
+  // cuotaPagadaDelMes como único criterio de confirmación) — sin loop nuevo. La usan
+  // desgloseDisponible(), "Gastos" y "Cuotas" del Resumen.
+  const cuotasGasto = cerrado ? cuotas : (cuotas - cuotasPendientes);
+  return { ingresos, gastos, cuotas, cuotasGasto, aportesMetas, saldoAnterior, cuotasPendientes, cerrado, transferenciasNetas, dispConPendientes, dispLibre };
 }
 
 /* ==================== TANDA R · DESGLOSE AUDITABLE DEL DISPONIBLE (pto 1) ====================
@@ -5888,9 +5905,10 @@ function desgloseDisponible(refDate, incluirCeros, cuentaId){
   // Mes CERRADO: la cifra grande ya no reincorpora → el término de cuotas es el total
   // del mes ("cuotas del mes"). Mes en curso / futuro: solo las confirmadas ("cuotas
   // pagadas"), porque las pendientes se reincorporan y no son término del desglose.
+  // Tanda AC: el monto sale de T.cuotasGasto (fuente única) en vez de recalcularlo aquí.
   const cuotasTermino = T.cerrado
-    ? { clave:'cuotasMes',    label:'cuotas del mes', monto: T.cuotas }
-    : { clave:'cuotasPagadas', label:'cuotas pagadas', monto: T.cuotas - T.cuotasPendientes };
+    ? { clave:'cuotasMes',    label:'cuotas del mes', monto: T.cuotasGasto }
+    : { clave:'cuotasPagadas', label:'cuotas pagadas', monto: T.cuotasGasto };
   const raw = [
     { clave:'saldoAnterior', label:'saldo anterior', signo:+1, monto: T.saldoAnterior },
     { clave:'ingresos',      label:'ingresos',       signo:+1, monto: T.ingresos },
@@ -5908,23 +5926,45 @@ function desgloseDisponible(refDate, incluirCeros, cuentaId){
   return { terminos, suma, disponible: T.dispLibre, cuadra: Math.round(suma) === Math.round(T.dispLibre) };
 }
 
+// Tanda AC · FUENTE ÚNICA: cuotas por categoría que CUENTAN como gasto este mes — mismo
+// criterio que T.cuotasGasto / desgloseDisponible(): TODAS si el mes está CERRADO, o
+// solo las CONFIRMADAS (cuotaPagadaDelMes) si no. La usan la dona, "Gasto por categoría"
+// (con sus topes) e Insights financieros del Resumen, para que las tres siempre
+// coincidan entre sí y con la cifra "Cuotas" de la tarjeta. El Historial sigue con el
+// criterio VIEJO (todas las cuotas) a propósito — ver nota junto a histTotalesVisibles()
+// y gastoPorCategoriaData().
+function cuotasPorCategoriaGastoDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const cerrado = esMesCerrado(refDate);
+  const out = {};
+  state.debts.forEach(d=>{
+    if(!itemEnVista(d, cta)) return;
+    const info = cuotaInfoForMonth(d, refDate);
+    if(!info) return;
+    if(cerrado || cuotaPagadaDelMes(d, refDate)) out[d.category] = (out[d.category]||0) + info.monto;
+  });
+  return out;
+}
+
 /* ==================== TANDA R · DONA DE GASTOS POR CATEGORÍA (pto 3) ====================
    TODAS las categorías con monto > 0 (Tanda X · pto 2: antes eran TOP 5 + un segmento
-   "Otros" que agrupaba el resto). El total DEBE ser el mismo del indicador "Gastos" =
-   contado + TODAS las cuotas del mes (devengado): por eso no cambia al confirmar una
-   cuota como pagada. Los colores se asignan por ranking (categoría más gastadora = color
-   0) vía sliceColor(), que da tonos distintos hasta 12+ categorías; la lista "Gasto por
-   categoría" reusa este mismo mapa `colorDeCat` para funcionar como leyenda. Esto es
-   presentación: ningún monto se agrupa ni se recorta, sólo se dibujan todos los tramos. */
+   "Otros" que agrupaba el resto). El total es el mismo del indicador "Gastos" = contado +
+   cuotas que CUENTAN este mes (Tanda AC: contado + TODAS en mes cerrado, o contado +
+   confirmadas en mes en curso/futuro) — por eso, a diferencia de antes, SÍ cambia al
+   confirmar una cuota como pagada dentro del mismo mes en curso. Los colores se asignan
+   por ranking (categoría más gastadora = color 0) vía sliceColor(), que da tonos
+   distintos hasta 12+ categorías; la lista "Gasto por categoría" reusa este mismo mapa
+   `colorDeCat` para funcionar como leyenda. Esto es presentación: ningún monto se agrupa
+   ni se recorta, sólo se dibujan todos los tramos. */
 // Tanda C3: `cuentaId` opcional al final. Sin él (o 'total') idéntico a hoy; con un id
 // de cuenta, sólo los gastos de esa cuenta y sin cuotas (globales hasta C5 → $0).
 function donaResumenData(refDate, cuentaId){
-  const cta = ctaCalc(cuentaId);
   const T = resumenTotalesDelMes(refDate, cuentaId);
-  const totalGastos = T.gastos + T.cuotas;
+  const totalGastos = T.gastos + T.cuotasGasto;
   const ct = {};
   getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
-  state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });   // Tanda L2
+  const cuotasCat = cuotasPorCategoriaGastoDelMes(refDate, cuentaId);   // Tanda AC
+  Object.keys(cuotasCat).forEach(c=> ct[c] = (ct[c]||0) + cuotasCat[c]);
   const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
   const colorDeCat = {};
   orden.forEach(([cat], i)=>{ colorDeCat[cat] = sliceColor(i); });
@@ -6031,21 +6071,20 @@ function renderResumen(){
   // crédito es un gasto real, solo diferido en el tiempo). SOLO cambia la presentación:
   // dispLibre / dispConPendientes / cuotasPendientes NO se tocan — el Disponible ya
   // restaba gastos y cuotas por separado, este cambio solo los agrupa visualmente.
+  // Tanda AC: de las cuotas del mes, "Gastos" ahora solo suma las que CUENTAN como
+  // gasto (T.cuotasGasto: todas si el mes está cerrado, solo confirmadas si no) — antes
+  // sumaba T.cuotas (todas, sin filtrar). totalCuotas se conserva (T.cuotas, todas) para
+  // la línea "Total del mes" del indicador Cuotas invertido, más abajo.
   const gastosContado = T.gastos;                 // gasto normal, sin cuotas
-  const totalGastos = T.gastos + T.cuotas;        // mini-stat "Gastos" (contado + cuotas)
+  const totalGastos = T.gastos + T.cuotasGasto;   // mini-stat "Gastos" (contado + cuotas que cuentan)
   const totalCuotas = T.cuotas;
   const totalAportesMetas = T.aportesMetas;
   const saldoAnterior = T.saldoAnterior;
   const dispLibre = T.dispLibre;
 
-  // Cuotas por categoría (para el desglose "Gasto por categoría" de más abajo).
-  // Tanda L2: cuotas de deudas propias de la vista + compartidas (en 'total', todas).
-  const cuotasPorCategoria = {};
-  state.debts.forEach(d=>{
-    if(!itemEnVista(d, cta)) return;
-    const info = cuotaInfoForMonth(d, currentDate);
-    if(info) cuotasPorCategoria[d.category] = (cuotasPorCategoria[d.category]||0) + info.monto;
-  });
+  // Cuotas por categoría que CUENTAN este mes (para el desglose "Gasto por categoría" y
+  // sus topes, más abajo) — Tanda AC: mismo helper que usa la dona, fuente única.
+  const cuotasPorCategoria = cuotasPorCategoriaGastoDelMes(currentDate, cta);
 
   // Conteo animado (0 -> valor) de Ingresos / Gastos / Disponible: solo al cambiar de
   // mes o al abrir el Resumen, no en cada re-render (p. ej. tras guardar un gasto).
@@ -6061,7 +6100,10 @@ function renderResumen(){
   document.getElementById('rDisponible').classList.toggle('neg', dispLibre<0);
   setTotal('rIngresos', totalIngresos);
   setTotal('rGastos', totalGastos);
-  document.getElementById('rCuotas').textContent = money(totalCuotas);
+  // Tanda AC · pto c: la cifra PRINCIPAL de "Cuotas" pasa a ser T.cuotasGasto — que ya
+  // es "pagadas" en mes en curso/futuro y "total del mes" en mes cerrado (mismo valor
+  // que antes en ese caso). El desglose pagadas/total va en la línea de abajo.
+  document.getElementById('rCuotas').textContent = money(T.cuotasGasto);
   document.getElementById('rMetas').textContent = money(totalAportesMetas);
 
   // --- Contexto de la cifra grande (Tanda R / R2 / R3) ---
@@ -6069,25 +6111,32 @@ function renderResumen(){
   const esPreRegistro = inicioMk !== null && monthKey(currentDate) < inicioMk;
   const cuotasPend = T.cuotasPendientes;
 
-  // Tanda R · pto 4 + Tanda R3: "Pagadas $X" bajo el indicador Cuotas. Solo tiene sentido
-  // cuando el desglose divide las cuotas en pagadas / pendientes — el mes en curso y los
-  // futuros. En meses CERRADOS el desglose usa "cuotas del mes" (todas) y esta línea
-  // confundiría; se oculta. En meses pre-registro no hay desglose: también se oculta.
+  // Tanda AC · pto c: el indicador "Cuotas" SE INVIERTE. La cifra principal (rCuotas, ya
+  // fijada arriba a T.cuotasGasto) es "pagadas" en mes en curso/futuro y "total del mes"
+  // en mes cerrado; esta línea secundaria (rCuotasPagadas, mismo id de siempre) ahora
+  // muestra el TOTAL del mes cuando hay algo pendiente sin confirmar — antes mostraba
+  // "Pagadas $X" como dato secundario de una principal que era el total. En mes CERRADO
+  // no hay distinción (T.cuotasGasto ya es el total) y se oculta, igual que antes se
+  // ocultaba "Pagadas"; en pre-registro también se oculta, sin cambios.
   const pagadasEl = document.getElementById('rCuotasPagadas');
   if(pagadasEl){
-    if(T.cerrado || esPreRegistro){
+    if(T.cerrado || esPreRegistro || Math.round(T.cuotasGasto) === Math.round(totalCuotas)){
+      // Sin pendientes (o sin distinción posible): "Total del mes" sería redundante con
+      // la cifra principal, que ya es el total.
       pagadasEl.style.display = 'none';
     } else {
-      pagadasEl.textContent = 'Pagadas ' + money(totalCuotas - cuotasPend);
+      pagadasEl.textContent = 'Total del mes ' + money(totalCuotas);
       pagadasEl.style.display = '';
     }
   }
 
-  // Línea chica "Contado $X" bajo "Gastos": visible solo cuando hay cuotas este mes (si
-  // no, "Gastos" ya es igual a "Contado" y la línea sobraría).
+  // Línea chica "Contado $X" bajo "Gastos": visible solo cuando "Gastos" difiere de
+  // "Contado", es decir, cuando hay cuotas que SÍ cuentan este mes (Tanda AC: antes se
+  // basaba en totalCuotas —todas—, así que aparecía aunque la única cuota del mes
+  // estuviera sin confirmar y "Gastos" fuera en los hechos igual a "Contado").
   const contadoEl = document.getElementById('rGastosContado');
   if(contadoEl){
-    if(Math.round(totalCuotas) > 0){
+    if(Math.round(T.cuotasGasto) > 0){
       contadoEl.textContent = 'Contado ' + money(gastosContado);
       contadoEl.style.display = '';
     } else {
@@ -6349,11 +6398,14 @@ function insightsMesData(refDate, cuentaId){
   const normalExpenses = getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId);
   const ingresos = getIncomesForMonth(refDate, cuentaId).reduce((s,i)=> s + i.amount, 0);
   const gastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
-  let cuotas = 0; const cuotasPorCat = {};
+  // `cuotas` (TODAS, sin filtrar) alimenta solo la fórmula de disponible/disponibleLibre
+  // más abajo, que ya reincorpora las pendientes por su cuenta. El desglose por
+  // categoría que SÍ filtra por confirmación vive en cuotasPorCatGasto, más abajo.
+  let cuotas = 0;
   state.debts.forEach(d=>{   // Tanda L2: cuotas propias de la vista + compartidas
     if(!itemEnVista(d, cta)) return;
     const info = cuotaInfoForMonth(d, refDate);
-    if(info){ cuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
+    if(info) cuotas += info.monto;
   });
   const aportesMetas = totalAportesMetasDelMes(refDate, cuentaId);
   const saldoAnterior = saldoAcumuladoHasta(refDate, cuentaId);
@@ -6368,11 +6420,19 @@ function insightsMesData(refDate, cuentaId){
   // NO (ya cuentan como gasto del mes). La comparación mes a mes usa este valor: el mes
   // anterior siempre está cerrado, así que se compara sin reincorporar de ese lado.
   const disponibleLibre = disponible + (esMesCerrado(refDate) ? 0 : cuotasPendientesDelMes(refDate, cuentaId));
+  // Tanda AC: catTotals/gastoTotal (comparación mes a mes, categoría con mayor
+  // variación, categorías en alerta) usan las cuotas que CUENTAN este mes — mismo
+  // criterio que T.cuotasGasto — vía el helper único cuotasPorCategoriaGastoDelMes().
+  // `cuotas`/`cuotasPorCat` de arriba quedan intactas: las usa la fórmula de
+  // disponible/disponibleLibre, que ya reincorpora las pendientes por su cuenta y no
+  // debe tocarse.
+  const cuotasPorCatGasto = cuotasPorCategoriaGastoDelMes(refDate, cuentaId);
+  const cuotasGasto = Object.values(cuotasPorCatGasto).reduce((s,v)=> s + v, 0);
   const catTotals = {};
   normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
-  Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
+  Object.keys(cuotasPorCatGasto).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCatGasto[c]);
   const gastoTotal = Object.values(catTotals).reduce((s,v)=> s + v, 0);
-  return { ingresos, gastos, cuotas, aportesMetas, saldoAnterior, transferenciasNetas, disponible, disponibleLibre, catTotals, gastoTotal };
+  return { ingresos, gastos, cuotas, cuotasGasto, aportesMetas, saldoAnterior, transferenciasNetas, disponible, disponibleLibre, catTotals, gastoTotal };
 }
 // ¿El mes tiene algún movimiento propio? (define si se puede comparar contra él).
 // Tanda C2: `cuentaId` opcional al final. Sin él (o 'total') es idéntico a hoy. Con un id
@@ -6466,8 +6526,16 @@ function proyeccionFinDeMes(refDate, cuentaId){
     getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=> push(e, 'gasto'));
     getIncomesForMonth(refDate, cuentaId).forEach(i=> push(i, 'ingreso'));
   }
+  // Tanda AC · fix del bug de yaOcurrio(): a diferencia de los gastos/fijos de arriba
+  // (donde el criterio de fecha SÍ es correcto), una CUOTA no se da por "ya realizada"
+  // porque su día del mes ya pasó — solo cuenta si está confirmada (c.paid =
+  // isManuallyPaid). Si el día pasó pero sigue sin confirmar, es "conocida pero no
+  // realizada" (fijosCuotasRestantes), igual que un fijo futuro conocido. En mes CERRADO
+  // todas cuentan igual (Tanda R3: ya son gasto del mes, confirmadas o no) y en un mes
+  // futuro ninguna todavía — mismos casos límite que ya resolvía yaOcurrio() arriba.
   cuotasVirtualesHistorial(refDate, cuentaId).forEach(c=>{
-    if(yaOcurrio(c.date)) gastosRealizados += c.amount;
+    const realizada = mkRef < mkHoy ? true : (mkRef > mkHoy ? false : c.paid);
+    if(realizada) gastosRealizados += c.amount;
     else fijosCuotasRestantes += c.amount;
   });
 
@@ -6700,7 +6768,8 @@ function renderInsights(){
     cmpRow('Ingresos', data.ingresos, prevData.ingresos, true, 'mv-ingreso') +
     // Tanda O · punto 4: "Gastos" = contado + cuotas, igual que el mini-stat del
     // balance-card. data.disponible NO se toca (resta gastos y cuotas por separado).
-    cmpRow('Gastos', data.gastos + data.cuotas, prevData.gastos + prevData.cuotas, false, 'mv-gasto') +
+    // Tanda AC: usa cuotasGasto (solo las que cuentan este mes), no cuotas (todas).
+    cmpRow('Gastos', data.gastos + data.cuotasGasto, prevData.gastos + prevData.cuotasGasto, false, 'mv-gasto') +
     // Tanda R · pto 6: usa disponibleLibre (mismo criterio que la cifra grande del
     // Resumen: cuotas solo restadas si están pagadas) para AMBOS meses. Antes usaba
     // data.disponible, que descontaba las cuotas sin confirmar y daba una cifra
@@ -7248,6 +7317,12 @@ function historialDetalleOn(){ return !state.config || state.config.historialDet
 //    el Disponible de este mes)
 // En vista de gráfico (barra/torta) la búsqueda no filtra la lista: ahí se muestran los
 // totales del mes completo (resumenTotalesDelMes), sin fórmula paralela.
+// Tanda AC: a propósito NO usa el criterio nuevo de T.cuotasGasto/cuotasPorCategoriaGastoDelMes
+// (el Resumen ahora cuenta, en mes en curso/futuro, solo las cuotas CONFIRMADAS). Este
+// total sigue sumando TODAS las cuotas del mes, confirmadas o no — el Historial es un
+// registro de lo devengado, no de lo confirmado. Por eso, con cuotas del mes sin
+// confirmar, el Total Gasto de acá puede diferir del "Gastos" del Resumen: es
+// divergencia intencional, no un bug para "arreglar" sin revisar esta nota primero.
 function histTotalesVisibles(){
   let gastos = 0, ingresos = 0;
   if(hTab !== 'ingresos'){
@@ -9862,6 +9937,10 @@ function renderPieChart(container, data, opts){
 }
 
 // Gasto por categoría del mes (normales + cuotas), como objeto {cat: total}. Solo para gráficos.
+// Tanda AC: a propósito NO usa cuotasPorCategoriaGastoDelMes() (el criterio nuevo del
+// Resumen, que en mes en curso/futuro solo cuenta cuotas CONFIRMADAS). Esta torta sigue
+// sumando TODAS las cuotas del mes — mismo criterio devengado que histTotalesVisibles(),
+// con la misma divergencia intencional frente al Resumen cuando hay cuotas sin confirmar.
 function gastoPorCategoriaData(refDate){
   const cta = ctaVista();   // Tanda C3: la torta del Historial respeta el selector de cuenta
   const ct = {};
