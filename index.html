@@ -1492,24 +1492,19 @@ button:active{ transform:scale(0.97); }
    — no es una alerta, solo el tono ya asociado a montos de gasto en la app. */
 .insight-dow-mayor{color:var(--mv-gasto); font-weight:600;}
 
-/* Tanda V · pto 1: "x" para descartar un insight por el día. El descarte NO es
-   permanente — reaparece a la medianoche local si la condición sigue vigente. La
-   tarjeta lleva position:relative (clase .insight-dismiss) y reserva un hueco a la
-   derecha para que el texto no quede bajo el botón. El semáforo y el título NO se
-   descartan: son el mínimo que queda si el usuario cierra todo. */
-.insight-dismiss{position:relative;}
-.insight-x{
-  position:absolute; top:5px; right:5px; z-index:1;
-  width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;
-  background:transparent; border:0; border-radius:7px; cursor:pointer;
-  color:var(--cream-dim); font-size:15px; line-height:1; -webkit-tap-highlight-color:transparent;
-}
-.insight-x:active{transform:scale(0.9);}
-:root.hc .insight-x{color:var(--cream);}
-.insight-frase.insight-dismiss > p:first-of-type{padding-right:24px;}
-.insight-cuota-libre.insight-dismiss{padding-right:32px;}
-.insight-block.insight-dismiss > .insight-block-title{padding-right:26px;}
-.insight-todo-descartado{margin-top:6px;}
+/* CAMBIO A: el descarte individual por "x" (insight-x/insight-dismiss) se retira —
+   ahora el único control de visibilidad es el desplegable "Alertas Financieras"
+   (.insights-alertas, GRUPO 2), que reutiliza el patrón .cfg-group de Configuración.
+   Arranca siempre abierto porque el atributo `open` se escribe en cada render de
+   renderInsights(); no se guarda ningún estado de colapsado. */
+.insights-alertas{border-top:1px solid var(--border); border-bottom:none; margin-top:2px;}
+.insights-alertas > summary{padding-top:11px;}
+
+/* ---------- RESUMEN: CAMBIO B — Proyección de tendencia (regresión lineal) ---------- */
+.tendencia-wrap{margin-top:22px;}
+.tendencia-wrap .section-title{margin-bottom:12px;}
+.tendencia-seg{margin-bottom:12px;}
+.tendencia-chart{margin-bottom:2px;}
 
 /* ---------- METAS: racha de cumplimiento del aporte automático ---------- */
 .goal-racha{
@@ -1659,6 +1654,7 @@ button:active{ transform:scale(0.97); }
     <div id="rCategorias"></div>
     <div class="chart-box" id="rChart" style="display:none;"></div>
     <div class="insights-wrap" id="rInsights" style="display:none;"></div>
+    <div class="tendencia-wrap" id="rTendencia"></div>
   </div>
 
   <!-- HISTORIAL -->
@@ -6287,6 +6283,7 @@ function renderResumen(){
   renderDonaResumen(dona);
   renderResumenDetalle();
   renderInsights();
+  renderTendencia();
 }
 
 /* ==================== TANDA R · RENDER DE LA DONA DE GASTOS (pto 3) ====================
@@ -6679,42 +6676,18 @@ function patronGastoSemana(refDate, cuentaId){
   return { promFinde, promSemana, mayor, promMayor, promMenor, deltaPct };
 }
 
-/* ==================== TANDA V · pto 1 — DESCARTAR INSIGHTS ====================
-   Cada tarjeta del carrusel de insights lleva una "x". Al tocarla, el insight se
-   oculta por lo que queda del día y reaparece a la MEDIANOCHE LOCAL (no 24 h
-   después) si su condición sigue vigente — no es un descarte permanente.
-
-   Dónde se guarda: state.config.insightsDescartados, junto al resto de
-   preferencias de UI (resumenDetalle, historialDetalle, fontScale…). Estructura:
-       { fecha: "YYYY-MM-DD", ids: ["frase-mes", ...] }
-   Es un bucket de UN solo día: al guardar se reescribe entero con la fecha de hoy,
-   así nunca acumula días anteriores. Al leer, solo cuenta si `fecha` es la de hoy;
-   cualquier bucket de otro día se ignora (y se purga en loadState/migrateBackup).
-   Un respaldo viejo sin el campo funciona igual: se lee como "nada descartado".
-
-   Los ids son ESTABLES y no dependen del texto ni del monto (si dependieran, un
-   cambio de cifra "revive" el insight el mismo día):
-       frase-mes            → frase resumen del mes (cualquiera de sus variantes)
-       cuota-libre-<mk>     → aviso de cuota terminada, uno por mes de término
-       comparacion-mes      → bloque "Comparación con el mes anterior"
-       variacion-categoria  → bloque "Categoría con mayor variación"
-       proyeccion-fin-mes   → bloque "Proyección de fin de mes"
-   El semáforo y el título NO se descartan: son lo que queda si se cierra todo. */
+/* ==================== CAMBIO A — insightsDescartados queda INERTE ====================
+   Hasta esta tanda cada tarjeta llevaba una "x" (insight-x) que la ocultaba por el
+   resto del día, guardando { fecha, ids } en state.config.insightsDescartados. Ese
+   mecanismo se retira: el único control de visibilidad ahora es el desplegable
+   "Alertas Financieras" (ver renderInsights). El campo insightsDescartados NO se migra
+   ni se borra — un respaldo viejo que lo traiga simplemente deja de leerse y de
+   escribirse (queda como dato muerto). fechaHoyLocalISO() se conserva porque
+   loadState/migrateBackup todavía la usan para sanear ese campo en respaldos
+   importados (ver esas dos funciones). */
 function fechaHoyLocalISO(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-function insightsDescartadosHoy(){
-  const b = state.config && state.config.insightsDescartados;
-  if(!b || typeof b !== 'object' || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)) return new Set();
-  return new Set(b.ids);
-}
-function descartarInsight(id){
-  const cur = insightsDescartadosHoy();   // ya filtrado a hoy: descarta cualquier resto de días previos
-  cur.add(id);
-  state.config.insightsDescartados = { fecha: fechaHoyLocalISO(), ids: [...cur] };
-  saveState();
-  renderInsights();
 }
 
 function renderInsights(){
@@ -6747,8 +6720,6 @@ function renderInsights(){
   const hayAlerta = alertas.length > 0;
   const disp = proy.dispProyectado;
   const nombreMes = d => MESES[d.getMonth()] + ' ' + d.getFullYear();
-  // Tanda V · pto 1: botón "x" que llevan las tarjetas descartables (ver descartarInsight).
-  const xIns = `<button type="button" class="insight-x" aria-label="Descartar por hoy" title="Descartar por hoy">${icon('x')}</button>`;
   // Tanda S · pto 3: el ayudante local "signedMoney" que estaba acá duplicaba money()
   // (mismo resultado: money() ya pone el signo antes del "$"). Se unifica — se llama
   // money() directo en todo este bloque.
@@ -6794,7 +6765,7 @@ function renderInsights(){
   } else {
     frase = 'Vas bien encaminado este mes.';
   }
-  const fraseHtml = `<div class="insight-frase insight-dismiss${fraseCTA ? ' insight-frase-cta' : ''}" data-insight-id="frase-mes">${xIns}<p>${frase}</p>${
+  const fraseHtml = `<div class="insight-frase${fraseCTA ? ' insight-frase-cta' : ''}"><p>${frase}</p>${
     fraseCTA ? `<button type="button" class="insight-frase-btn" id="insightRegistrarIngresoBtn">Registrar ingreso</button>` : ''
   }</div>`;
 
@@ -6807,11 +6778,11 @@ function renderInsights(){
   // cuántas cuotas terminan, así un recálculo de la cifra no lo "revive" el mismo día.
   const cuotaLibreCards = deudasQueTerminanPronto().map(g=>{
     const mesNom = MESES[g.mk % 12].toLowerCase();
-    return { id: 'cuota-libre-' + g.mk, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="cuota-libre-${g.mk}">${xIns}${
+    return `<div class="insight-cuota-libre">${
       g.count > 1
         ? `En ${mesNom} terminan ${g.count} cuotas y se te liberan ${money(g.total)} al mes.`
         : `En ${mesNom} se te liberan ${money(g.total)} al mes.`
-    }</div>` };
+    }</div>`;
   });
 
   // ---- c) Comparación mes a mes ----
@@ -6860,7 +6831,7 @@ function renderInsights(){
   const cmpEstadosHtml = `<p class="insight-nodata">${nombreMes(currentDate)} (${estadoTxt(esMesCerrado(currentDate))})${
     prevTiene ? ` vs. ${nombreMes(prevDate)} (${estadoTxt(esMesCerrado(prevDate))})` : ''
   }</p>`;
-  const cmpHtml = `<div class="insight-block insight-dismiss" data-insight-id="comparacion-mes">${xIns}<p class="insight-block-title">Comparación con el mes anterior</p>${cmpEstadosHtml}${cmpBody}</div>`;
+  const cmpHtml = `<div class="insight-block"><p class="insight-block-title">Comparación con el mes anterior</p>${cmpEstadosHtml}${cmpBody}</div>`;
 
   // ---- d) Categoría con mayor variación ----
   let varBody;
@@ -6875,7 +6846,7 @@ function renderInsights(){
     if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${dec.cat}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
     varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin cambios de categoría respecto al mes anterior.</p>`;
   }
-  const varHtml = `<div class="insight-block insight-dismiss" data-insight-id="variacion-categoria">${xIns}<p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
+  const varHtml = `<div class="insight-block"><p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
 
   // ---- e) Proyección de fin de mes + categorías en alerta ----
   // Tanda CAMBIO 1: proy.dispProyectado resta TODAS las cuotas del mes, confirmadas o
@@ -6925,7 +6896,7 @@ function renderInsights(){
   const ingEstDesc = ingEst
     ? (ingEst.esHabitual ? 'tu ingreso habitual' : 'según ' + MESES[ingEst.meses[0].date.getMonth()].toLowerCase())
     : '';
-  const proyHtml = `<div class="insight-block insight-dismiss" data-insight-id="proyeccion-fin-mes">${xIns}
+  const proyHtml = `<div class="insight-block">
     <p class="insight-block-title">Proyección de fin de mes</p>
     <div class="insight-proy-main${disp < 0 ? ' neg' : ''}">
       <span>Disponible proyectado${ingEst ? ' <span class="insight-proy-est-tag">estimado</span>' : ''}</span><b>${money(disp)}</b>
@@ -6955,7 +6926,7 @@ function renderInsights(){
   // montoCuotasSinConfirmar arriba (cerradoActual ? 0 : ...): no tiene sentido
   // "confirmar" retroactivamente algo que la app ya no reincorpora al Disponible.
   const cuotasPorConfirmar = cerradoActual ? { count:0, total:0 } : cuotasSinConfirmarDelMes(currentDate, cta);
-  const cuotasPorConfirmarHtml = cuotasPorConfirmar.count > 0 ? `<div class="insight-frase insight-dismiss insight-frase-cta" data-insight-id="cuotas-por-confirmar">${xIns}<p>Este mes tienes ${cuotasPorConfirmar.count===1 ? '1 cuota por confirmar' : cuotasPorConfirmar.count+' cuotas por confirmar'}, por ${money(cuotasPorConfirmar.total)}.</p><button type="button" class="insight-frase-btn" id="insightIrCuotasBtn">Ir a Cuotas</button></div>` : '';
+  const cuotasPorConfirmarHtml = cuotasPorConfirmar.count > 0 ? `<div class="insight-frase insight-frase-cta"><p>Este mes tienes ${cuotasPorConfirmar.count===1 ? '1 cuota por confirmar' : cuotasPorConfirmar.count+' cuotas por confirmar'}, por ${money(cuotasPorConfirmar.total)}.</p><button type="button" class="insight-frase-btn" id="insightIrCuotasBtn">Ir a Cuotas</button></div>` : '';
 
   // ---- g) Insight NUEVO: patrón de gasto por día de la semana ----
   // Exploratorio y sin relación con el resto (no depende de cuotas/proyección) — va al
@@ -6965,37 +6936,37 @@ function renderInsights(){
     const mayorLbl = dowData.mayor === 'finde' ? 'el fin de semana' : 'entre semana';
     const menorLbl = dowData.mayor === 'finde' ? 'entre semana' : 'el fin de semana';
     const pctTxt = dowData.deltaPct === null ? '' : ` (+${dowData.deltaPct}%)`;
-    return `<div class="insight-frase insight-dismiss" data-insight-id="patron-semana">${xIns}<p>Gastas más <span class="insight-dow-mayor">${mayorLbl}</span>: ${money(dowData.promMayor)}/día vs. ${money(dowData.promMenor)}/día ${menorLbl}${pctTxt}.</p></div>`;
+    return `<div class="insight-frase"><p>Gastas más <span class="insight-dow-mayor">${mayorLbl}</span>: ${money(dowData.promMayor)}/día vs. ${money(dowData.promMenor)}/día ${menorLbl}${pctTxt}.</p></div>`;
   })() : '';
 
-  // Tanda V · pto 1: tarjetas descartables por el día. El semáforo y el título quedan
-  // siempre — son el mínimo que se ve si el usuario cierra todo (nunca un contenedor
-  // vacío con separadores colgando). Si se descartaron todas, un aviso breve lo explica.
-  const descHoy = insightsDescartadosHoy();
-  const descartables = [
-    { id: 'frase-mes', html: fraseHtml },
+  // ---- CAMBIO A: GRUPO 1 (núcleo fijo) + GRUPO 2 (desplegable "Alertas Financieras") ----
+  // Núcleo, siempre visible y sin botón de ocultar: semáforo, frase del mes y "cuotas
+  // por confirmar" (en ese orden). El resto de insights de antes va dentro de un
+  // <details class="cfg-group"> — mismo patrón que Configuración — que se reconstruye
+  // con `open` en cada render: no hay estado de colapsado que recordar, siempre abre
+  // expandido al entrar a Resumen o al cambiar de mes.
+  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml;
+  const grupo2Items = [
     ...cuotaLibreCards,
-    { id: 'comparacion-mes', html: cmpHtml },
-    { id: 'variacion-categoria', html: varHtml },
-    { id: 'proyeccion-fin-mes', html: proyHtml },
-    ...(cuotasPorConfirmar.count > 0 ? [{ id: 'cuotas-por-confirmar', html: cuotasPorConfirmarHtml }] : []),
-    ...(dowData ? [{ id: 'patron-semana', html: dowHtml }] : [])
+    cmpHtml,
+    varHtml,
+    proyHtml,
+    ...(dowData ? [dowHtml] : [])
   ];
-  const visibles = descartables.filter(c=> !descHoy.has(c.id));
-  const cuerpo = visibles.length
-    ? visibles.map(c=> c.html).join('')
-    : `<p class="insight-nodata insight-todo-descartado">Descartaste los insights de hoy. Vuelven mañana.</p>`;
+  // En la práctica cmpHtml/varHtml/proyHtml siempre traen contenido (con su propio
+  // texto de "sin datos aún" cuando corresponde) — este mensaje es un respaldo si algún
+  // día alguno de los tres deja de ser incondicional.
+  const grupo2Body = grupo2Items.length
+    ? grupo2Items.join('')
+    : `<p class="insight-nodata">Nada que destacar por ahora.</p>`;
+  const grupo2Html = `<details class="cfg-group insights-alertas" open>
+    <summary>Alertas Financieras <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+    <div class="cfg-group-body">${grupo2Body}</div>
+  </details>`;
 
   box.innerHTML =
     `<p class="section-title">Insights financieros · ${nombreMes(currentDate)}</p>` +
-    semHtml + cuerpo;
-
-  box.querySelectorAll('.insight-x').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const card = btn.closest('[data-insight-id]');
-      if(card && card.dataset.insightId) descartarInsight(card.dataset.insightId);
-    });
-  });
+    semHtml + grupo1Html + grupo2Html;
 
   const registrarBtn = box.querySelector('#insightRegistrarIngresoBtn');
   if(registrarBtn) registrarBtn.addEventListener('click', ()=> openIngresoForm(null));
@@ -7009,6 +6980,123 @@ function renderInsights(){
     if(sem) sem.classList.add('sem-pulse');
   }
   lastSemEstado = semEstado;
+}
+
+/* ==================== CAMBIO B — PROYECCIÓN DE TENDENCIA (regresión lineal) ====================
+   Sección aparte de Insights (no comparte guardarraíles ni HTML con GRUPO 1/GRUPO 2).
+   Junta, mes a mes, los DOS totales que ya calcula resumenTotalesDelMes() como fuente
+   única — T.gastos + T.cuotasGasto ("Gasto total") y T.dispLibre ("Disponible") — para
+   cada mes CERRADO desde el "mes de inicio de registro" (o el primer mes con datos si
+   no hay uno definido) hasta el mes anterior al REAL de hoy. Usa mesActualReal(), NO
+   currentDate: la tendencia es la misma sin importar qué mes esté navegando el usuario
+   en el resto del Resumen. Sobre esos puntos ajusta una recta por mínimos cuadrados y
+   la proyecta 3 meses hacia delante. Respeta la cuenta activa (ctaVista()), igual que
+   el resto del Resumen — resumenTotalesDelMes() ya filtra por cuentaId. No recalcula
+   ningún término propio: solo lee resumenTotalesDelMes() mes a mes. */
+let tendenciaVar = 'gastos';   // 'gastos' | 'disponible' — toggle en memoria, no se persiste
+const TENDENCIA_MESES_PROYECTADOS = 3;
+function mesesCerradosParaTendencia(cta){
+  const fin = monthKey(mesActualReal()) - 1;                        // último mes YA cerrado
+  const inicio = mesInicioRegistroMk() ?? primerMesConDatos();
+  if(inicio === null || fin < inicio) return [];
+  const out = [];
+  for(let mk = inicio; mk <= fin; mk++){
+    const d = new Date(Math.floor(mk/12), mk%12, 1);
+    const T = resumenTotalesDelMes(d, cta);
+    out.push({ mk, date: d, gastos: T.gastos + T.cuotasGasto, disponible: T.dispLibre });
+  }
+  return out;
+}
+// Mínimos cuadrados, fórmula cerrada con las 4 sumatorias: y = m·x + b. `x` es el
+// ÍNDICE del mes dentro de la serie (0..n-1), no el monthKey crudo — la recta es la
+// misma, pero los números quedan chicos y fáciles de verificar a mano.
+function regresionLineal(valores){
+  const n = valores.length;
+  let sx=0, sy=0, sxy=0, sxx=0;
+  valores.forEach((y,x)=>{ sx+=x; sy+=y; sxy+=x*y; sxx+=x*x; });
+  const den = n*sxx - sx*sx;
+  const m = den === 0 ? 0 : (n*sxy - sx*sy) / den;
+  const b = (sy - m*sx) / n;
+  return { m, b };
+}
+function avisoConfianzaTendencia(n){
+  // Umbrales (CAMBIO B): <6 meses = confianza baja (aviso explícito); 6-9 = moderada
+  // (aviso más suave); ≥10 = sin aviso, la muestra ya se considera sólida.
+  if(n < 6) return `<p class="chart-note">Con ${n} meses cerrados, esta proyección tiene confianza baja — mejora con más historial registrado.</p>`;
+  if(n < 10) return `<p class="chart-note">Con ${n} meses cerrados, esta proyección tiene confianza moderada — se afina con más historial.</p>`;
+  return '';
+}
+function dibujarTendenciaSvg(meses, valores, proyValores, m, b){
+  const n = meses.length;
+  const totalPts = n + proyValores.length;
+  const todos = valores.concat(proyValores);
+  const w = 300, h = 150, padL = 8, padR = 8, padT = 10, padB = 22;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const minV = Math.min(0, ...todos), maxV = Math.max(0, ...todos);
+  const rango = (maxV - minV) || 1;
+  const xAt = i => padL + (totalPts <= 1 ? 0 : (i/(totalPts-1)) * plotW);
+  const yAt = v => padT + plotH - ((v - minV) / rango) * plotH;
+  const step = Math.max(1, Math.ceil(totalPts/6));   // deja ~6 etiquetas como máximo a 375px
+  const labelFor = i=>{
+    if(i < n) return MESES[meses[i].date.getMonth()].slice(0,3);
+    const base = meses[n-1].date;
+    const fd = new Date(base.getFullYear(), base.getMonth() + (i-n+1), 1);
+    return MESES[fd.getMonth()].slice(0,3);
+  };
+  const ejeCero = (minV < 0 && maxV > 0)
+    ? `<line x1="${padL}" y1="${yAt(0).toFixed(1)}" x2="${w-padR}" y2="${yAt(0).toFixed(1)}" class="tend-zero"/>`
+    : '';
+  const lineaReal = `<line x1="${xAt(0).toFixed(1)}" y1="${yAt(m*0+b).toFixed(1)}" x2="${xAt(n-1).toFixed(1)}" y2="${yAt(m*(n-1)+b).toFixed(1)}" class="tend-line"/>`;
+  const lineaProy = totalPts > n
+    ? `<line x1="${xAt(n-1).toFixed(1)}" y1="${yAt(m*(n-1)+b).toFixed(1)}" x2="${xAt(totalPts-1).toFixed(1)}" y2="${yAt(m*(totalPts-1)+b).toFixed(1)}" class="tend-line tend-proy"/>`
+    : '';
+  const puntos = valores.map((v,i)=> `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(v).toFixed(1)}" r="3" class="tend-punto"/>`).join('');
+  const puntosProy = proyValores.map((v,i)=> `<circle cx="${xAt(n+i).toFixed(1)}" cy="${yAt(v).toFixed(1)}" r="3" class="tend-punto tend-punto-proy"/>`).join('');
+  const labels = [];
+  for(let i=0; i<totalPts; i++){
+    if(i % step !== 0 && i !== totalPts-1 && i !== n-1 && i !== n) continue;
+    labels.push(`<text x="${xAt(i).toFixed(1)}" y="${h-6}" text-anchor="middle" class="tend-lbl">${labelFor(i)}</text>`);
+  }
+  return `<div class="chart-box tendencia-chart"><svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .tend-line{stroke:var(--gold); stroke-width:2; stroke-linecap:round;}
+      .tend-proy{stroke-dasharray:5 4; opacity:.7;}
+      .tend-punto{fill:var(--gold);}
+      .tend-punto-proy{fill:var(--surface-2); stroke:var(--gold); stroke-width:1.5;}
+      .tend-zero{stroke:var(--border); stroke-width:1; stroke-dasharray:2 3;}
+      .tend-lbl{fill:var(--cream-dim); font:9.5px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+    </style>
+    ${ejeCero}${lineaReal}${lineaProy}${puntos}${puntosProy}${labels.join('')}
+  </svg></div>`;
+}
+function renderTendencia(){
+  const box = document.getElementById('rTendencia');
+  if(!box) return;
+  const cta = ctaVista();
+  const meses = mesesCerradosParaTendencia(cta);
+  const seg = `<div class="toggle-row tendencia-seg" id="rTendenciaSeg">
+    <button type="button" class="toggle-opt${tendenciaVar==='gastos'?' active':''}" data-tendvar="gastos" aria-pressed="${tendenciaVar==='gastos'}">Gasto total</button>
+    <button type="button" class="toggle-opt${tendenciaVar==='disponible'?' active':''}" data-tendvar="disponible" aria-pressed="${tendenciaVar==='disponible'}">Disponible</button>
+  </div>`;
+  let cuerpo;
+  if(meses.length < 2){
+    cuerpo = emptyMsg('Necesitas al menos 2 meses cerrados para ver una proyección.');
+  } else {
+    const valores = meses.map(mm=> mm[tendenciaVar]);
+    const { m, b } = regresionLineal(valores);
+    const n = valores.length;
+    const proyValores = [];
+    for(let x = n; x < n + TENDENCIA_MESES_PROYECTADOS; x++) proyValores.push(m*x + b);
+    cuerpo = dibujarTendenciaSvg(meses, valores, proyValores, m, b) + avisoConfianzaTendencia(n);
+  }
+  box.innerHTML = `<p class="section-title">Proyección de tendencia</p>${seg}${cuerpo}`;
+  box.querySelectorAll('[data-tendvar]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(tendenciaVar === btn.dataset.tendvar) return;
+      tendenciaVar = btn.dataset.tendvar;
+      renderTendencia();
+    });
+  });
 }
 
 /* ==================== DETALLE DE CATEGORÍA (desde Resumen) ==================== */
