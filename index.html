@@ -508,10 +508,13 @@ button{font-family:inherit;}
 .debt-manual-note .icon{width:13px; height:13px;}
 /* Tanda J: fila de total al pie de la lista de Cuotas (Activas / Pagadas). Contenedor
    como .debt-card; tipografía de la clave/valor tomada de .dd-row.dd-total del Resumen. */
+/* Corrección Tanda AA · Cambio B: pasa de ir al pie de la lista (margin-top) a ir
+   arriba, antes de la primera tarjeta — mismo espaciado que separa dos .debt-card
+   entre sí (12px), ahora como margin-bottom. */
 .cuotas-total{
   display:flex; justify-content:space-between; align-items:baseline; gap:12px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
-  padding:13px 16px; margin-top:4px;
+  padding:13px 16px; margin-bottom:12px;
 }
 .cuotas-total-k{
   font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--cream);
@@ -823,9 +826,16 @@ button{font-family:inherit;}
 .int-disclaimer{font-size:11.5px; color:var(--gold-dim); margin:-4px 0 14px;}
 
 /* ---------- BOTTOM NAV (con botón de acción central) ---------- */
+/* Fix Tanda AA · Cambio A: .bottom-zone es position:fixed pero no tenía z-index, así
+   que quedaba al nivel "auto" (equivalente a 0) del stacking context de #app. Cualquier
+   contenido con scroll que declarara un z-index propio mayor a 0 —como la "x" de
+   descartar insights (.insight-x, z-index:1) o el lápiz de editar meta (.card-edit,
+   z-index:2)— terminaba pintándose ENCIMA de la barra al hacer scroll hasta quedar cerca
+   de ella. z-index:10 la deja siempre por delante de esos elementos y por debajo de
+   cualquier overlay real (sheets 50, blocker/toast 120, confetti 200). */
 .bottom-zone{
   position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:480px;
-  padding-bottom:env(safe-area-inset-bottom);
+  padding-bottom:env(safe-area-inset-bottom); z-index:10;
 }
 .navbar{
   background:var(--surface); border-top:1px solid var(--border);
@@ -1672,6 +1682,7 @@ button:active{ transform:scale(0.97); }
           <option value="cuotas">Cuotas</option>
           <option value="contado">Contado</option>
           <option value="credito">Crédito</option>
+          <option value="fijos">Fijos</option>
         </select>
         <button class="hist-filter-btn" id="hFilterBtn" type="button" aria-label="Ordenar" aria-expanded="false">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -6172,10 +6183,17 @@ function renderResumen(){
     if(tope == null) return '';
     const pct = Math.max(0, Math.min(100, val / tope * 100));
     const over = val > tope;
+    // Corrección Tanda AA · Cambio D: monto restante para llegar al tope. Superado el
+    // tope, "$X restantes" ya no tiene sentido (daría negativo) — se cambia a "Superado
+    // por $X", más informativo que fijar "$0 restantes" y consistente con `.over` (que
+    // ya marca esta fila en rojo).
+    const restanteTxt = over
+      ? `Superado por ${money(val - tope)}`
+      : `${money(tope - val)} restantes`;
     return `
         <div class="cat-tope${over ? ' over' : ''}">
           <div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
-          <span class="cat-tope-txt">${money(val)} de ${money(tope)}</span>
+          <span class="cat-tope-txt">${money(val)} de ${money(tope)} · ${restanteTxt}</span>
         </div>`;
   };
   if(rows.length===0 && (chartView.resumen !== 'lista' || listaRows.length===0)){
@@ -6958,6 +6976,10 @@ function histPasaKind(row){
   if(hKindFilter === 'all') return true;
   if(hKindFilter === 'cuotas')  return histRowEsCuotaVence(row);
   if(hKindFilter === 'credito') return histRowEsCompraCredito(row);
+  // Corrección Tanda AA · Cambio C: 5ª opción del filtro, independiente de las otras
+  // cuatro (no reparte las filas en conjuntos disjuntos junto a ellas) — aísla gastos e
+  // ingresos con tipo === 'Fijo', el mismo campo que ya pinta el badge "Fijo".
+  if(hKindFilter === 'fijos')   return row && row.tipo === 'Fijo';
   return !histRowEsCuotaVence(row) && !histRowEsCompraCredito(row);   // 'contado'
 }
 // Filtro para un gasto (objeto de getExpensesForMonth): descripción AND categoría.
@@ -6973,6 +6995,12 @@ function histPasaGasto(e){
 function histPasaIngreso(i){
   if(!histMatchTexto((i.nombre || '') + ' ' + (i.description || '') + ' ' + (i.source || ''))) return false;
   if(hFilterCats.size > 0) return false;
+  // Corrección Tanda AA · Cambio C: "Fijos" es la única de las 5 opciones de tipo de pago
+  // que también aplica a ingresos (mismo campo tipo === 'Fijo' que ya usan los gastos).
+  // "Cuotas"/"Contado"/"Crédito" siguen sin tener sentido para un ingreso: cualquiera de
+  // esas tres deja la lista vacía, igual que antes.
+  if(hKindFilter === 'fijos') return i.tipo === 'Fijo';
+  if(hKindFilter !== 'all') return false;
   return true;
 }
 function updateHistCount(n){
@@ -7061,17 +7089,16 @@ function renderHistSearchControls(){
     car.dataset.key = '';
   }
 
-  // --- Filtro Cuotas / Gastos normales ---
-  // Solo tiene sentido donde hay gastos: pestañas "Gastos" y "Todo". En "Ingresos" se
-  // oculta (y hKindFilter ya vuelve a 'all' al cambiar de pestaña).
+  // --- Filtro Cuotas / Gastos normales / Fijos ---
+  // Corrección Tanda AA · Cambio C: "Cuotas"/"Contado"/"Crédito" solo tienen sentido donde
+  // hay gastos (Gastos / Todo) — "Fijos" en cambio también aplica a Ingresos (gastos e
+  // ingresos fijos existen por igual), así que el selector ya no se oculta en esa pestaña.
+  // Elegir una opción que no aplica ahí (Cuotas/Contado/Crédito) simplemente no deja
+  // ninguna fila, igual que ya pasaba con esas mismas opciones en la pestaña "Todo".
   const kindSel = document.getElementById('hKindSelect');
   if(kindSel){
-    const kindAplica = hTab !== 'ingresos';
-    kindSel.style.display = kindAplica ? '' : 'none';
-    if(kindAplica){
-      if(kindSel.value !== hKindFilter) kindSel.value = hKindFilter;
-      kindSel.classList.toggle('on', hKindFilter !== 'all');
-    }
+    if(kindSel.value !== hKindFilter) kindSel.value = hKindFilter;
+    kindSel.classList.toggle('on', hKindFilter !== 'all');
   }
 
   // --- Botón embudo (ordenar) + panel ---
@@ -7445,7 +7472,10 @@ function renderHistorialTodo(box){
   })).filter(i=>{
     if(!histMatchTexto((i.name || '') + ' ' + (i.description || '') + ' ' + (i.source || ''))) return false;
     if(hFilterCats.size > 0) return false;
-    if(hKindFilter !== 'all') return false;   // Cuotas / Gastos normales: los ingresos no son ninguno
+    // Corrección Tanda AA · Cambio C: "Fijos" sí aplica a ingresos; el resto de opciones
+    // de tipo de pago (Cuotas/Contado/Crédito) los sigue excluyendo, como ya pasaba.
+    if(hKindFilter === 'fijos'){ if(i.tipo !== 'Fijo') return false; }
+    else if(hKindFilter !== 'all') return false;
     return true;
   });
   // Filas virtuales de cuota (meses posteriores al de la compra): participan igual que
@@ -7713,12 +7743,17 @@ function renderCuotas(){
       if(b) b.addEventListener('click', abrirFormPrimeraCuota);
       return;
     }
-    box.innerHTML = emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.')
-      + cuotasTotalRow(0);
+    box.innerHTML = cuotasTotalRow(0)
+      + emptyMsg(cTab==='activas' ? 'No tienes cuotas activas este mes.' : 'No hay cuotas pagadas hasta este mes.');
     return;
   }
 
-  box.innerHTML = filtered.map(d=>{
+  // Corrección Tanda AA · Cambio B: el total pasa de ir al final del `.join('')` a ir
+  // ANTES del map, como primer elemento del string — mismo cálculo (suma de "por cuota"
+  // de `filtered`, ya heredando el filtro de cuenta de `debtsVista`), solo cambia su
+  // posición en el layout.
+  box.innerHTML = cuotasTotalRow(filtered.reduce((s,d)=> s + d.totalAmount/d.numCuotas, 0))
+    + filtered.map(d=>{
     const est = cuotaEstadoMes(d, refDate);
     const montoCuota = d.totalAmount/d.numCuotas;
     // T2: la deuda solo llega aquí si cuotaInfoForMonth != null (cuotaEstadoMes devuelve
@@ -7766,8 +7801,7 @@ function renderCuotas(){
         ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${d.id}">Ir a la compra original</button>` : ''}
       </div>
     </div>`;
-  }).join('')
-  + cuotasTotalRow(filtered.reduce((s,d)=> s + d.totalAmount/d.numCuotas, 0));
+  }).join('');
 
   // Barra de progreso de cada cuota: crece desde 0 hacia su valor al mostrarse (igual que Metas).
   const fills = box.querySelectorAll('.progress-fill');
@@ -8024,6 +8058,12 @@ function renderConfigList(key, boxId){
         inp.value = '';
       }
       saveState();
+      // Corrección Tanda AA · Cambio D: saveState() solo persiste en localStorage, no
+      // repinta nada — por eso la barra de "Gasto por categoría" del Resumen quedaba con
+      // el tope viejo hasta el próximo render (cambiar de mes, reabrir la app, etc.). NO
+      // se llama a renderConfig() (eso sí perdería foco/cursor del input, ver comentario
+      // arriba); renderResumen() es una pantalla distinta del DOM y no le afecta.
+      renderResumen();
     };
     inp.addEventListener('change', guardar);
     inp.addEventListener('blur', guardar);
@@ -9668,6 +9708,11 @@ function resetChartViews(){
 function syncHistDetalleBtn(){
   const btn = document.getElementById('tgHistorialDetalle');
   if(!btn) return;
+  // Corrección Tanda AA · Cambio C: "Detalle" expande/colapsa filas de la vista Lista —
+  // no tiene sentido (ni maqueta nada) en Torta o Barra, así que se oculta ahí. El
+  // estado guardado en state.config.historialDetalle NO se toca: al volver a Lista
+  // reaparece con la preferencia intacta.
+  btn.style.display = (chartView.historial === 'lista') ? '' : 'none';
   const on = historialDetalleOn();
   btn.classList.toggle('toggle-on', on);
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
