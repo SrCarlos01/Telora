@@ -6690,9 +6690,15 @@ function renderInsights(){
   // money() directo en todo este bloque.
 
   // ---- a) Semáforo de salud financiera ----
+  // Tanda CAMBIO 2: el umbral usa el ingreso PROYECTADO (proy.ingresosProy), no solo el
+  // registrado (data.ingresos). Si el mes no tiene ingreso registrado todavía pero sí
+  // fijos proyectados, data.ingresos = 0 colapsaba el umbral a $0 y el semáforo saltaba a
+  // verde con cualquier disp > 0, saltándose el margen del 10%. proy.ingresosProy ya cae
+  // de vuelta a data.ingresos cuando no hay estimado (ver proyeccionFinDeMes), así que el
+  // caso normal (con ingreso registrado) no cambia.
   let semEstado, semTxt;
   if(disp < 0){ semEstado = 'sem-rojo'; semTxt = 'en rojo'; }
-  else if(disp === 0 || disp < 0.10 * data.ingresos || hayAlerta){ semEstado = 'sem-ambar'; semTxt = 'en amarillo'; }
+  else if(disp === 0 || disp < 0.10 * proy.ingresosProy || hayAlerta){ semEstado = 'sem-ambar'; semTxt = 'en amarillo'; }
   else { semEstado = 'sem-verde'; semTxt = 'en verde'; }
   const semDot = c => `<span class="sem-dot ${c}${c === semEstado ? ' on' : ''}"></span>`;
   const semHtml = `<div class="insight-semaforo" role="img" aria-label="Salud financiera: ${semTxt}">${semDot('sem-verde')}${semDot('sem-ambar')}${semDot('sem-rojo')}</div>`;
@@ -6781,7 +6787,16 @@ function renderInsights(){
   } else if(data.aportesMetas > prevData.aportesMetas){
     cmpBody += `<p class="insight-motiv">Aportaste ${money(data.aportesMetas - prevData.aportesMetas)} más a tus metas que el mes pasado. ¡Sigue así!</p>`;
   }
-  const cmpHtml = `<div class="insight-block insight-dismiss" data-insight-id="comparacion-mes">${xIns}<p class="insight-block-title">Comparación con el mes anterior</p>${cmpBody}</div>`;
+  // Tanda CAMBIO 3: el comentario original asumía "el mes anterior siempre está cerrado",
+  // pero eso no es cierto si se navega a un mes futuro (ahí ambos lados quedan "en
+  // curso" según esMesCerrado()). El cálculo ya resolvía cada lado por separado — esto
+  // solo hace visible ese estado. Cada lado se evalúa con esMesCerrado() de forma
+  // independiente.
+  const estadoTxt = c => c ? 'cerrado' : 'en curso';
+  const cmpEstadosHtml = `<p class="insight-nodata">${nombreMes(currentDate)} (${estadoTxt(esMesCerrado(currentDate))})${
+    prevTiene ? ` vs. ${nombreMes(prevDate)} (${estadoTxt(esMesCerrado(prevDate))})` : ''
+  }</p>`;
+  const cmpHtml = `<div class="insight-block insight-dismiss" data-insight-id="comparacion-mes">${xIns}<p class="insight-block-title">Comparación con el mes anterior</p>${cmpEstadosHtml}${cmpBody}</div>`;
 
   // ---- d) Categoría con mayor variación ----
   let varBody;
@@ -6799,6 +6814,33 @@ function renderInsights(){
   const varHtml = `<div class="insight-block insight-dismiss" data-insight-id="variacion-categoria">${xIns}<p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
 
   // ---- e) Proyección de fin de mes + categorías en alerta ----
+  // Tanda CAMBIO 1: proy.dispProyectado resta TODAS las cuotas del mes, confirmadas o
+  // no, pero categoriasEnAlerta() decide con data.catTotals, que excluye las cuotas sin
+  // confirmar (ver cuotasPorCategoriaGastoDelMes). Aviso informativo aparte para que
+  // "Disponible proyectado bajo" + "ninguna categoría en alerta" no se lean como
+  // contradictorios. Reutiliza cuotasPendientesDelMes() (misma fuente que ya usa
+  // resumenTotalesDelMes/disponibleLibre) — sin recalcular el monto. En mes CERRADO no
+  // aplica: ahí categoriasEnAlerta() ya cuenta TODAS las cuotas (cuotasPorCategoriaGastoDelMes
+  // usa cerrado=true), así que no hay nada que aclarar.
+  const cerradoActual = esMesCerrado(currentDate);
+  const montoCuotasSinConfirmar = cerradoActual ? 0 : cuotasPendientesDelMes(currentDate, cta);
+  let catsCuotaSinConfirmar = new Set();
+  if(montoCuotasSinConfirmar > 0){
+    state.debts.forEach(d=>{
+      if(!itemEnVista(d, cta)) return;
+      const info = cuotaInfoForMonth(d, currentDate);
+      if(info && !cuotaPagadaDelMes(d, currentDate)) catsCuotaSinConfirmar.add(d.category);
+    });
+  }
+  const cuotasSinConfirmarHtml = montoCuotasSinConfirmar > 0 ? (()=>{
+    const soloCat = catsCuotaSinConfirmar.size === 1 ? [...catsCuotaSinConfirmar][0] : null;
+    // Solo redactado (verificación post-cierre): con 2+ categorías el aviso decía
+    // "cuotas sin confirmar" a secas, sin marcar que el monto es agregado — se leía
+    // como una omisión más que como una decisión. "en varias categorías" lo deja
+    // explícito sin listarlas todas.
+    const calif = soloCat ? ` de «${soloCat}»` : (catsCuotaSinConfirmar.size > 1 ? ' en varias categorías' : '');
+    return `<p class="insight-proy-detail">Hay ${money(montoCuotasSinConfirmar)} en cuotas sin confirmar${calif} este mes, ya incluidas en el Disponible proyectado.</p>`;
+  })() : '';
   const alertasHtml = alertas.length ? (
     `<p class="insight-alertas-title">Categorías en alerta</p>` +
     alertas.map(a=>{
@@ -6836,6 +6878,7 @@ function renderInsights(){
         `${r.tipo === 'ingreso' ? 'El ingreso' : 'El gasto'} «${r.nombre}» puede caer entre el ${r.diaInicio} y el ${r.diaFin} — aún sin confirmar.`
       ).join('<br>')
     }</p>` : ''}
+    ${cuotasSinConfirmarHtml}
     ${alertasHtml}
   </div>`;
 
