@@ -1487,6 +1487,11 @@ button:active{ transform:scale(0.97); }
 }
 :root.hc .insight-cuota-libre{border-width:2px;}
 
+/* Insight "patrón de gasto por día de la semana": destaca cuál de los dos baldes gasta
+   más, con el mismo color que usa el resto del Resumen para "gasto" (mv-gasto = danger)
+   — no es una alerta, solo el tono ya asociado a montos de gasto en la app. */
+.insight-dow-mayor{color:var(--mv-gasto); font-weight:600;}
+
 /* Tanda V · pto 1: "x" para descartar un insight por el día. El descarte NO es
    permanente — reaparece a la medianoche local si la condición sigue vigente. La
    tarjeta lleva position:relative (clase .insight-dismiss) y reserva un hueco a la
@@ -5846,6 +5851,20 @@ function cuotasPendientesDelMes(refDate, cuentaId){
   });
   return total;
 }
+// Insight "Cuotas por confirmar este mes": mismo criterio y misma fuente que
+// cuotasPendientesDelMes() (itemEnVista + cuotaInfoForMonth + cuotaPagadaDelMes), pero
+// además cuenta cuántas cuotas son — ese helper solo expone el monto. Solo lectura: no
+// lo usan Gastos/Cuotas/Disponible ni el aviso "Por confirmar" de la pestaña Cuotas.
+function cuotasSinConfirmarDelMes(refDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  let count = 0, total = 0;
+  state.debts.forEach(d=>{
+    if(!itemEnVista(d, cta)) return;
+    const info = cuotaInfoForMonth(d, refDate);
+    if(info && !cuotaPagadaDelMes(d, refDate)){ count++; total += info.monto; }
+  });
+  return { count, total };
+}
 // ¿`refDate` cae en un mes YA CERRADO? (anterior al mes real de hoy). En meses cerrados
 // la cuota que venció y no se confirmó ya no "queda por pagar": cuenta como gasto del
 // mes y NO se reincorpora al Disponible (Tanda R3). En el mes en curso y en los futuros
@@ -6615,6 +6634,51 @@ function deudasQueTerminanPronto(){
   return Array.from(porMes.values()).sort((a,b)=> a.mk - b.mk);
 }
 
+// Insight "Patrón de gasto por día de la semana": compara el promedio diario de gasto
+// de fin de semana (sáb+dom) contra el de entre semana (lun-vie).
+// "Gasto de contado del mes" = mismo conjunto que variableOcurrido en
+// proyeccionFinDeMes(): gastos normales sin debtId y sin tipo Fijo — el gasto variable
+// del día a día. Se excluyen cuotas (no son una decisión de gasto de ese día) y fijos
+// recurrentes (caen el mismo día del mes cada vez, no reflejan un patrón por día de
+// semana). Puramente informativo/derivado — no toca Gastos/Cuotas/Disponible.
+// Días transcurridos: mismo criterio que proyeccionFinDeMes() (mes cerrado -> mes
+// completo; mes en curso -> hasta hoy). Con menos de 7 días no hay garantía de haber
+// completado al menos un fin de semana Y un día de semana, así que la comparación no
+// es representativa todavía -> null (el insight no se muestra).
+// Fechas siempre parseadas con "T00:00:00" (mismo patrón que addMonths/cuotaVencidaPorFecha)
+// para fijar el día local y evitar corrimientos de zona horaria.
+function patronGastoSemana(refDate, cuentaId){
+  const hoy = new Date();
+  const mkRef = monthKey(refDate), mkHoy = monthKey(hoy);
+  const diasEnMes = new Date(refDate.getFullYear(), refDate.getMonth()+1, 0).getDate();
+  const diasTranscurridos = mkRef < mkHoy ? diasEnMes : (mkRef > mkHoy ? 0 : hoy.getDate());
+  if(diasTranscurridos < 7) return null;
+
+  let diasFinde = 0, diasSemana = 0;
+  for(let d=1; d<=diasTranscurridos; d++){
+    const dow = new Date(refDate.getFullYear(), refDate.getMonth(), d).getDay();
+    if(dow===0 || dow===6) diasFinde++; else diasSemana++;
+  }
+  if(diasFinde===0 || diasSemana===0) return null;   // mes recién empezado: falta un tipo de día completo
+
+  let totalFinde = 0, totalSemana = 0;
+  getExpensesForMonth(refDate, cuentaId).filter(e=> !e.debtId && e.tipo !== 'Fijo').forEach(e=>{
+    const dia = parseInt(e.date.slice(8,10), 10);
+    if(dia > diasTranscurridos) return;   // gasto registrado a futuro dentro del mes en curso: aún no cuenta
+    const dow = new Date(e.date+"T00:00:00").getDay();
+    if(dow===0 || dow===6) totalFinde += e.amount; else totalSemana += e.amount;
+  });
+
+  const promFinde = totalFinde / diasFinde;
+  const promSemana = totalSemana / diasSemana;
+  if(promFinde === promSemana) return null;   // sin diferencia que destacar
+  const mayor = promFinde > promSemana ? 'finde' : 'semana';
+  const promMayor = mayor==='finde' ? promFinde : promSemana;
+  const promMenor = mayor==='finde' ? promSemana : promFinde;
+  const deltaPct = promMenor > 0 ? Math.round((promMayor - promMenor) / promMenor * 100) : null;
+  return { promFinde, promSemana, mayor, promMayor, promMenor, deltaPct };
+}
+
 /* ==================== TANDA V · pto 1 — DESCARTAR INSIGHTS ====================
    Cada tarjeta del carrusel de insights lleva una "x". Al tocarla, el insight se
    oculta por lo que queda del día y reaparece a la MEDIANOCHE LOCAL (no 24 h
@@ -6882,6 +6946,28 @@ function renderInsights(){
     ${alertasHtml}
   </div>`;
 
+  // ---- f) Insight NUEVO: cuotas por confirmar este mes ----
+  // Justo después de "Proyección de fin de mes": ese bloque ya menciona el monto
+  // agregado de cuotas sin confirmar (cuotasSinConfirmarHtml, arriba — informativo, sin
+  // acción). Esta tarjeta va inmediatamente después con el mismo universo de datos pero
+  // ACCIONABLE: cuántas cuotas son (no solo el monto) y un botón directo a Cuotas para
+  // confirmarlas. En mes CERRADO no se muestra — mismo guardarraíl que ya usa
+  // montoCuotasSinConfirmar arriba (cerradoActual ? 0 : ...): no tiene sentido
+  // "confirmar" retroactivamente algo que la app ya no reincorpora al Disponible.
+  const cuotasPorConfirmar = cerradoActual ? { count:0, total:0 } : cuotasSinConfirmarDelMes(currentDate, cta);
+  const cuotasPorConfirmarHtml = cuotasPorConfirmar.count > 0 ? `<div class="insight-frase insight-dismiss insight-frase-cta" data-insight-id="cuotas-por-confirmar">${xIns}<p>Este mes tienes ${cuotasPorConfirmar.count===1 ? '1 cuota por confirmar' : cuotasPorConfirmar.count+' cuotas por confirmar'}, por ${money(cuotasPorConfirmar.total)}.</p><button type="button" class="insight-frase-btn" id="insightIrCuotasBtn">Ir a Cuotas</button></div>` : '';
+
+  // ---- g) Insight NUEVO: patrón de gasto por día de la semana ----
+  // Exploratorio y sin relación con el resto (no depende de cuotas/proyección) — va al
+  // final del carrusel, después de todo lo accionable/de alerta.
+  const dowData = patronGastoSemana(currentDate, cta);
+  const dowHtml = dowData ? (()=>{
+    const mayorLbl = dowData.mayor === 'finde' ? 'el fin de semana' : 'entre semana';
+    const menorLbl = dowData.mayor === 'finde' ? 'entre semana' : 'el fin de semana';
+    const pctTxt = dowData.deltaPct === null ? '' : ` (+${dowData.deltaPct}%)`;
+    return `<div class="insight-frase insight-dismiss" data-insight-id="patron-semana">${xIns}<p>Gastas más <span class="insight-dow-mayor">${mayorLbl}</span>: ${money(dowData.promMayor)}/día vs. ${money(dowData.promMenor)}/día ${menorLbl}${pctTxt}.</p></div>`;
+  })() : '';
+
   // Tanda V · pto 1: tarjetas descartables por el día. El semáforo y el título quedan
   // siempre — son el mínimo que se ve si el usuario cierra todo (nunca un contenedor
   // vacío con separadores colgando). Si se descartaron todas, un aviso breve lo explica.
@@ -6891,7 +6977,9 @@ function renderInsights(){
     ...cuotaLibreCards,
     { id: 'comparacion-mes', html: cmpHtml },
     { id: 'variacion-categoria', html: varHtml },
-    { id: 'proyeccion-fin-mes', html: proyHtml }
+    { id: 'proyeccion-fin-mes', html: proyHtml },
+    ...(cuotasPorConfirmar.count > 0 ? [{ id: 'cuotas-por-confirmar', html: cuotasPorConfirmarHtml }] : []),
+    ...(dowData ? [{ id: 'patron-semana', html: dowHtml }] : [])
   ];
   const visibles = descartables.filter(c=> !descHoy.has(c.id));
   const cuerpo = visibles.length
@@ -6911,6 +6999,9 @@ function renderInsights(){
 
   const registrarBtn = box.querySelector('#insightRegistrarIngresoBtn');
   if(registrarBtn) registrarBtn.addEventListener('click', ()=> openIngresoForm(null));
+
+  const irCuotasBtn = box.querySelector('#insightIrCuotasBtn');
+  if(irCuotasBtn) irCuotasBtn.addEventListener('click', ()=>{ cTab = 'activas'; switchScreen('cuotas'); });
 
   // Semáforo: un único pulso cuando el estado pasa a rojo (entrar, no en cada render).
   if(!prefersReducedMotion() && semEstado === 'sem-rojo' && lastSemEstado && lastSemEstado !== 'sem-rojo'){
