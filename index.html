@@ -1493,7 +1493,7 @@ button:active{ transform:scale(0.97); }
 .insight-dow-mayor{color:var(--mv-gasto); font-weight:600;}
 
 /* CAMBIO A: el descarte individual por "x" (insight-x/insight-dismiss) se retira —
-   ahora el único control de visibilidad es el desplegable "Alertas Financieras"
+   ahora el único control de visibilidad es el desplegable "Más insights"
    (.insights-alertas, GRUPO 2), que reutiliza el patrón .cfg-group de Configuración.
    Arranca siempre abierto porque el atributo `open` se escribe en cada render de
    renderInsights(); no se guarda ningún estado de colapsado. */
@@ -6495,9 +6495,21 @@ function ingresoEstimadoInfo(refDate, cuentaId){
   if(!meses.length) return null;
   return { meses, estimado: medianaValores(meses.map(m=> m.ingresos)), esHabitual: meses.length === 3 };
 }
+// Clasifica una fecha en 'finde' (sáb/dom) o 'semana'. Mismo criterio que ya usa
+// patronGastoSemana() (Insight B) para su comparación semana/fin de semana — se extrae
+// acá como función propia para que proyeccionFinDeMes() (CAMBIO C) lo reutilice sin
+// tocar patronGastoSemana() ni duplicar la clasificación día a día.
+function esFinDeSemana(date){
+  const dow = date.getDay();
+  return dow === 0 || dow === 6;
+}
 // e) Proyección de fin de mes. Dos partes: (1) fijos/cuotas restantes conocidos con
 // certeza; (2) gasto variable estimado = promedio diario de gasto NO fijo / NO cuota
-// extrapolado a los días que quedan. Total = ya realizado + restante conocido + estimado.
+// extrapolado a los días que quedan. CAMBIO C: el promedio diario se calcula por
+// separado para días de semana y de fin de semana (mismo patrón que patronGastoSemana,
+// Insight B) — evita que un desbalance semana/finde entre los días ya transcurridos y
+// los que quedan se arrastre a toda la proyección. Total = ya realizado + restante
+// conocido + estimado.
 function proyeccionFinDeMes(refDate, cuentaId){
   const data = insightsMesData(refDate, cuentaId);   // Tanda C2: `cuentaId` opcional al final
   const hoy = new Date();
@@ -6522,10 +6534,15 @@ function proyeccionFinDeMes(refDate, cuentaId){
   };
 
   let gastosRealizados = 0, fijosCuotasRestantes = 0, variableOcurrido = 0;
+  let variableOcurridoSemana = 0, variableOcurridoFinde = 0;   // CAMBIO C: split semana/finde
   getExpensesForMonth(refDate, cuentaId).filter(e=>!e.debtId).forEach(e=>{
     if(yaOcurrio(e)){
       gastosRealizados += e.amount;
-      if(e.tipo !== 'Fijo') variableOcurrido += e.amount;   // base del promedio diario
+      if(e.tipo !== 'Fijo'){
+        variableOcurrido += e.amount;   // base del promedio diario plano (respaldo)
+        if(esFinDeSemana(new Date(e.date+"T00:00:00"))) variableOcurridoFinde += e.amount;
+        else variableOcurridoSemana += e.amount;
+      }
     } else {
       // Aún no ocurre: se conoce con certeza (fijo recurrente o gasto ya registrado a futuro).
       fijosCuotasRestantes += e.amount;
@@ -6555,9 +6572,38 @@ function proyeccionFinDeMes(refDate, cuentaId){
     else fijosCuotasRestantes += c.amount;
   });
 
+  // CAMBIO C: clasifica los días YA transcurridos y los que QUEDAN del mes en semana/
+  // finde (mismo criterio que patronGastoSemana, vía esFinDeSemana), para calcular un
+  // promedio diario propio de cada balde y proyectar cada tipo de día con el suyo.
+  let diasSemanaTranscurridos = 0, diasFindeTranscurridos = 0;
+  for(let d = 1; d <= diasTranscurridos; d++){
+    if(esFinDeSemana(new Date(refDate.getFullYear(), refDate.getMonth(), d))) diasFindeTranscurridos++;
+    else diasSemanaTranscurridos++;
+  }
+  let diasSemanaRestantes = 0, diasFindeRestantes = 0;
+  for(let d = diasTranscurridos + 1; d <= diasEnMes; d++){
+    if(esFinDeSemana(new Date(refDate.getFullYear(), refDate.getMonth(), d))) diasFindeRestantes++;
+    else diasSemanaRestantes++;
+  }
+
   const promedioDiario = diasTranscurridos > 0 ? variableOcurrido / diasTranscurridos : 0;
-  const variableEstimado = promedioDiario * diasRestantes;
+  // Caso borde: un balde sin ningún día transcurrido todavía (p. ej. día 2 del mes, aún
+  // sin fin de semana) no tiene promedio propio que calcular — usa el promedio plano
+  // como respaldo SOLO para ese balde; el otro balde, si sí tiene datos, conserva el suyo.
+  const promedioSemana = diasSemanaTranscurridos > 0 ? variableOcurridoSemana / diasSemanaTranscurridos : promedioDiario;
+  const promedioFinde = diasFindeTranscurridos > 0 ? variableOcurridoFinde / diasFindeTranscurridos : promedioDiario;
+  const variableEstimado = promedioSemana * diasSemanaRestantes + promedioFinde * diasFindeRestantes;
   const proyGastos = gastosRealizados + fijosCuotasRestantes + variableEstimado;
+
+  // Aviso de confianza temprana: con pocos días del mes EN CURSO transcurridos, un gasto
+  // puntual puede inflar el promedio de su balde y amplificarse sobre muchos días
+  // restantes. Solo aplica al mes en curso (mkRef === mkHoy): un mes cerrado ya no
+  // proyecta nada (diasRestantes = 0, variableEstimado = 0) y un mes futuro no tiene
+  // ningún día transcurrido que calificar de "pocos". Umbral: menos de 5 días
+  // transcurridos — coherente con el piso de 7 días que patronGastoSemana() exige para
+  // garantizar al menos un fin de semana completo; acá el umbral es más laxo porque el
+  // aviso es solo informativo, no una condición para mostrar o no la cifra.
+  const avisoConfianzaTemprana = mkRef === mkHoy && diasTranscurridos < 5;
 
   // Tanda R4 · pto 4: sin ingresos registrados este mes, la proyección asume la mediana
   // de hasta 3 meses anteriores con ingresos en vez de $0 — evita un "sobregasto"
@@ -6576,6 +6622,7 @@ function proyeccionFinDeMes(refDate, cuentaId){
   return {
     diasTranscurridos, diasRestantes, diasEnMes,
     gastosRealizados, fijosCuotasRestantes, variableEstimado, promedioDiario,
+    avisoConfianzaTemprana,
     proyGastos, dispProyectado, rangosPendientes,
     ingresos: data.ingresos, ingresosProy, ingresoEstimado,
     aportesMetas: data.aportesMetas, saldoAnterior: data.saldoAnterior
@@ -6680,7 +6727,7 @@ function patronGastoSemana(refDate, cuentaId){
    Hasta esta tanda cada tarjeta llevaba una "x" (insight-x) que la ocultaba por el
    resto del día, guardando { fecha, ids } en state.config.insightsDescartados. Ese
    mecanismo se retira: el único control de visibilidad ahora es el desplegable
-   "Alertas Financieras" (ver renderInsights). El campo insightsDescartados NO se migra
+   "Más insights" (ver renderInsights). El campo insightsDescartados NO se migra
    ni se borra — un respaldo viejo que lo traiga simplemente deja de leerse y de
    escribirse (queda como dato muerto). fechaHoyLocalISO() se conserva porque
    loadState/migrateBackup todavía la usan para sanear ese campo en respaldos
@@ -6907,6 +6954,7 @@ function renderInsights(){
       + ${money(proy.variableEstimado)} de gasto variable estimado
       ${proy.diasRestantes > 0 ? `· ${proy.diasRestantes === 1 ? 'queda 1 día' : 'quedan ' + proy.diasRestantes + ' días'} del mes` : '· mes cerrado'}.
     </p>
+    ${proy.avisoConfianzaTemprana ? `<p class="insight-proy-detail">Con pocos días del mes transcurridos, esta proyección es menos precisa.</p>` : ''}
     ${ingEst ? `<p class="insight-proy-detail">Incluye un ingreso estimado de ${money(ingEst.estimado)} (${ingEstDesc}) — todavía no registras ingresos de ${mesActualNombre}.</p>` : ''}
     ${(proy.rangosPendientes && proy.rangosPendientes.length) ? `<p class="insight-proy-detail">${
       proy.rangosPendientes.map(r=>
@@ -6939,15 +6987,15 @@ function renderInsights(){
     return `<div class="insight-frase"><p>Gastas más <span class="insight-dow-mayor">${mayorLbl}</span>: ${money(dowData.promMayor)}/día vs. ${money(dowData.promMenor)}/día ${menorLbl}${pctTxt}.</p></div>`;
   })() : '';
 
-  // ---- CAMBIO A: GRUPO 1 (núcleo fijo) + GRUPO 2 (desplegable "Alertas Financieras") ----
-  // Núcleo, siempre visible y sin botón de ocultar: semáforo, frase del mes y "cuotas
-  // por confirmar" (en ese orden). El resto de insights de antes va dentro de un
-  // <details class="cfg-group"> — mismo patrón que Configuración — que se reconstruye
-  // con `open` en cada render: no hay estado de colapsado que recordar, siempre abre
-  // expandido al entrar a Resumen o al cambiar de mes.
-  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml;
+  // ---- CAMBIO A: GRUPO 1 (núcleo fijo) + GRUPO 2 (desplegable "Más insights") ----
+  // Núcleo, siempre visible y sin botón de ocultar: semáforo, frase del mes, "cuotas
+  // por confirmar" y "cuotas que terminan pronto" (en ese orden — este último se movió
+  // acá en una tanda posterior, ver deudasQueTerminanPronto()). El resto de insights de
+  // antes va dentro de un <details class="cfg-group"> — mismo patrón que Configuración —
+  // que se reconstruye con `open` en cada render: no hay estado de colapsado que
+  // recordar, siempre abre expandido al entrar a Resumen o al cambiar de mes.
+  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml + cuotaLibreCards.join('');
   const grupo2Items = [
-    ...cuotaLibreCards,
     cmpHtml,
     varHtml,
     proyHtml,
@@ -6960,7 +7008,7 @@ function renderInsights(){
     ? grupo2Items.join('')
     : `<p class="insight-nodata">Nada que destacar por ahora.</p>`;
   const grupo2Html = `<details class="cfg-group insights-alertas" open>
-    <summary>Alertas Financieras <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+    <summary>Más insights <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
     <div class="cfg-group-body">${grupo2Body}</div>
   </details>`;
 
