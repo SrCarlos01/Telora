@@ -770,6 +770,24 @@ button{font-family:inherit;}
 :root.hc .hist-rango-field input, :root.hc .hist-rango-chip, :root.hc .hist-rango-apply,
 :root.hc .hist-rango-clear{border-width:2px;}
 
+/* Botón flotante "Ir a hoy" (Historial). Disimulado a propósito: pill chica, no un
+   FAB — ancla en el borde inferior derecho del frame de la app, sobre la bottom-zone. */
+.hist-ir-hoy-host{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:calc(88px + env(safe-area-inset-bottom));
+  width:100%; max-width:480px; display:flex; justify-content:flex-end;
+  padding:0 20px; pointer-events:none; z-index:15;
+}
+#btnIrAHoy{
+  pointer-events:auto; display:flex; align-items:center; gap:4px;
+  background:var(--surface-3); color:var(--gold-dim); border:1px solid var(--border);
+  border-radius:14px; padding:6px 12px 6px 10px; font-family:inherit; font-size:12px; font-weight:600;
+  cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.35);
+}
+#btnIrAHoy[hidden]{display:none;}
+#btnIrAHoy:active{transform:scale(0.95);}
+#btnIrAHoy .icon{width:14px; height:14px; stroke-width:2.5;}
+:root.hc #btnIrAHoy{border-width:2px; color:var(--cream);}
+
 /* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
 .hist-day-sep{
   font-size:12px; font-weight:600; color:var(--gold-dim); letter-spacing:.02em;
@@ -1729,6 +1747,14 @@ button:active{ transform:scale(0.97); }
     </div>
     <div id="hList"></div>
     <div class="chart-box" id="hChart" style="display:none;"></div>
+    <!-- Botón flotante "Ir a hoy": aparece cuando el usuario está lejos del día de
+         hoy (otro mes, o scrolleado lejos de la fila de hoy en el mes actual). -->
+    <div class="hist-ir-hoy-host">
+      <button type="button" id="btnIrAHoy" hidden aria-label="Ir a hoy">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        <span>Hoy</span>
+      </button>
+    </div>
   </div>
 
   <!-- CUOTAS -->
@@ -7744,6 +7770,50 @@ function renderHistMonthTotals(){
   if(gItem) gItem.style.display = (showG && !mostrarNotaCredito) ? '' : 'none';
   if(iItem) iItem.style.display = showI ? '' : 'none';
 }
+/* Botón "Ir a hoy": usa un IntersectionObserver sobre el separador de día de hoy
+   (data-date, ver groupByDayHtml) en vez de escuchar scroll y calcular posiciones a
+   mano. Se reengancha en cada renderHistorial() porque el separador se recrea junto
+   con el resto de #hList. */
+let irAHoyObserver = null;
+function refreshIrAHoyBtn(){
+  const btn = document.getElementById('btnIrAHoy');
+  if(!btn) return;
+  if(irAHoyObserver){ irAHoyObserver.disconnect(); irAHoyObserver = null; }
+  // Con un rango de fechas activo el botón no cambia de rango (misma guarda que
+  // prevMonth/nextMonth) — más simple y claro mostrarlo oculto que deshabilitado.
+  if(hRango){ btn.hidden = true; return; }
+  if(monthKey(currentDate) !== monthKey(mesActualReal())){
+    btn.hidden = false;   // mes distinto al actual: siempre "lejos" de hoy
+    return;
+  }
+  const box = document.getElementById('hList');
+  const enListView = box && box.style.display !== 'none';
+  const hoySep = enListView ? box.querySelector('.hist-day-sep[data-date="' + fechaHoyLocalISO() + '"]') : null;
+  if(!hoySep){ btn.hidden = true; return; }   // sin movimientos hoy: nada que alcanzar
+  btn.hidden = true;   // estado inicial; el observer decide en su primer callback
+  irAHoyObserver = new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{ btn.hidden = entry.isIntersecting; });
+  }, { root: document.getElementById('app') });
+  irAHoyObserver.observe(hoySep);
+}
+function irAHoyClick(){
+  if(hRango) return;
+  if(monthKey(currentDate) !== monthKey(mesActualReal())){
+    currentDate = mesActualReal();
+    resetChartViews();
+    renderAll();
+  }
+  const box = document.getElementById('hList');
+  const hoySep = box ? box.querySelector('.hist-day-sep[data-date="' + fechaHoyLocalISO() + '"]') : null;
+  if(hoySep) hoySep.scrollIntoView({behavior:'smooth', block:'start'});
+  const btn = document.getElementById('btnIrAHoy');
+  if(btn) btn.hidden = true;
+}
+(function(){
+  const btn = document.getElementById('btnIrAHoy');
+  if(btn) btn.addEventListener('click', irAHoyClick);
+})();
+
 function renderHistorial(){
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
@@ -7764,6 +7834,7 @@ function renderHistorial(){
   if(hTab === 'todo'){
     box.style.display = ''; chartBox.style.display = 'none';
     renderHistorialTodo(box);
+    refreshIrAHoyBtn();
     return;
   }
 
@@ -7782,6 +7853,7 @@ function renderHistorial(){
       // del tab activo (gastos o ingresos), no siempre gastos.
       renderBarChart(chartBox, hTab === 'ingresos' ? ingresosUltimos6Meses() : gastosUltimos6Meses());
     }
+    refreshIrAHoyBtn();
     return;
   }
   box.style.display = ''; chartBox.style.display = 'none';
@@ -7792,6 +7864,7 @@ function renderHistorial(){
     updateHistCount(items.length);
     if(items.length===0){
       box.innerHTML = emptyMsg(hRango ? 'Sin gastos en el rango elegido.' : histFiltrosActivos() ? 'Ningún gasto coincide con la búsqueda.' : 'Sin gastos registrados este mes.');
+      refreshIrAHoyBtn();
       return;
     }
     const rowHtml = (e)=>{
@@ -7849,6 +7922,7 @@ function renderHistorial(){
     updateHistCount(items.length);
     if(items.length===0){
       box.innerHTML = emptyMsg(hRango ? 'Sin ingresos en el rango elegido.' : histFiltrosActivos() ? 'Ningún ingreso coincide con la búsqueda.' : 'Sin ingresos registrados este mes.');
+      refreshIrAHoyBtn();
       return;
     }
     // Tanda M: etiqueta principal = "Nombre"; fuente y descripción pasan al Detalle (.li-sub).
@@ -7873,6 +7947,7 @@ function renderHistorial(){
     });
     wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
   }
+  refreshIrAHoyBtn();
 }
 
 /* ==================== RENDER: HISTORIAL · pestaña "Todo" ==================== */
@@ -8104,7 +8179,7 @@ function groupByDayHtml(items, rowHtml){
   for(const it of items){
     if(it.date !== lastDay){
       lastDay = it.date;
-      html += `<div class="hist-day-sep">${fmtDayHeader(it.date)}</div>`;
+      html += `<div class="hist-day-sep" data-date="${it.date}">${fmtDayHeader(it.date)}</div>`;
     }
     html += rowHtml(it);
   }
@@ -10967,7 +11042,7 @@ function onboardingRender(){
 function renderObBienvenida(){
   return `
     <h2>¡Bienvenido a Telora!</h2>
-    <p class="sheet-note">Antes de mostrarte tu Resumen, personalicémoslo con tu situación real: 6 pasos rápidos, cada uno se puede saltar. Al terminar, tu Disponible ya reflejará tus datos.</p>
+    <p class="sheet-note">Personalicemos tu Resumen con tu situación real: 6 pasos rápidos, menos de 90 segundos. No necesitas cifras exactas — con un estimado basta, y puedes ajustar todo después. Cada paso se puede saltar.</p>
     <button class="btn-primary" data-ob="empezar">Empezar</button>
     <button class="btn-ghost" data-ob="saltar-todo">Saltar todo por ahora</button>
   `;
