@@ -2240,6 +2240,16 @@ button:active{ transform:scale(0.97); }
           </div>
         </details>
 
+        <details class="cfg-group">
+          <summary>Onboarding <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <div class="cfg-group-body">
+            <p class="sheet-note" style="margin:0 0 12px;">
+              Vuelve a recorrer los 6 pasos de bienvenida (fuentes, ingreso, categorías, gastos fijos, cuotas y una meta). Tus categorías y fuentes actuales no se borran ni se reinician: aparecen ya marcadas.
+            </p>
+            <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el onboarding</button>
+          </div>
+        </details>
+
       </div>
     </details>
 
@@ -2261,6 +2271,17 @@ button:active{ transform:scale(0.97); }
       MisFinanzas · versión <span id="cfgBuildTag">—</span>
     </p>
     <button class="btn-ghost" data-close style="margin-top:10px;">Cerrar</button>
+  </div>
+</div>
+
+<!-- SHEET: onboarding interactivo de primer uso. data-nodismiss: es un flujo de
+     varios pasos con datos reales cargándose — no debe cerrarse por accidente con
+     un swipe/backdrop/Escape (cada pantalla trae su propia salida explícita). -->
+<div class="sheet-overlay" id="sheetOnboarding" data-nodismiss>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <p class="sheet-note" id="obProgress" style="display:none; margin:-6px 0 6px; font-weight:600; letter-spacing:.02em;"></p>
+    <div id="obBody"></div>
   </div>
 </div>
 
@@ -2489,12 +2510,47 @@ function icon(name, extraClass){
 
 
 const DEFAULTS = {
-  categorias: ["Comida","Aseo casa","Transporte","Cursos","Libros","Vestuario","Maquillaje/Skincare","Aseo/cuidado personal","Salidas con amigas o citas","Regalos","Ahorro","Varios"],
+  categorias: ["Comida","Arriendo/Vivienda","Cuentas y Servicios","Transporte","Salud","Cuidado personal","Vestimenta","Entretenimiento","Regalos","Ahorro","Varios"],
   metodos: ["Efectivo","Débito","Crédito","Transferencia"],
-  fuentes: ["Iustax","Agrupación","Sesiones Online","Otros"],
+  fuentes: ["Sueldo","Trabajos extra","Ventas","Bono","Mesada","Interés","Otros"],
   categoriaIconos: {},  // { "Nombre categoría": {tipo:'emoji'|'icono', valor:'...'} }
-  categoriaTopes: {}    // { "Nombre categoría": monto CLP entero > 0 } — clave ausente = sin tope
+  categoriaTopes: {},   // { "Nombre categoría": monto CLP entero > 0 } — clave ausente = sin tope
+  onboardingVisto: false   // Onboarding interactivo de primer uso: true = ya se completó o se saltó
 };
+
+/* ==================== ONBOARDING · LISTAS MAESTRAS ====================
+   Solo se usan dentro de la encuesta de bienvenida (Pasos 1, 3, 4 y 6). No
+   reemplazan a DEFAULTS: son un catálogo más amplio para que la persona elija
+   qué le aplica, sin ensuciar los defaults reales de una instalación nueva. */
+const ENCUESTA_CATEGORIAS = DEFAULTS.categorias.concat([
+  "Universidad","Gimnasio","Cursos y estudios","Mascotas",
+  "Streaming y suscripciones","Delivery/Apps de comida","Seguros",
+  "Tecnología","Hogar y decoración","Belleza"
+]);
+const ENCUESTA_FUENTES = DEFAULTS.fuentes.filter(f=>f!=='Otros').concat([
+  "Boleta de honorarios","Pensión","Arriendo (que recibo)",
+  "Devolución de impuestos","Finiquito","Beca","Reembolso",
+  "Aporte familiar","Dividendos","Propinas"
+]).concat(["Otros"]);
+const GASTOS_FIJOS_SUGERIDOS = [
+  {nombre:"Arriendo", monto:250000, categoria:"Arriendo/Vivienda"},
+  {nombre:"Cuenta de luz", monto:30000, categoria:"Cuentas y Servicios"},
+  {nombre:"Cuenta de agua", monto:15000, categoria:"Cuentas y Servicios"},
+  {nombre:"Internet", monto:25000, categoria:"Cuentas y Servicios"},
+  {nombre:"Plan celular", monto:15000, categoria:"Cuentas y Servicios"},
+  {nombre:"Gimnasio", monto:30000, categoria:"Gimnasio"},
+  {nombre:"Streaming", monto:8000, categoria:"Streaming y suscripciones"}
+];
+const METAS_SUGERIDAS = [
+  {nombre:"Fondo de emergencia", monto:500000},
+  {nombre:"Vacaciones/Viaje", monto:400000},
+  {nombre:"Comprar auto", monto:3000000},
+  {nombre:"Pie para depto/casa", monto:2000000},
+  {nombre:"Pagar deudas", monto:null},
+  {nombre:"Estudios", monto:1000000},
+  {nombre:"Matrimonio", monto:3000000},
+  {nombre:"Tecnología", monto:500000}
+];
 const CAT_ICONS = {
   "Comida":"coffee","Aseo casa":"home","Transporte":"truck","Cursos":"book-open",
   "Libros":"book","Vestuario":"bag","Maquillaje/Skincare":"star","Aseo/cuidado personal":"droplet",
@@ -2733,6 +2789,18 @@ function loadState(){
       if(!b || typeof b !== 'object' || Array.isArray(b) || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)){
         delete parsed.config.insightsDescartados;
       }
+    }
+    // Onboarding interactivo de primer uso: un respaldo/estado de ANTES de esta
+    // tanda no trae el campo. Se normaliza a `true` si ya tenía datos reales (así
+    // nunca se le dispara la encuesta a alguien que ya usaba la app); solo un
+    // estado sin este campo Y sin ningún dato queda en `false` (dispara el onboarding).
+    if(!parsed.config) parsed.config = {};
+    if(typeof parsed.config.onboardingVisto !== 'boolean'){
+      const teniaDatos = (Array.isArray(parsed.expenses) && parsed.expenses.length)
+        || (Array.isArray(parsed.incomes) && parsed.incomes.length)
+        || (Array.isArray(parsed.debts) && parsed.debts.length)
+        || (Array.isArray(parsed.goals) && parsed.goals.length);
+      parsed.config.onboardingVisto = !!teniaDatos;
     }
     return migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
   }
@@ -4585,7 +4653,14 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
   haptic(HAPTIC_OK);
   saveState();
   if(nuevoGastoId) lastCreatedMovementId = nuevoGastoId;   // slide-in de la fila nueva en Historial
-  flashSaveButton(document.getElementById('btnSaveGasto'), ()=>{ closeSheet('sheetGasto'); renderAll(); });
+  flashSaveButton(document.getElementById('btnSaveGasto'), ()=>{
+    closeSheet('sheetGasto');
+    // Onboarding Paso 5 (cuotas, loop visible): en vez de volver a Resumen, ofrece
+    // "Agregar otra" / "Continuar". Fuera de ese paso (incluye el alta en bloque
+    // del Paso 4, que nunca abre este sheet) el comportamiento normal no cambia.
+    if(typeof onboardingActivo !== 'undefined' && onboardingActivo && onboardingPaso === 5){ onboardingLoopGuardado(); }
+    else { renderAll(); }
+  });
 };
 
 let pendingDeleteType = null; // 'simple' | 'cuota' | 'fijo' | 'simpleIngreso' | 'fijoIngreso'
@@ -4797,7 +4872,13 @@ document.getElementById('btnSaveIngreso').onclick = ()=>{
   haptic(HAPTIC_OK);
   saveState();
   if(nuevoIngresoId) lastCreatedMovementId = nuevoIngresoId;
-  flashSaveButton(document.getElementById('btnSaveIngreso'), ()=>{ closeSheet('sheetIngreso'); renderAll(); });
+  flashSaveButton(document.getElementById('btnSaveIngreso'), ()=>{
+    closeSheet('sheetIngreso');
+    // Onboarding Paso 2 (ingreso mensual, loop): "Agregar otro" / "Continuar" en vez
+    // de volver a Resumen. Fuera del onboarding, comportamiento normal sin cambios.
+    if(typeof onboardingActivo !== 'undefined' && onboardingActivo && onboardingPaso === 2){ onboardingLoopGuardado(); }
+    else { renderAll(); }
+  });
 };
 document.getElementById('btnDeleteIngreso').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
@@ -5157,7 +5238,12 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     cuentaId: metaCuentaId   // Tanda L3
   });
   haptic(HAPTIC_OK);
-  saveState(); closeSheet('sheetMeta'); renderAll();
+  saveState(); closeSheet('sheetMeta');
+  // Onboarding Paso 6 (una meta, selección única): al guardar avanza directo a
+  // cierre. btnSaveMeta no usa flashSaveButton (a diferencia de gasto/ingreso), así
+  // que el enganche va aquí mismo, justo después del guardado real.
+  if(typeof onboardingActivo !== 'undefined' && onboardingActivo && onboardingPaso === 6){ onboardingAvanzarA(7); }
+  else { renderAll(); }
 };
 
 /* ==================== ELIMINAR META ==================== */
@@ -9310,6 +9396,15 @@ function migrateBackup(parsed){
   });
   reconciliacionImport = { metodos: recMetodos, fuentes: recFuentes };
 
+  // Onboarding: mismo criterio de normalización que loadState() — un respaldo de
+  // antes de esta tanda que ya traía datos no debe disparar la encuesta al restaurarlo.
+  // OJO: se compara contra `c` (el config CRUDO del archivo), no contra `config` ya
+  // fusionado con DEFAULTS — `config.onboardingVisto` YA es boolean (false) desde el
+  // spread `{...DEFAULTS, ...c}` de más arriba aunque el archivo nunca lo trajera.
+  if(typeof c.onboardingVisto !== 'boolean'){
+    config.onboardingVisto = !!(expenses.length || incomes.length || debts.length || goals.length);
+  }
+
   // Tanda C1: modelo multi-cuenta. Se conservan accounts/transfers si el respaldo
   // los trae; migrarEstadoCuentas() los normaliza, crea "Principal" si faltan,
   // fija config.cuentaActiva y reasigna a "Principal" cualquier cuentaId huérfano
@@ -10770,6 +10865,299 @@ if('serviceWorker' in navigator){
       }
     });
   });
+}
+
+/* ====================================================================================
+   ONBOARDING INTERACTIVO DE PRIMER USO
+   6 pasos dentro de un único sheet (#sheetOnboarding, data-nodismiss) cuyo contenido
+   se re-renderiza por completo en cada paso (innerHTML de #obBody) — un solo listener
+   delegado (click/change/input) cubre todos los botones y campos dinámicos, así no
+   hay que re-enganchar listeners a mano en cada render.
+   Pasos 2 (ingreso) y 5 (cuotas) reutilizan el sheet REAL de gasto/ingreso, apilado
+   encima del de onboarding (mismo mecanismo de z-index que cualquier otro sheet). El
+   resto de pasos (1, 3, 4, 6) viven enteramente dentro de #obBody.
+   ==================================================================================== */
+const ONBOARDING_LOOP_LIMITE = 5;
+let onboardingActivo = false;
+let onboardingPaso = 0;              // 0 = bienvenida, 1..6 = pasos, 7 = cierre
+let onboardingEsRelanzamiento = false;
+let onboardingContadorIngreso = 0;
+let onboardingContadorCuota = 0;
+
+function iniciarOnboarding(relanzamiento){
+  onboardingActivo = true;
+  onboardingEsRelanzamiento = !!relanzamiento;
+  onboardingPaso = 0;
+  onboardingContadorIngreso = 0;
+  onboardingContadorCuota = 0;
+  onboardingRender();
+  openSheet('sheetOnboarding');
+}
+function onboardingAvanzarA(paso){
+  onboardingPaso = paso;
+  onboardingRender();
+}
+function onboardingFinalizar(marcarVisto){
+  if(marcarVisto){
+    state.config.onboardingVisto = true;
+    saveState();
+  }
+  onboardingActivo = false;
+  closeSheet('sheetOnboarding');
+  renderAll();
+}
+// Llamado tras un guardado exitoso de ingreso (Paso 2) o gasto-cuota (Paso 5): el
+// callback normal de flashSaveButton queda reemplazado por esto solo en esos pasos
+// (ver los onclick de btnSaveIngreso/btnSaveGasto más arriba).
+function onboardingLoopGuardado(){
+  renderAll();   // refleja el nuevo registro en Resumen, detrás del sheet
+  if(onboardingPaso === 2){
+    onboardingContadorIngreso++;
+    if(onboardingContadorIngreso >= ONBOARDING_LOOP_LIMITE) onboardingAvanzarA(3);
+    else onboardingRender();
+  } else if(onboardingPaso === 5){
+    onboardingContadorCuota++;
+    if(onboardingContadorCuota >= ONBOARDING_LOOP_LIMITE) onboardingAvanzarA(6);
+    else onboardingRender();
+  }
+}
+
+function onboardingRender(){
+  const prog = document.getElementById('obProgress');
+  const body = document.getElementById('obBody');
+  if(onboardingPaso >= 1 && onboardingPaso <= 6){
+    prog.style.display = '';
+    prog.textContent = `Paso ${onboardingPaso} de 6`;
+  } else {
+    prog.style.display = 'none';
+  }
+  const renderers = {
+    0: renderObBienvenida, 1: renderObPaso1, 2: renderObPaso2, 3: renderObPaso3,
+    4: renderObPaso4, 5: renderObPaso5, 6: renderObPaso6, 7: renderObCierre
+  };
+  body.innerHTML = (renderers[onboardingPaso] || renderObBienvenida)();
+}
+
+function renderObBienvenida(){
+  return `
+    <h2>¡Bienvenido a Telora!</h2>
+    <p class="sheet-note">Antes de mostrarte tu Resumen, personalicémoslo con tu situación real: 6 pasos rápidos, cada uno se puede saltar. Al terminar, tu Disponible ya reflejará tus datos.</p>
+    <button class="btn-primary" data-ob="empezar">Empezar</button>
+    <button class="btn-ghost" data-ob="saltar-todo">Saltar todo por ahora</button>
+  `;
+}
+function renderObPaso1(){
+  const marcadas = onboardingEsRelanzamiento ? state.config.fuentes.slice() : [];
+  const filas = ENCUESTA_FUENTES.map(f=>
+    `<label class="check-row"><input type="checkbox" data-ob-val="${f}" ${marcadas.includes(f)?'checked':''}><span>${f}</span></label>`
+  ).join('');
+  return `
+    <h2>Tus fuentes de ingreso</h2>
+    <p class="sheet-note">Marca las que apliquen. Puedes agregar más después en Configuración.</p>
+    <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
+    <button class="btn-primary" data-ob="continuar-fuentes">Continuar</button>
+    <button class="btn-ghost" data-ob="saltar-fuentes">Saltar este paso</button>
+  `;
+}
+function renderObPaso2(){
+  const n = onboardingContadorIngreso;
+  return `
+    <h2>Tu ingreso mensual</h2>
+    <p class="sheet-note">Registra tus ingresos habituales (sueldo, honorarios, etc.) — quedan como "Fijo" y se repiten solos cada mes.</p>
+    ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'ingreso agregado':'ingresos agregados'}.</p>` : ''}
+    <button class="btn-primary" data-ob="agregar-ingreso">${n===0?'Agregar ingreso':'Agregar otro ingreso'}</button>
+    <button class="btn-ghost" data-ob="saltar-ingreso">${n===0?'Saltar este paso':'Continuar'}</button>
+  `;
+}
+function renderObPaso3(){
+  const base = onboardingEsRelanzamiento ? state.config.categorias.slice() : DEFAULTS.categorias.slice();
+  const filas = ENCUESTA_CATEGORIAS.map(c=>
+    `<label class="check-row"><input type="checkbox" data-ob-val="${c}" ${base.includes(c)?'checked':''}><span>${c}</span></label>`
+  ).join('');
+  return `
+    <h2>Tus categorías de gasto</h2>
+    <p class="sheet-note">Ya vienen marcadas las básicas — suma las que te apliquen o desmarca las que no uses.</p>
+    <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
+    <button class="btn-primary" data-ob="continuar-categorias">Continuar</button>
+    <button class="btn-ghost" data-ob="saltar-categorias">Saltar este paso</button>
+  `;
+}
+function renderObPaso4(){
+  const filas = GASTOS_FIJOS_SUGERIDOS.map((g,i)=>`
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <label class="check-row" style="margin:0; flex:1; min-width:0;">
+        <input type="checkbox" data-ob-fijo-idx="${i}">
+        <span>${g.nombre}</span>
+      </label>
+      <div class="field" style="margin:0; width:104px; flex-shrink:0;">
+        <input type="text" inputmode="numeric" data-ob-monto-idx="${i}" value="${formatMiles(String(g.monto))}">
+      </div>
+    </div>
+  `).join('');
+  return `
+    <h2>Gastos fijos típicos</h2>
+    <p class="sheet-note">Marca los que tengas y ajusta el monto si no calza. Máximo ${ONBOARDING_LOOP_LIMITE}.</p>
+    <div style="max-height:300px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
+    <button class="btn-primary" data-ob="continuar-fijos">Continuar</button>
+    <button class="btn-ghost" data-ob="saltar-fijos">Saltar este paso</button>
+  `;
+}
+function renderObPaso5(){
+  const n = onboardingContadorCuota;
+  return `
+    <h2>Tus cuotas activas</h2>
+    <p class="sheet-note">Si tienes compras a crédito en cuotas, regístralas aquí (el método queda en "Crédito").</p>
+    ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'cuota agregada':'cuotas agregadas'}.</p>` : ''}
+    <button class="btn-primary" data-ob="agregar-cuota">${n===0?'Agregar cuota':'Agregar otra cuota'}</button>
+    <button class="btn-ghost" data-ob="saltar-cuota">${n===0?'Saltar este paso':'Continuar'}</button>
+  `;
+}
+function renderObPaso6(){
+  const filas = METAS_SUGERIDAS.map((m,i)=>
+    `<button type="button" class="btn-ghost" data-ob="elegir-meta" data-ob-idx="${i}" style="text-align:left;">${m.nombre}${m.monto!=null ? ' — ' + money(m.monto) : ''}</button>`
+  ).join('');
+  return `
+    <h2>Una meta de ahorro</h2>
+    <p class="sheet-note">Elige una para partir (editas monto y fecha después). Hasta ${GOALS_FREE_LIMIT} metas activas en el plan gratuito.</p>
+    <div style="max-height:300px; overflow-y:auto; margin-bottom:10px;">
+      ${filas}
+      <button type="button" class="btn-ghost" data-ob="meta-otro" style="text-align:left;">Otro…</button>
+    </div>
+    <button class="btn-ghost" data-ob="saltar-meta">Saltar este paso</button>
+  `;
+}
+function renderObCierre(){
+  return `
+    <h2>¡Listo!</h2>
+    <p class="sheet-note">Tu Resumen ya refleja lo que registraste. Puedes seguir ajustando todo cuando quieras desde Configuración o cada pantalla.</p>
+    <button class="btn-primary" data-ob="ir-resumen">Ir a mi Resumen</button>
+  `;
+}
+
+// Agrega una categoría a config.categorias si no existe ya (mismo criterio de
+// dedup — normNombre — que usa el listener [data-addlist] de Configuración).
+function onboardingAsegurarCategoria(nombre){
+  if(!state.config.categorias.some(c=> normNombre(c) === normNombre(nombre))){
+    state.config.categorias.push(nombre);
+  }
+}
+// Paso 4 (alta en bloque, sin loop visible): reutiliza la función real de guardado
+// de gasto (btnSaveGasto.onclick) para cada ítem marcado, sin abrir openGastoForm
+// (que sí abriría el sheet visualmente). Los campos del sheet oculto se completan a
+// mano y se dispara el guardado real, uno por uno y en serie — nunca en paralelo,
+// porque flashSaveButton anima el mismo botón y una segunda llamada síncrona
+// pisaría su innerHTML "original" a mitad de la animación de la primera.
+function onboardingCrearGastosFijosSecuencial(items, onDone){
+  let i = 0;
+  function siguiente(){
+    if(i >= items.length){ onDone(); return; }
+    const item = items[i++];
+    onboardingAsegurarCategoria(item.categoria);
+    editingExpenseId = null;
+    confirmarMetodoSinCuotas = false;
+    confirmarGastoDuplicado = false;
+    document.getElementById('gFecha').value = new Date().toISOString().slice(0,10);
+    document.getElementById('gNombre').value = item.nombre;
+    setMonto('gMonto', item.monto);
+    fillSelect('gCategoria', state.config.categorias, item.categoria);
+    const metodoCash = state.config.metodos.find(m=>m!=='Crédito') || state.config.metodos[0];
+    fillSelect('gMetodo', state.config.metodos, metodoCash);
+    document.getElementById('gDescripcion').value = '';
+    document.querySelectorAll('#sheetGasto [data-tipo]').forEach(x=>x.classList.toggle('active', x.dataset.tipo==='Fijo'));
+    document.getElementById('gRangoChk').checked = false;
+    document.getElementById('gCuotaCompartida').checked = false;
+    document.getElementById('gNumCuotas').value = '';
+    document.getElementById('btnSaveGasto').onclick();
+    setTimeout(siguiente, prefersReducedMotion() ? 0 : 550);
+  }
+  siguiente();
+}
+function onboardingContinuarFijos(){
+  const items = [...document.querySelectorAll('#obBody [data-ob-fijo-idx]:checked')].map(chk=>{
+    const idx = parseInt(chk.dataset.obFijoIdx, 10);
+    const base = GASTOS_FIJOS_SUGERIDOS[idx];
+    const montoInput = document.querySelector(`#obBody [data-ob-monto-idx="${idx}"]`);
+    const monto = parseMonto(montoInput);
+    return { nombre: base.nombre, categoria: base.categoria, monto: (monto && monto > 0) ? monto : base.monto };
+  });
+  if(!items.length){ onboardingAvanzarA(5); return; }
+  onboardingCrearGastosFijosSecuencial(items, ()=> onboardingAvanzarA(5));
+}
+
+document.getElementById('obBody').addEventListener('click', e=>{
+  const el = e.target.closest('[data-ob]');
+  if(!el) return;
+  const accion = el.dataset.ob;
+  if(accion === 'empezar') onboardingAvanzarA(1);
+  else if(accion === 'saltar-todo') onboardingFinalizar(true);
+  else if(accion === 'continuar-fuentes'){
+    const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
+    if(marcadas.length){ state.config.fuentes = marcadas; saveState(); }
+    onboardingAvanzarA(2);
+  }
+  else if(accion === 'saltar-fuentes') onboardingAvanzarA(2);
+  else if(accion === 'agregar-ingreso'){
+    openIngresoForm(null);
+    document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo==='Fijo'));
+    syncIngresoRango();
+  }
+  else if(accion === 'saltar-ingreso') onboardingAvanzarA(3);
+  else if(accion === 'continuar-categorias'){
+    const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
+    state.config.categorias = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
+    saveState();
+    onboardingAvanzarA(4);
+  }
+  else if(accion === 'saltar-categorias') onboardingAvanzarA(4);
+  else if(accion === 'continuar-fijos') onboardingContinuarFijos();
+  else if(accion === 'saltar-fijos') onboardingAvanzarA(5);
+  else if(accion === 'agregar-cuota'){
+    openGastoForm(null);
+    fillSelect('gMetodo', state.config.metodos, 'Crédito');
+    syncCuotaFields();
+  }
+  else if(accion === 'saltar-cuota') onboardingAvanzarA(6);
+  else if(accion === 'elegir-meta'){
+    const m = METAS_SUGERIDAS[parseInt(el.dataset.obIdx, 10)];
+    openMetaForm(null);
+    document.getElementById('mNombre').value = m.nombre;
+    if(m.monto != null) setMonto('mMonto', m.monto);
+  }
+  else if(accion === 'meta-otro'){
+    openMetaForm(null);
+    document.getElementById('mNombre').focus();
+  }
+  else if(accion === 'saltar-meta') onboardingAvanzarA(7);
+  else if(accion === 'ir-resumen') onboardingFinalizar(true);
+});
+// Formateo en vivo del monto editable del Paso 4 (mismo criterio que initMoneyInputs,
+// pero delegado porque estos inputs se recrean en cada render de #obBody).
+document.getElementById('obBody').addEventListener('input', e=>{
+  if(e.target.matches('[data-ob-monto-idx]')){
+    const f = formatMiles(e.target.value);
+    if(f !== e.target.value) e.target.value = f;
+  }
+});
+// Tope de 5 gastos fijos marcados a la vez en el Paso 4.
+document.getElementById('obBody').addEventListener('change', e=>{
+  if(e.target.matches('[data-ob-fijo-idx]') && e.target.checked){
+    const marcados = document.querySelectorAll('#obBody [data-ob-fijo-idx]:checked');
+    if(marcados.length > ONBOARDING_LOOP_LIMITE){
+      e.target.checked = false;
+      showToast(`Máximo ${ONBOARDING_LOOP_LIMITE} gastos fijos a la vez en este paso.`, 'error');
+    }
+  }
+});
+
+document.getElementById('btnRelanzarOnboarding').onclick = ()=>{
+  closeSheet('sheetConfig');
+  iniciarOnboarding(true);
+};
+
+// Disparo automático: primera vez que se abre la app sin ningún dato cargado. Va
+// DESPUÉS del renderAll() normal de arriba, así no bloquea ni retrasa ese render.
+if(!state.config.onboardingVisto && !(state.expenses.length || state.incomes.length || state.debts.length || (state.goals||[]).length)){
+  iniciarOnboarding(false);
 }
 </script>
 </body>
