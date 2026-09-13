@@ -2280,7 +2280,10 @@ button:active{ transform:scale(0.97); }
 <div class="sheet-overlay" id="sheetOnboarding" data-nodismiss>
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <p class="sheet-note" id="obProgress" style="display:none; margin:-6px 0 6px; font-weight:600; letter-spacing:.02em;"></p>
+    <div id="obProgressRow" style="display:none; align-items:center; justify-content:space-between; gap:10px; margin:-6px 0 6px;">
+      <button type="button" class="btn-ghost" id="obBtnVolver" style="width:auto; margin:0; padding:0; border:none; background:none; font-size:12px; color:var(--cream-dim); cursor:pointer;">‹ Volver</button>
+      <p class="sheet-note" id="obProgress" style="margin:0; font-weight:600; letter-spacing:.02em;"></p>
+    </div>
     <div id="obBody"></div>
   </div>
 </div>
@@ -10889,6 +10892,17 @@ let onboardingPaso = 0;              // 0 = bienvenida, 1..6 = pasos, 7 = cierre
 let onboardingEsRelanzamiento = false;
 let onboardingContadorIngreso = 0;
 let onboardingContadorCuota = 0;
+// Paso 4 (gastos fijos): índices de GASTOS_FIJOS_SUGERIDOS ya creados como gasto
+// real en esta sesión de onboarding. Si el usuario usa "Volver" desde el Paso 5/6
+// y vuelve a presionar "Continuar" en el Paso 4 con las mismas casillas marcadas,
+// evita crear el gasto fijo duplicado (ver onboardingContinuarFijos).
+let onboardingFijosCreados = new Set();
+// Pasos 1 y 3: lo que el usuario dejó marcado la última vez que pasó por "Continuar"
+// en esta sesión de onboarding (null = aún no pasó). Sin esto, el botón "Volver"
+// mostraría las casillas en blanco de nuevo (renderObPaso1/3 solo miran state.config
+// cuando es relanzamiento), perdiendo la selección que el usuario ya había hecho.
+let onboardingFuentesSesion = null;
+let onboardingCategoriasSesion = null;
 
 function iniciarOnboarding(relanzamiento){
   onboardingActivo = true;
@@ -10896,6 +10910,9 @@ function iniciarOnboarding(relanzamiento){
   onboardingPaso = 0;
   onboardingContadorIngreso = 0;
   onboardingContadorCuota = 0;
+  onboardingFijosCreados = new Set();
+  onboardingFuentesSesion = null;
+  onboardingCategoriasSesion = null;
   onboardingRender();
   openSheet('sheetOnboarding');
 }
@@ -10930,12 +10947,15 @@ function onboardingLoopGuardado(){
 
 function onboardingRender(){
   const prog = document.getElementById('obProgress');
+  const progRow = document.getElementById('obProgressRow');
+  const btnVolver = document.getElementById('obBtnVolver');
   const body = document.getElementById('obBody');
   if(onboardingPaso >= 1 && onboardingPaso <= 6){
-    prog.style.display = '';
+    progRow.style.display = 'flex';
     prog.textContent = `Paso ${onboardingPaso} de 6`;
+    btnVolver.style.visibility = onboardingPaso === 1 ? 'hidden' : 'visible';
   } else {
-    prog.style.display = 'none';
+    progRow.style.display = 'none';
   }
   const renderers = {
     0: renderObBienvenida, 1: renderObPaso1, 2: renderObPaso2, 3: renderObPaso3,
@@ -10953,7 +10973,9 @@ function renderObBienvenida(){
   `;
 }
 function renderObPaso1(){
-  const marcadas = onboardingEsRelanzamiento ? state.config.fuentes.slice() : [];
+  const marcadas = onboardingFuentesSesion !== null
+    ? onboardingFuentesSesion
+    : (onboardingEsRelanzamiento ? state.config.fuentes.slice() : []);
   const filas = ENCUESTA_FUENTES.map(f=>
     `<label class="check-row"><input type="checkbox" data-ob-val="${f}" ${marcadas.includes(f)?'checked':''}><span>${f}</span></label>`
   ).join('');
@@ -10976,7 +10998,9 @@ function renderObPaso2(){
   `;
 }
 function renderObPaso3(){
-  const base = onboardingEsRelanzamiento ? state.config.categorias.slice() : DEFAULTS.categorias.slice();
+  const base = onboardingCategoriasSesion !== null
+    ? onboardingCategoriasSesion
+    : (onboardingEsRelanzamiento ? state.config.categorias.slice() : DEFAULTS.categorias.slice());
   const filas = ENCUESTA_CATEGORIAS.map(c=>
     `<label class="check-row"><input type="checkbox" data-ob-val="${c}" ${base.includes(c)?'checked':''}><span>${c}</span></label>`
   ).join('');
@@ -11084,12 +11108,16 @@ function onboardingContinuarFijos(){
     const base = GASTOS_FIJOS_SUGERIDOS[idx];
     const montoInput = document.querySelector(`#obBody [data-ob-monto-idx="${idx}"]`);
     const monto = parseMonto(montoInput);
-    return { nombre: base.nombre, categoria: base.categoria, monto: (monto && monto > 0) ? monto : base.monto };
-  });
+    return { idx, nombre: base.nombre, categoria: base.categoria, monto: (monto && monto > 0) ? monto : base.monto };
+  }).filter(item => !onboardingFijosCreados.has(item.idx));
   if(!items.length){ onboardingAvanzarA(5); return; }
+  items.forEach(item => onboardingFijosCreados.add(item.idx));
   onboardingCrearGastosFijosSecuencial(items, ()=> onboardingAvanzarA(5));
 }
 
+document.getElementById('obBtnVolver').addEventListener('click', ()=>{
+  if(onboardingPaso >= 2 && onboardingPaso <= 6) onboardingAvanzarA(onboardingPaso - 1);
+});
 document.getElementById('obBody').addEventListener('click', e=>{
   const el = e.target.closest('[data-ob]');
   if(!el) return;
@@ -11098,6 +11126,7 @@ document.getElementById('obBody').addEventListener('click', e=>{
   else if(accion === 'saltar-todo') onboardingFinalizar(true);
   else if(accion === 'continuar-fuentes'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
+    onboardingFuentesSesion = marcadas;
     if(marcadas.length){ state.config.fuentes = marcadas; saveState(); }
     onboardingAvanzarA(2);
   }
@@ -11110,7 +11139,8 @@ document.getElementById('obBody').addEventListener('click', e=>{
   else if(accion === 'saltar-ingreso') onboardingAvanzarA(3);
   else if(accion === 'continuar-categorias'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
-    state.config.categorias = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
+    onboardingCategoriasSesion = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
+    state.config.categorias = onboardingCategoriasSesion;
     saveState();
     onboardingAvanzarA(4);
   }
