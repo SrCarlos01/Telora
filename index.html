@@ -2562,7 +2562,7 @@ const CAT_ICON_SET = ["coffee","home","truck","book-open","book","bag","star","d
 function catIcon(cat, extraClass){
   const cfg = (state.config.categoriaIconos || {})[cat];
   if(cfg && cfg.tipo === 'emoji' && cfg.valor){
-    return `<span class="cat-emoji${extraClass ? ' ' + extraClass : ''}">${cfg.valor}</span>`;
+    return `<span class="cat-emoji${extraClass ? ' ' + extraClass : ''}">${escHtml(cfg.valor)}</span>`;
   }
   if(cfg && cfg.tipo === 'icono' && cfg.valor && ICONS[cfg.valor]){
     return icon(cfg.valor, extraClass);
@@ -4339,7 +4339,7 @@ function poblarSelectCuenta(selId, fieldId, actualId){
     const arch = cuentaById(objetivo);
     opts.push(arch ? { id: arch.id, nombre: arch.nombre + ' (archivada)' } : { id: objetivo, nombre: 'Cuenta anterior' });
   }
-  sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${a.nombre}</option>`).join('');
+  sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${escHtml(a.nombre)}</option>`).join('');
   if(objetivo) sel.value = objetivo;
   // Visible si hay ≥2 cuentas vivas, o si el movimiento editado está en una cuenta que
   // no aparece en la lista corta (archivada/huérfana).
@@ -4377,7 +4377,7 @@ function poblarSelectMetaCuenta(actualId){
     opts.push({ id: objetivo, nombre: (arch ? arch.nombre + ' (archivada)' : 'Cuenta anterior') });
   }
   sel.innerHTML = opts.map(o=>
-    `<option value="${escAttr(o.id)}"${o.disabled ? ' disabled' : ''}${o.id === objetivo ? ' selected' : ''}>${o.nombre}</option>`
+    `<option value="${escAttr(o.id)}"${o.disabled ? ' disabled' : ''}${o.id === objetivo ? ' selected' : ''}>${escHtml(o.nombre)}</option>`
   ).join('');
   sel.value = objetivo;
 }
@@ -4487,7 +4487,7 @@ function openGastoForm(expenseId){
     const favs = expenseId ? [] : gastosFavoritos();
     if(favs.length){
       favBox.innerHTML = favs.map((f,idx)=>
-        `<button type="button" class="chip" data-fav="${idx}">${catIcon(f.category)}${f.category}</button>`
+        `<button type="button" class="chip" data-fav="${idx}">${catIcon(f.category)}${escHtml(f.category)}</button>`
       ).join('');
       favField.style.display = 'block';
       favBox.querySelectorAll('[data-fav]').forEach(btn=>{
@@ -4928,7 +4928,7 @@ function poblarSelectTransferCuenta(actualOrigen, actualDestino){
       const arch = cuentaById(objetivo);
       opts.push(arch ? { id: arch.id, nombre: arch.nombre + ' (archivada)' } : { id: objetivo, nombre: 'Cuenta anterior' });
     }
-    sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${a.nombre}</option>`).join('');
+    sel.innerHTML = opts.map(a=> `<option value="${escAttr(a.id)}"${a.id === objetivo ? ' selected' : ''}>${escHtml(a.nombre)}</option>`).join('');
     if(objetivo) sel.value = objetivo;
   };
   arma('tOrigen', actualOrigen);
@@ -5423,7 +5423,7 @@ function renderMetas(){
     const ahorradoNota = everPaused.has(g.id) ? ` <span class="ahorrado-nota">(no descuenta meses pausados)</span>` : '';
     let autoNote = '';
     if(pausada){
-      const extra = topGasto ? ` Mayor gasto: ${topGasto.categoria} (${money(topGasto.monto)}).` : '';
+      const extra = topGasto ? ` Mayor gasto: ${escHtml(topGasto.categoria)} (${money(topGasto.monto)}).` : '';
       autoNote = `<p class="debt-manual-note paused">${icon('pause')} Aporte automático pausado este mes — no alcanzó el disponible.${extra}</p>`;
     } else if(aa.activo){
       autoNote = `<p class="debt-manual-note">${icon('tag')} Aporte automático activo · ${aporteMensualTxt} el día ${aa.diaDelMes||1}</p>`;
@@ -5464,7 +5464,7 @@ function renderMetas(){
       ${editBtn}
       <div class="debt-top">
         <div>
-          <p class="debt-title">${g.name}${compBadge}</p>
+          <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
           <p class="debt-cat">Meta indefinida · sin fecha límite</p>
           ${pauseBadge}
         </div>
@@ -5485,7 +5485,7 @@ function renderMetas(){
       ${editBtn}
       <div class="debt-top">
         <div>
-          <p class="debt-title">${g.name}${compBadge}</p>
+          <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
           <p class="debt-cat">${g.fechaLimite ? 'Meta para ' + fmtDate(g.fechaLimite) : 'Sin fecha límite'}</p>
           ${done ? '<span class="goal-done-badge">Meta cumplida</span>' : ''}
           ${pauseBadge}
@@ -5739,7 +5739,7 @@ function openInteres(goalId){
   if(!g) return;
   interesGoalId = goalId;
   document.getElementById('interesTitle').innerHTML =
-    `Intereses de "${g.name}" <span class="premium-badge">PREMIUM</span>`;
+    `Intereses de "${escHtml(g.name)}" <span class="premium-badge">PREMIUM</span>`;
   document.getElementById('intTasa').value = 4;
   const mesesRest = !g.indefinida ? mesesHastaFecha(g.fechaLimite) : null;
   document.getElementById('intMeses').value = mesesRest || 12;
@@ -6358,7 +6358,7 @@ function renderResumen(){
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = listaRows.map(([cat,val])=>`
       <div class="cat-row" data-cat="${cat}">
-        <div class="left"><span class="cat-sw" style="background:${dona.colorDeCat[cat] || 'var(--cream-dim)'}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${cat}</span></div>
+        <div class="left"><span class="cat-sw" style="background:${dona.colorDeCat[cat] || 'var(--cream-dim)'}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${escHtml(cat)}</span></div>
         <span class="val">${money(val)}</span>${topeBar(cat, val)}
       </div>`).join('');
     box.querySelectorAll('[data-cat]').forEach(el=>{
@@ -6481,7 +6481,7 @@ function renderResumenDetalle(){
   host.innerHTML = bloques.map(b=>{
     const head = `<p class="bd-block-title">${b.titulo} · Top 3 (% sobre ${b.ref})</p>`;
     if(!b.rows.length) return `<div class="bd-block">${head}<p class="bd-empty">${b.vacio}</p></div>`;
-    const rws = b.rows.map(r=>`<div class="bd-row"><span class="bd-name">${r.nombre}</span><span class="bd-monto">${money(r.monto)}</span><span class="bd-pct">${r.pct}%</span></div>`).join('');
+    const rws = b.rows.map(r=>`<div class="bd-row"><span class="bd-name">${escHtml(r.nombre)}</span><span class="bd-monto">${money(r.monto)}</span><span class="bd-pct">${r.pct}%</span></div>`).join('');
     return `<div class="bd-block">${head}${rws}</div>`;
   }).join('');
 }
@@ -6894,7 +6894,7 @@ function renderInsights(){
   } else if(disp < 0){
     frase = `Proyección de sobregasto: cerrarías el mes en ${money(disp)}.`;
   } else if(prevTiene && topAumento){
-    frase = `${topAumento.cat} es la categoría que más subió este mes: +${money(topAumento.delta)} respecto al mes anterior.`;
+    frase = `${escHtml(topAumento.cat)} es la categoría que más subió este mes: +${money(topAumento.delta)} respecto al mes anterior.`;
   } else {
     frase = 'Vas bien encaminado este mes.';
   }
@@ -6975,8 +6975,8 @@ function renderInsights(){
     const dec = varCats.filter(v=> v.delta < 0).sort((a,b)=> a.delta - b.delta)[0];
     const pctTxt = v => v.pct === null ? 'nueva' : (v.pct >= 0 ? '+' : '') + Math.round(v.pct) + '%';
     const parts = [];
-    if(inc) parts.push(`<div class="insight-var-row up"><span>▲ ${inc.cat}</span><span>+${money(inc.delta)} · ${pctTxt(inc)}</span></div>`);
-    if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${dec.cat}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
+    if(inc) parts.push(`<div class="insight-var-row up"><span>▲ ${escHtml(inc.cat)}</span><span>+${money(inc.delta)} · ${pctTxt(inc)}</span></div>`);
+    if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${escHtml(dec.cat)}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
     varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin cambios de categoría respecto al mes anterior.</p>`;
   }
   const varHtml = `<div class="insight-block"><p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
@@ -7006,7 +7006,7 @@ function renderInsights(){
     // "cuotas sin confirmar" a secas, sin marcar que el monto es agregado — se leía
     // como una omisión más que como una decisión. "en varias categorías" lo deja
     // explícito sin listarlas todas.
-    const calif = soloCat ? ` de «${soloCat}»` : (catsCuotaSinConfirmar.size > 1 ? ' en varias categorías' : '');
+    const calif = soloCat ? ` de «${escHtml(soloCat)}»` : (catsCuotaSinConfirmar.size > 1 ? ' en varias categorías' : '');
     return `<p class="insight-proy-detail">Hay ${money(montoCuotasSinConfirmar)} en cuotas sin confirmar${calif} este mes, ya incluidas en el Disponible proyectado.</p>`;
   })() : '';
   const alertasHtml = alertas.length ? (
@@ -7017,7 +7017,7 @@ function renderInsights(){
       if(a.c2) razones.push('más del 35% del gasto del mes');
       const doble = a.c1 && a.c2;
       return `<div class="insight-alerta${doble ? ' doble' : ''}">
-        <span class="ia-cat">${doble ? '⚠⚠' : '⚠'} ${a.cat} · ${money(a.val)}</span>
+        <span class="ia-cat">${doble ? '⚠⚠' : '⚠'} ${escHtml(a.cat)} · ${money(a.val)}</span>
         <span class="ia-razon">${razones.join(' + ')}</span>
       </div>`;
     }).join('')
@@ -7044,7 +7044,7 @@ function renderInsights(){
     ${ingEst ? `<p class="insight-proy-detail">Incluye un ingreso estimado de ${money(ingEst.estimado)} (${ingEstDesc}) — todavía no registras ingresos de ${mesActualNombre}.</p>` : ''}
     ${(proy.rangosPendientes && proy.rangosPendientes.length) ? `<p class="insight-proy-detail">${
       proy.rangosPendientes.map(r=>
-        `${r.tipo === 'ingreso' ? 'El ingreso' : 'El gasto'} «${r.nombre}» puede caer entre el ${r.diaInicio} y el ${r.diaFin} — aún sin confirmar.`
+        `${r.tipo === 'ingreso' ? 'El ingreso' : 'El gasto'} «${escHtml(r.nombre)}» puede caer entre el ${r.diaInicio} y el ${r.diaFin} — aún sin confirmar.`
       ).join('<br>')
     }</p>` : ''}
     ${cuotasSinConfirmarHtml}
@@ -7261,7 +7261,7 @@ function openCategoriaDetalle(categoria, normalExpenses){
       <div class="list-item" style="cursor:default;">
         <div class="li-icon">${catIcon(categoria)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.descripcion ? it.descripcion : '<span class="li-muted">Sin descripción</span>'}</span>${it.tipo?`<span class="li-badge">${it.tipo}</span>`:''}</p>
+          <p class="li-title"><span class="li-title-text">${it.descripcion ? escHtml(it.descripcion) : '<span class="li-muted">Sin descripción</span>'}</span>${it.tipo?`<span class="li-badge">${it.tipo}</span>`:''}</p>
           <p class="li-sub">${it.fecha? fmtDate(it.fecha) : nombreMes}</p>
         </div>
         <span class="li-amount">${money(it.monto)}</span>
@@ -7801,8 +7801,8 @@ function renderHistorial(){
       <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${e.description ? e.description : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
-          <p class="li-sub">${fmtDate(e.date)} · ${e.category} · cuota ${e.cuotaNum} de ${e.totalCuotas}</p>
+          <p class="li-title"><span class="li-title-text">${e.description ? escHtml(e.description) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
+          <p class="li-sub">${fmtDate(e.date)} · ${escHtml(e.category)} · cuota ${e.cuotaNum} de ${e.totalCuotas}</p>
         </div>
         <span class="li-amount li-amount-cuota-real">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -7825,8 +7825,8 @@ function renderHistorial(){
       <div class="list-item${expCls}" data-editexpense="${e.id}">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(e.date)} · ${e.category} · ${e.method}${e.description ? ' · ' + e.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(e.date)} · ${escHtml(e.category)} · ${escHtml(e.method)}${e.description ? ' · ' + escHtml(e.description) : ''}</p>
           ${rb ? rb.btn : ''}
         </div>
         <span class="${amtCls}">${money(e.amount)}</span>
@@ -7856,8 +7856,8 @@ function renderHistorial(){
       <div class="list-item income${expCls}" data-editincome="${i.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? nom : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(i.date)} · ${i.source}${i.description? ' · '+i.description:''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(i.date)} · ${escHtml(i.source)}${i.description? ' · '+escHtml(i.description):''}</p>
           ${rb ? rb.btn : ''}
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
@@ -7967,8 +7967,8 @@ function renderHistorialTodo(box){
       <div class="list-item income${expCls}" data-editincome="${it.id}">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${it.source}${it.description ? ' · '+it.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${escHtml(it.source)}${it.description ? ' · '+escHtml(it.description) : ''}</p>
           ${rb ? rb.btn : ''}
         </div>
         <div class="li-amount-wrap">
@@ -7983,7 +7983,7 @@ function renderHistorialTodo(box){
       // (+ destino / − origen); en vista Total impacta $0 y se muestra en tono neutro
       // (igual que la fila de origen de una compra a crédito), con una nota que lo aclara.
       const tIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
-      const ruta = `${cuentaNombre(it.origen)} → ${cuentaNombre(it.destino)}`;
+      const ruta = `${escHtml(cuentaNombre(it.origen))} → ${escHtml(cuentaNombre(it.destino))}`;
       let amtHtml, nota = '';
       if(it.impacto > 0)      amtHtml = `<span class="li-amount income">+${money(it.amount)}</span>`;
       else if(it.impacto < 0) amtHtml = `<span class="li-amount li-amount-gasto">−${money(it.amount)}</span>`;
@@ -7993,7 +7993,7 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-edittransfer="${it.transferId}">
         <div class="li-icon">${tIcon}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Transferencia</span>'}</span><span class="li-badge">Transferencia</span></p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Transferencia</span>'}</span><span class="li-badge">Transferencia</span></p>
           <p class="li-sub">${fmtDate(it.date)} · ${ruta}</p>
           ${nota}
         </div>
@@ -8013,8 +8013,8 @@ function renderHistorialTodo(box){
       <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
-          <p class="li-sub">${fmtDate(it.date)} · ${it.category} · cuota ${it.cuotaNum} de ${it.totalCuotas}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
+          <p class="li-sub">${fmtDate(it.date)} · ${escHtml(it.category)} · cuota ${it.cuotaNum} de ${it.totalCuotas}</p>
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount li-amount-cuota-real">−${money(it.amount)}</span>
@@ -8043,8 +8043,8 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-editexpense="${it.id}">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? it.name : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${it.category} · ${it.method}${it.description ? ' · ' + it.description : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
+          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${escHtml(it.category)} · ${escHtml(it.method)}${it.description ? ' · ' + escHtml(it.description) : ''}</p>
           ${cuotaNote}
           ${rb ? rb.btn : ''}
         </div>
@@ -8215,8 +8215,8 @@ function renderCuotas(){
     <div class="debt-card" data-cuotacard>
       <div class="debt-top">
         <div>
-          <p class="debt-title">${d.description}${d.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : ''}</p>
-          <p class="debt-cat">${d.category}</p>
+          <p class="debt-title">${escHtml(d.description)}${d.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : ''}</p>
+          <p class="debt-cat">${escHtml(d.category)}</p>
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
       </div>
@@ -8379,6 +8379,12 @@ function contarUso(key, item){
   return 0;
 }
 const escAttr = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
+const escHtml = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -8408,7 +8414,7 @@ function renderConfigList(key, boxId){
       </div>` : '';
     return `
     <div class="config-item${isCat ? ' is-cat' : ''}" data-cfgitem="${key}:${idx}">
-      <span>${item}</span>
+      <span>${escHtml(item)}</span>
       <div class="cfg-item-actions">
         ${isCat ? `<button class="cfg-icon-btn" data-caticon="${idx}" aria-label="Cambiar ícono">${catIcon(item)}</button>` : ''}
         ${renombrable ? `<button class="cfg-rename-btn" data-rename="${key}:${idx}" aria-label="Renombrar ${escAttr(item)}">${icon('edit')}</button>` : ''}
@@ -8618,7 +8624,7 @@ function renderCuentasList(){
     const bajaDisabled = idx === orden.length - 1;
     return `
     <div class="config-item acc-cfg-item${a.archivada ? ' is-archived' : ''}" data-acccfg="${escAttr(a.id)}">
-      <span>${a.nombre}${a.archivada ? '<span class="acc-arch-tag">Archivada</span>' : ''}</span>
+      <span>${escHtml(a.nombre)}${a.archivada ? '<span class="acc-arch-tag">Archivada</span>' : ''}</span>
       <div class="cfg-acc-actions">
         <button data-accmove="up:${escAttr(a.id)}" aria-label="Subir ${escAttr(a.nombre)}" ${subeDisabled ? 'disabled' : ''}>${icon('chevron-up')}</button>
         <button data-accmove="down:${escAttr(a.id)}" aria-label="Bajar ${escAttr(a.nombre)}" ${bajaDisabled ? 'disabled' : ''}>${icon('chevron-down')}</button>
@@ -8769,7 +8775,7 @@ function abrirBorrarCuenta(id){
     field.hidden = true;
   } else {
     const sel = document.getElementById('ctaBorrarDestino');
-    let opts = destinos.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
+    let opts = destinos.map(d=> `<option value="${escAttr(d.id)}">${escHtml(d.nombre)}${d.archivada ? ' (archivada)' : ''}</option>`).join('');
     // Tanda L3: "Compartida" sólo aplica a cuotas/metas; se ofrece si la cuenta tiene alguna.
     if(nCM) opts += `<option value="compartida">Compartida (solo las cuotas y metas)</option>`;
     sel.innerHTML = opts;
@@ -8784,7 +8790,7 @@ function abrirBorrarCuenta(id){
     // Sólo cuentas VIVAS restantes como destino del reapuntado (siempre hay ≥1).
     const vivasRest = cuentasVivas().filter(x=> x.id !== id);
     tSel.innerHTML = `<option value="" disabled selected>Elige una cuenta…</option>`
-      + vivasRest.map(d=> `<option value="${escAttr(d.id)}">${d.nombre}</option>`).join('');
+      + vivasRest.map(d=> `<option value="${escAttr(d.id)}">${escHtml(d.nombre)}</option>`).join('');
     // Reset a "Reapuntar" cada vez que se abre (no arrastra la elección anterior).
     document.querySelectorAll('#ctaBorrarTransferModo [data-tdel]').forEach(x=> x.classList.toggle('active', x.dataset.tdel === 'reapuntar'));
     tField.hidden = false;
@@ -10296,7 +10302,7 @@ function renderPieChart(container, data, opts){
   const legend = `<div class="pie-legend">` + items.map((d,i)=>{
     const col = colOf(d, i);
     const pct = Math.round(d.value / total * 100);
-    return `<div class="pie-leg-item"><span class="sw" style="background:${col}"></span><span class="pl-label">${d.label}</span><span class="pl-val">${fmt(d.value)} · ${pct}%</span></div>`;
+    return `<div class="pie-leg-item"><span class="sw" style="background:${col}"></span><span class="pl-label">${escHtml(d.label)}</span><span class="pl-val">${fmt(d.value)} · ${pct}%</span></div>`;
   }).join('') + `</div>`;
   container.innerHTML = svg + legend + (opts.note ? `<p class="chart-note">${opts.note}</p>` : '');
 }
@@ -10361,7 +10367,7 @@ function renderBarChart(container, data, opts){
     const valAnchor = inside ? 'end' : 'start';
     const valCls = inside ? 'c-val-in' : 'c-val';
     return `
-      <text x="0" y="${y - 4}" class="c-lbl">${d.label}</text>
+      <text x="0" y="${y - 4}" class="c-lbl">${escHtml(d.label)}</text>
       <rect x="0" y="${y}" width="${bw}" height="${rowH}" rx="4" class="c-bar"></rect>
       <text x="${valX}" y="${y + 15}" text-anchor="${valAnchor}" class="${valCls}">${fmt(d.value)}</text>`;
   }).join('');
@@ -10586,7 +10592,7 @@ function renderAccountSelector(){
     + `<span class="am-name">Total</span>${activa === 'total' ? check : ''}</button>`;
   vivas.forEach(a=>{
     html += `<button type="button" class="account-menu-item${activa === a.id ? ' is-active' : ''}" data-acc="${escAttr(a.id)}" role="menuitem">`
-      + `<span class="am-name">${a.nombre}</span>${activa === a.id ? check : ''}</button>`;
+      + `<span class="am-name">${escHtml(a.nombre)}</span>${activa === a.id ? check : ''}</button>`;
   });
   if(vivas.length >= 2){
     html += `<div class="account-menu-sep"></div>`
