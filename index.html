@@ -10892,11 +10892,11 @@ let onboardingPaso = 0;              // 0 = bienvenida, 1..6 = pasos, 7 = cierre
 let onboardingEsRelanzamiento = false;
 let onboardingContadorIngreso = 0;
 let onboardingContadorCuota = 0;
-// Paso 4 (gastos fijos): índices de GASTOS_FIJOS_SUGERIDOS ya creados como gasto
-// real en esta sesión de onboarding. Si el usuario usa "Volver" desde el Paso 5/6
-// y vuelve a presionar "Continuar" en el Paso 4 con las mismas casillas marcadas,
-// evita crear el gasto fijo duplicado (ver onboardingContinuarFijos).
-let onboardingFijosCreados = new Set();
+// Paso 4 (gastos fijos): índice de GASTOS_FIJOS_SUGERIDOS -> id del gasto real ya
+// creado en esta sesión de onboarding. Si el usuario usa "Volver" desde el Paso 5/6
+// y vuelve al Paso 4, permite reconocer qué ítems ya existen (para editarlos o
+// cortarlos in situ) en vez de solo evitar el duplicado (ver onboardingContinuarFijos).
+let onboardingFijosCreados = new Map();
 // Pasos 1 y 3: lo que el usuario dejó marcado la última vez que pasó por "Continuar"
 // en esta sesión de onboarding (null = aún no pasó). Sin esto, el botón "Volver"
 // mostraría las casillas en blanco de nuevo (renderObPaso1/3 solo miran state.config
@@ -10910,7 +10910,7 @@ function iniciarOnboarding(relanzamiento){
   onboardingPaso = 0;
   onboardingContadorIngreso = 0;
   onboardingContadorCuota = 0;
-  onboardingFijosCreados = new Set();
+  onboardingFijosCreados = new Map();
   onboardingFuentesSesion = null;
   onboardingCategoriasSesion = null;
   onboardingRender();
@@ -11013,17 +11013,22 @@ function renderObPaso3(){
   `;
 }
 function renderObPaso4(){
-  const filas = GASTOS_FIJOS_SUGERIDOS.map((g,i)=>`
+  const filas = GASTOS_FIJOS_SUGERIDOS.map((g,i)=>{
+    const idExistente = onboardingFijosCreados.get(i);
+    const gastoExistente = idExistente ? state.expenses.find(x=>x.id===idExistente) : null;
+    if(idExistente && !gastoExistente) onboardingFijosCreados.delete(i);   // entrada huérfana (borrado fuera del onboarding)
+    const montoMostrar = gastoExistente ? gastoExistente.amount : g.monto;
+    return `
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
       <label class="check-row" style="margin:0; flex:1; min-width:0;">
-        <input type="checkbox" data-ob-fijo-idx="${i}">
+        <input type="checkbox" data-ob-fijo-idx="${i}" ${gastoExistente?'checked':''}>
         <span>${g.nombre}</span>
       </label>
       <div class="field" style="margin:0; width:104px; flex-shrink:0;">
-        <input type="text" inputmode="numeric" data-ob-monto-idx="${i}" value="${formatMiles(String(g.monto))}">
+        <input type="text" inputmode="numeric" data-ob-monto-idx="${i}" value="${formatMiles(String(montoMostrar))}">
       </div>
     </div>
-  `).join('');
+  `;}).join('');
   return `
     <h2>Gastos fijos típicos</h2>
     <p class="sheet-note">Marca los que tengas y ajusta el monto si no calza. Máximo ${ONBOARDING_LOOP_LIMITE}.</p>
@@ -11098,21 +11103,43 @@ function onboardingCrearGastosFijosSecuencial(items, onDone){
     document.getElementById('gCuotaCompartida').checked = false;
     document.getElementById('gNumCuotas').value = '';
     document.getElementById('btnSaveGasto').onclick();
+    // btnSaveGasto hace push síncrono a state.expenses antes de devolver el control:
+    // el último elemento es el gasto recién creado de este ítem.
+    const creado = state.expenses[state.expenses.length - 1];
+    onboardingFijosCreados.set(item.idx, creado.id);
     setTimeout(siguiente, prefersReducedMotion() ? 0 : 550);
   }
   siguiente();
 }
 function onboardingContinuarFijos(){
-  const items = [...document.querySelectorAll('#obBody [data-ob-fijo-idx]:checked')].map(chk=>{
+  const paraCrear = [];
+  document.querySelectorAll('#obBody [data-ob-fijo-idx]').forEach(chk=>{
     const idx = parseInt(chk.dataset.obFijoIdx, 10);
+    const marcado = chk.checked;
     const base = GASTOS_FIJOS_SUGERIDOS[idx];
     const montoInput = document.querySelector(`#obBody [data-ob-monto-idx="${idx}"]`);
     const monto = parseMonto(montoInput);
-    return { idx, nombre: base.nombre, categoria: base.categoria, monto: (monto && monto > 0) ? monto : base.monto };
-  }).filter(item => !onboardingFijosCreados.has(item.idx));
-  if(!items.length){ onboardingAvanzarA(5); return; }
-  items.forEach(item => onboardingFijosCreados.add(item.idx));
-  onboardingCrearGastosFijosSecuencial(items, ()=> onboardingAvanzarA(5));
+    const montoFinal = (monto && monto > 0) ? monto : base.monto;
+    const idExistente = onboardingFijosCreados.get(idx);
+    const gastoExistente = idExistente ? state.expenses.find(x=>x.id===idExistente) : null;
+
+    if(marcado && !gastoExistente){
+      paraCrear.push({ idx, nombre: base.nombre, categoria: base.categoria, monto: montoFinal });
+    } else if(marcado && gastoExistente){
+      if(gastoExistente.amount !== montoFinal){
+        gastoExistente.amount = montoFinal;
+        saveState();
+      }
+    } else if(!marcado && gastoExistente){
+      // Mismo criterio que btnConfirmDeleteDebt para tipo==='fijo': no se borra el
+      // registro, se corta la recurrencia desde el mes actual en adelante.
+      gastoExistente.fixedEndMonthKey = monthKey(new Date());
+      saveState();
+      onboardingFijosCreados.delete(idx);
+    }
+  });
+  if(!paraCrear.length){ onboardingAvanzarA(5); return; }
+  onboardingCrearGastosFijosSecuencial(paraCrear, ()=> onboardingAvanzarA(5));
 }
 
 document.getElementById('obBtnVolver').addEventListener('click', ()=>{
