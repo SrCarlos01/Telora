@@ -496,13 +496,28 @@ button{font-family:inherit;}
 
 /* ---------- DEBTS ---------- */
 .debt-card{
+  position:relative;
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
   padding:16px; margin-bottom:12px;
 }
+/* Tanda (Opción D): mismo patrón de acento que .list-item (Historial) — barra al borde
+   izquierdo + ícono en anillo, color estable por --li-accent (fijado inline por tarjeta
+   en Cuotas vía colorDeCategoria; fijo/dorado por defecto en Metas, ver .goal-card). */
+.debt-card::before{
+  content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px; border-radius:3px;
+  background:var(--li-accent, var(--gold-dim));
+}
+.debt-card .li-icon{
+  width:40px; height:40px; border-radius:50%; background:transparent;
+  border:1.5px solid var(--li-accent, var(--gold-dim));
+  display:flex; align-items:center; justify-content:center; color:var(--li-accent, var(--gold)); font-size:18px; flex-shrink:0;
+}
 .debt-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;}
+.debt-top-main{display:flex; align-items:flex-start; gap:10px; min-width:0; flex:1 1 auto;}
+.debt-top-body{min-width:0;}
 .debt-title{font-size:16px; font-weight:500; color:var(--cream); margin:0 0 3px;}
 .debt-cat{font-size:13px; color:var(--gold-dim); margin:0;}
-.debt-amt{font-size:16.5px; font-weight:600; color:var(--cream); text-align:right;}
+.debt-amt{font-size:16.5px; font-weight:600; color:var(--cream); text-align:right; white-space:nowrap; flex-shrink:0;}
 .debt-amt small{display:block; font-size:11.5px; color:var(--cream-dim); font-weight:400;}
 .progress-track{
   height:7px; background:var(--surface-3); border-radius:6px; overflow:hidden; margin-bottom:8px;
@@ -577,10 +592,10 @@ button{font-family:inherit;}
 .goal-pause-badge .icon{width:11px; height:11px;}
 .ahorrado-nota{font-size:10.5px; color:var(--gold-dim); font-weight:400;}
 .goal-card.paused{
+  --li-accent:var(--danger);
   border-color:var(--danger);
   background:var(--surface-2);
   background:color-mix(in srgb, var(--danger) 9%, var(--surface-2));
-  box-shadow:inset 3px 0 0 var(--danger);
 }
 .goal-expand, .cuota-expand{
   max-height:0; overflow:hidden; opacity:0; transition:max-height .28s ease, opacity .2s ease;
@@ -5546,10 +5561,13 @@ function renderMetas(){
     <div class="debt-card goal-card${pausada ? ' paused' : ''}" data-goalcard="${g.id}">
       ${editBtn}
       <div class="debt-top">
-        <div>
-          <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
-          <p class="debt-cat">Meta indefinida · sin fecha límite</p>
-          ${pauseBadge}
+        <div class="debt-top-main">
+          <div class="li-icon">${icon('target')}</div>
+          <div class="debt-top-body">
+            <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
+            <p class="debt-cat">Meta indefinida · sin fecha límite</p>
+            ${pauseBadge}
+          </div>
         </div>
         <div class="debt-amt">${money(ahorrado)}<small>acumulado</small></div>
       </div>
@@ -5567,11 +5585,14 @@ function renderMetas(){
     <div class="debt-card goal-card${done ? ' done' : ''}${pausada ? ' paused' : ''}" data-goalcard="${g.id}">
       ${editBtn}
       <div class="debt-top">
-        <div>
-          <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
-          <p class="debt-cat">${g.fechaLimite ? 'Meta para ' + fmtDate(g.fechaLimite) : 'Sin fecha límite'}</p>
-          ${done ? '<span class="goal-done-badge">Meta cumplida</span>' : ''}
-          ${pauseBadge}
+        <div class="debt-top-main">
+          <div class="li-icon">${icon('target')}</div>
+          <div class="debt-top-body">
+            <p class="debt-title">${escHtml(g.name)}${compBadge}</p>
+            <p class="debt-cat">${g.fechaLimite ? 'Meta para ' + fmtDate(g.fechaLimite) : 'Sin fecha límite'}</p>
+            ${done ? '<span class="goal-done-badge">Meta cumplida</span>' : ''}
+            ${pauseBadge}
+          </div>
         </div>
         <div class="debt-amt">${money(g.montoObjetivo)}<small>objetivo</small></div>
       </div>
@@ -8380,11 +8401,14 @@ function renderCuotas(){
     }
 
     return `
-    <div class="debt-card" data-cuotacard>
+    <div class="debt-card" data-cuotacard style="--li-accent:${colorDeCategoria(d.category)};">
       <div class="debt-top">
-        <div>
-          <p class="debt-title">${escHtml(d.description)}${d.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : ''}</p>
-          <p class="debt-cat">${escHtml(d.category)}</p>
+        <div class="debt-top-main">
+          <div class="li-icon">${catIcon(d.category)}</div>
+          <div class="debt-top-body">
+            <p class="debt-title">${escHtml(d.description)}${d.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : ''}</p>
+            <p class="debt-cat">${escHtml(d.category)}</p>
+          </div>
         </div>
         <div class="debt-amt">${money(montoCuota)}<small>por cuota</small></div>
       </div>
