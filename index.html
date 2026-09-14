@@ -455,16 +455,24 @@ button{font-family:inherit;}
 .segmented button.active{background:var(--burgundy); color:#FBEFE9;}
 
 .list-item{
+  position:relative;
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:15px 16px; margin-bottom:9px; display:flex; align-items:center; gap:12px; cursor:pointer;
   transition:background .15s ease, transform .12s ease;
 }
 .list-item:active{transform:scale(0.94); background:var(--surface-3);}
-.list-item .li-icon{
-  width:40px; height:40px; border-radius:11px; background:var(--surface-3);
-  display:flex; align-items:center; justify-content:center; color:var(--gold); font-size:18px; flex-shrink:0;
+/* Rediseño "Opción B — Editorial con acento": barra de color al borde izquierdo, color
+   estable por categoría/fuente (--li-accent, fijado inline por fila — ver colorDeCategoria
+   / colorDeFuente). Inset arriba/abajo para no depender del radio de la tarjeta. */
+.list-item::before{
+  content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px; border-radius:3px;
+  background:var(--li-accent, var(--gold-dim));
 }
-.list-item.income .li-icon{color:var(--success);}
+.list-item .li-icon{
+  width:40px; height:40px; border-radius:50%; background:transparent;
+  border:1.5px solid var(--li-accent, var(--gold-dim));
+  display:flex; align-items:center; justify-content:center; color:var(--li-accent, var(--gold)); font-size:18px; flex-shrink:0;
+}
 .li-body{flex:1; min-width:0;}
 .li-title{font-size:15px; color:var(--cream); margin:0 0 2px; display:flex; align-items:center; column-gap:6px; row-gap:4px; min-width:0;}
 .li-title .li-title-text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
@@ -7332,8 +7340,9 @@ function openCategoriaDetalle(categoria, normalExpenses){
   if(items.length===0){
     box.innerHTML = emptyMsg('No hay movimientos en esta categoría este mes.');
   } else {
+    const catColor = colorDeCategoria(categoria);   // rediseño Opción B: barra/anillo por categoría
     box.innerHTML = items.map(it=>`
-      <div class="list-item" style="cursor:default;">
+      <div class="list-item" style="cursor:default; --li-accent:${catColor};">
         <div class="li-icon">${catIcon(categoria)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.descripcion ? escHtml(it.descripcion) : '<span class="li-muted">Sin descripción</span>'}</span>${it.tipo?`<span class="li-badge">${it.tipo}</span>`:''}</p>
@@ -7953,7 +7962,7 @@ function renderHistorial(){
         const check = e.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
         const unpaidBadge = e.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
         return `
-      <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}">
+      <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}" style="--li-accent:${colorDeCategoria(e.category)};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${e.description ? escHtml(e.description) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
@@ -7977,7 +7986,7 @@ function renderHistorial(){
       // aparece al expandir el Detalle, dentro de .li-sub.
       const nom = e.nombre || e.description || '';
       return `
-      <div class="list-item${expCls}" data-editexpense="${e.id}">
+      <div class="list-item${expCls}" data-editexpense="${e.id}" style="--li-accent:${colorDeCategoria(e.category)};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
@@ -8008,8 +8017,9 @@ function renderHistorial(){
     const rowHtml = (i)=>{
       const nom = i.nombre || i.description || i.source || '';
       const rb = rangoFijoRowBits(i, 'ingreso');
+      const fuente = (i.source && String(i.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${i.id}">
+      <div class="list-item income${expCls}" data-editincome="${i.id}" style="--li-accent:${colorDeFuente(fuente)};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
@@ -8120,8 +8130,9 @@ function renderHistorialTodo(box){
       : `<span class="li-saldo${saldo < 0 ? ' neg' : ''}">Saldo: ${money(saldo)}</span>`;
     if(it.kind==='ingreso'){
       const rb = rangoFijoRowBits(it, 'ingreso');
+      const fuente = (it.source && String(it.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${it.id}">
+      <div class="list-item income${expCls}" data-editincome="${it.id}" style="--li-accent:${colorDeFuente(fuente)};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
@@ -8147,7 +8158,7 @@ function renderHistorialTodo(box){
       else { amtHtml = `<span class="li-amount li-amount-cuota-origen">${money(it.amount)}</span>`;
              nota = `<p class="li-cuota-note">Sin impacto en el total: sólo mueve saldo entre cuentas.</p>`; }
       return `
-      <div class="list-item${expCls}" data-edittransfer="${it.transferId}">
+      <div class="list-item${expCls}" data-edittransfer="${it.transferId}" style="--li-accent:var(--gold-dim);">
         <div class="li-icon">${tIcon}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Transferencia</span>'}</span><span class="li-badge">Transferencia</span></p>
@@ -8167,7 +8178,7 @@ function renderHistorialTodo(box){
       const check = it.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
       const unpaidBadge = it.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
       return `
-      <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}">
+      <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}" style="--li-accent:${colorDeCategoria(it.category)};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
@@ -8197,7 +8208,7 @@ function renderHistorialTodo(box){
       }
     }
     return `
-      <div class="list-item${expCls}" data-editexpense="${it.id}">
+      <div class="list-item${expCls}" data-editexpense="${it.id}" style="--li-accent:${colorDeCategoria(it.category)};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
@@ -10475,7 +10486,9 @@ function gastoPorCategoriaData(refDate){
   const ct = {};
   getExpensesForMonth(refDate, cta).filter(e=> !e.debtId).forEach(e=> ct[e.category] = (ct[e.category]||0) + e.amount);
   state.debts.forEach(d=>{ if(!itemEnVista(d, cta)) return; const info = cuotaInfoForMonth(d, refDate); if(info) ct[d.category] = (ct[d.category]||0) + info.monto; });   // Tanda L2
-  return Object.entries(ct).filter(([,v])=> v>0).map(([label,value])=> ({label,value})).sort((a,b)=> b.value - a.value);
+  return Object.entries(ct).filter(([,v])=> v>0)
+    .map(([label,value])=> ({ label, value, color: colorDeCategoria(label) }))
+    .sort((a,b)=> b.value - a.value);
 }
 
 // Tanda X · pto 3: ingreso por FUENTE del mes, para la torta de la pestaña Ingresos del
@@ -10501,6 +10514,20 @@ function ingresoPorFuenteData(refDate){
 function colorDeFuente(nombre){
   if(nombre === 'Sin fuente') return 'var(--cream-dim)';
   const arr = (state.config && state.config.fuentes) || [];
+  const idx = arr.indexOf(nombre);
+  if(idx >= 0) return sliceColor(idx);
+  let h = 0;
+  for(let c = 0; c < nombre.length; c++) h = (h * 31 + nombre.charCodeAt(c)) | 0;
+  return sliceColor(SLICE_COLORS.length + (Math.abs(h) % 12));   // zona de tonos generados
+}
+
+// Tanda (rediseño Opción B): mismo patrón que colorDeFuente, pero por CATEGORÍA de
+// gasto. Color estable según la posición en state.config.categorias — no según el
+// ranking de gasto del mes — así la misma categoría no cambia de color entre meses ni
+// al reordenar el gráfico de torta. Una categoría heredada que ya no está en la lista
+// (ej. una eliminada) cae al mismo fallback por hash del nombre que usa colorDeFuente.
+function colorDeCategoria(nombre){
+  const arr = (state.config && state.config.categorias) || [];
   const idx = arr.indexOf(nombre);
   if(idx >= 0) return sliceColor(idx);
   let h = 0;
