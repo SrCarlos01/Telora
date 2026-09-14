@@ -113,7 +113,8 @@ function runTests(){
     'resetMoneyCache','resetSaldoRowCache',
     'disponibleBaseDelMes','totalAportesMetasDelMes','saldoAcumuladoHasta',
     'cuotaVencidaPorFecha','cuotaPagadaDelMes','cuotaEstadoMes','cuotasSinConfirmarDelMes',
-    'aporteMetaEnMes','aportePactadoDeMeta','calcularEstadoAportesDelMes'
+    'aporteMetaEnMes','aportePactadoDeMeta','calcularEstadoAportesDelMes',
+    'cuotaInfoForMonth','desgloseDisponible','cuotasPorCategoriaGastoDelMes','aporteMetaObjetivoEnMes'
   ];
   funcionesEsperadas.forEach(nombre=>{
     assert(typeof win[nombre] === 'function', `iframe.contentWindow.${nombre} existe y es function`,
@@ -545,6 +546,304 @@ function runTests(){
     assert(resultado.size === 1 && resultado.has('gPausa2') && !resultado.has('gPausa1'),
       `calcularEstadoAportesDelMes: con 50.000 disponibles y 30k+40k pactados, se pausa solo la meta más nueva`,
       `Obtenido: [${[...resultado].join(', ')}]`);
+  }
+
+  // ==================== T4 PARTE 3 — 4 funciones nuevas sin cobertura ====================
+
+  // ---- cuotaInfoForMonth ----
+  // Deuda comprada 2026-01-01, 4 cuotas de 400.000/4=100.000 c/u. Su ciclo real de cuotas
+  // corre de cuotaNum 1 (feb 2026, = addMonths(purchaseDate,1)) a cuotaNum 4 (may 2026).
+  // Un mismo fixture cubre mes intermedio, primer mes del ciclo, y los dos límites fuera
+  // de rango (antes del primero y después del último).
+  {
+    const debt = {
+      id:'dInfo', purchaseDate:'2026-01-01', numCuotas:4, totalAmount:400000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const st = fixtureBase();
+    st.debts.push(debt);
+    setState(win, st);
+    resetCaches(win);
+
+    // Mes intermedio (marzo 2026 = cuotaNum 2 de 4): monto = 400.000/4 = 100.000,
+    // saldoRestante = 400.000 - 2*100.000 = 200.000.
+    const infoIntermedio = win.cuotaInfoForMonth(debt, new Date(2026, 2, 15)); // 15 marzo 2026
+    assert(infoIntermedio && infoIntermedio.cuotaNum === 2 && infoIntermedio.total === 4 &&
+      infoIntermedio.monto === 100000 && infoIntermedio.saldoRestante === 200000,
+      `cuotaInfoForMonth (mes intermedio, cuotaNum 2/4): monto=100.000, saldoRestante=200.000`,
+      `Obtenido: ${JSON.stringify(infoIntermedio)}`);
+
+    // Primer mes del ciclo (febrero 2026 = cuotaNum 1 de 4): saldoRestante = 400.000-100.000=300.000.
+    const infoPrimero = win.cuotaInfoForMonth(debt, new Date(2026, 1, 15)); // 15 febrero 2026
+    assert(infoPrimero && infoPrimero.cuotaNum === 1 && infoPrimero.saldoRestante === 300000,
+      `cuotaInfoForMonth (primer mes del ciclo, cuotaNum 1/4): saldoRestante=300.000`,
+      `Obtenido: ${JSON.stringify(infoPrimero)}`);
+
+    // Fuera de rango, antes: enero 2026, un mes antes del primer cuotaNum (febrero) -> null.
+    const infoAntes = win.cuotaInfoForMonth(debt, new Date(2026, 0, 15)); // 15 enero 2026
+    assert(infoAntes === null,
+      `cuotaInfoForMonth (fuera de rango, antes del ciclo) = null`,
+      `Obtenido: ${JSON.stringify(infoAntes)}`);
+
+    // Fuera de rango, después: junio 2026, un mes después del último cuotaNum (mayo) -> null.
+    const infoDespues = win.cuotaInfoForMonth(debt, new Date(2026, 5, 15)); // 15 junio 2026
+    assert(infoDespues === null,
+      `cuotaInfoForMonth (fuera de rango, después del ciclo) = null`,
+      `Obtenido: ${JSON.stringify(infoDespues)}`);
+  }
+
+  // ---- cuotaInfoForMonth (límite: última cuota con división no exacta) ----
+  // Deuda de 100.000 en 11 cuotas: monto = 100.000/11 = 9090,909090909091 (no exacto).
+  // Su cuotaNum 11 (última) cae en diciembre 2026 (feb 2026 + 10 meses). saldoRestante
+  // teórico es 0, pero el cálculo real (totalAmount - cuotaNum*monto) puede arrastrar un
+  // residuo de redondeo de punto flotante — se verifica con tolerancia, no igualdad estricta
+  // (riesgo señalado en el encargo de esta tanda; no es un bug a corregir acá).
+  {
+    const debt = {
+      id:'dUltima', purchaseDate:'2026-01-01', numCuotas:11, totalAmount:100000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const st = fixtureBase();
+    st.debts.push(debt);
+    setState(win, st);
+    resetCaches(win);
+    const infoUltima = win.cuotaInfoForMonth(debt, new Date(2026, 11, 15)); // 15 diciembre 2026
+    const montoEsperado = 100000/11;
+    assert(infoUltima && infoUltima.cuotaNum === 11 &&
+      Math.abs(infoUltima.monto - montoEsperado) < 0.01 &&
+      Math.abs(infoUltima.saldoRestante) < 0.01,
+      `cuotaInfoForMonth (última cuota, división no exacta): saldoRestante ≈ 0 (tolerancia redondeo)`,
+      `Obtenido: ${JSON.stringify(infoUltima)} — monto esperado ≈ ${montoEsperado}`);
+  }
+
+  // ---- desgloseDisponible ----
+  // Deuda comprada un mes antes del refDate (así su compra no genera cuota propia y el
+  // arrastre de meses anteriores queda en 0, sin depender de resumenTotalesDelMes de otro
+  // mes): 2025-12-01, 1 cuota, 60.000 -> cuotaNum 1 en enero 2026, monto=30.000/2=30.000
+  // (numCuotas=2 para poder reusar el mismo patrón que cuotasPendientesDelMes: en realidad
+  // basta 1 cuota, se deja 2 solo por claridad del ciclo). Enero 2026 es un mes CERRADO
+  // (muy anterior a "hoy"). Ingreso 200.000 - gasto 50.000 - cuota 30.000 (sin confirmar,
+  // pero en mes cerrado SIEMPRE cuenta como gasto) = disponible 120.000.
+  {
+    const debtCerrado = {
+      id:'dDesglose1', purchaseDate:'2025-12-01', numCuotas:2, totalAmount:60000, category:'Comida',
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const st = fixtureBase();
+    st.debts.push(debtCerrado);
+    st.incomes.push({ id:'iD1', date:'2026-01-05', amount:200000, tipo:'Casual' });
+    st.expenses.push({ id:'eD1', date:'2026-01-10', amount:50000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refCerrado = new Date(2026, 0, 15); // 15 enero 2026
+
+    // incluirCeros=false: los 3 términos con monto $0 (saldoAnterior, metas, transferencias)
+    // no aparecen; quedan solo ingresos, gastoContado y la cuota del mes (clave 'cuotasMes',
+    // porque el mes está cerrado). suma = 200.000-50.000-30.000 = 120.000 = disponible.
+    const sinCeros = win.desgloseDisponible(refCerrado, false, 'total');
+    const clavesSinCeros = sinCeros.terminos.map(t=>t.clave).sort();
+    assert(sinCeros.terminos.length === 3 &&
+      !clavesSinCeros.includes('saldoAnterior') && !clavesSinCeros.includes('metas') && !clavesSinCeros.includes('transferencias') &&
+      sinCeros.terminos.some(t=> t.clave==='cuotasMes' && t.monto===30000) &&
+      sinCeros.disponible === 120000 && sinCeros.cuadra === true,
+      `desgloseDisponible (mes cerrado, incluirCeros=false): 3 términos no-$0, cuadra=true, disponible=120.000`,
+      `Términos: ${JSON.stringify(sinCeros.terminos)} — disponible=${sinCeros.disponible} cuadra=${sinCeros.cuadra}`);
+
+    // incluirCeros=true: los 6 términos aparecen todos (incluidos los $0), pero la suma y
+    // el disponible NO cambian frente al caso anterior.
+    const conCeros = win.desgloseDisponible(refCerrado, true, 'total');
+    assert(conCeros.terminos.length === 6 && conCeros.suma === sinCeros.suma &&
+      conCeros.disponible === 120000 && conCeros.cuadra === true,
+      `desgloseDisponible (mes cerrado, incluirCeros=true): 6 términos (todos), suma y disponible sin cambio`,
+      `Términos: ${JSON.stringify(conCeros.terminos)} — suma=${conCeros.suma}`);
+  }
+
+  // ---- desgloseDisponible (mes NO cerrado: clave 'cuotasPagadas' en vez de 'cuotasMes') ----
+  // Deuda comprada 2026-09-01 (un mes antes del refDate, mismo truco que el caso anterior
+  // para que el arrastre quede en 0), 1 cuota de 40.000 -> cuotaNum 1 en octubre 2026 (mes
+  // FUTURO respecto a "hoy"), confirmada manualmente como pagada. Ingreso 100.000 - cuota
+  // confirmada 40.000 (sin gasto) = disponible 60.000. Al no estar cerrado el mes, el
+  // término de cuotas debe usar la clave 'cuotasPagadas' (no 'cuotasMes').
+  {
+    const debtFuturo = {
+      id:'dDesglose2', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:40000, category:'Transporte',
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const refFuturo = new Date(2026, 9, 15); // 15 octubre 2026
+    debtFuturo.manualPaidMonthKeys = [ mk(refFuturo) ];
+    const st = fixtureBase();
+    st.debts.push(debtFuturo);
+    st.incomes.push({ id:'iD2', date:'2026-10-05', amount:100000, tipo:'Casual' });
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.desgloseDisponible(refFuturo, false, 'total');
+    assert(resultado.terminos.some(t=> t.clave==='cuotasPagadas' && t.monto===40000) &&
+      !resultado.terminos.some(t=> t.clave==='cuotasMes') &&
+      resultado.disponible === 60000 && resultado.cuadra === true,
+      `desgloseDisponible (mes no cerrado): clave 'cuotasPagadas' (no 'cuotasMes'), disponible=60.000`,
+      `Términos: ${JSON.stringify(resultado.terminos)} — disponible=${resultado.disponible} cuadra=${resultado.cuadra}`);
+  }
+
+  // ---- cuotasPorCategoriaGastoDelMes ----
+  // Deuda comprada un mes antes del refDate (2025-12-01, 1 cuota de 30.000, categoría
+  // Comida) -> cuotaNum 1 en enero 2026, mes CERRADO. Sin confirmar manualmente, pero en
+  // mes cerrado la cuota cuenta igual: out = { Comida: 30.000 }.
+  {
+    const st = fixtureBase();
+    st.debts.push({
+      id:'dCatCerrado', purchaseDate:'2025-12-01', numCuotas:1, totalAmount:30000, category:'Comida',
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 0, 15); // 15 enero 2026 (cerrado)
+    const resultado = win.cuotasPorCategoriaGastoDelMes(refDate, 'total');
+    assert(resultado.Comida === 30000 && Object.keys(resultado).length === 1,
+      `cuotasPorCategoriaGastoDelMes (mes cerrado, sin confirmar): cuenta igual = { Comida: 30.000 }`,
+      `Obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ---- cuotasPorCategoriaGastoDelMes (mes en curso/futuro, cuota SIN confirmar: no suma) ----
+  {
+    const st = fixtureBase();
+    st.debts.push({
+      id:'dCatNoConf', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:50000, category:'Transporte',
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 9, 15); // 15 octubre 2026 (futuro respecto a "hoy")
+    const resultado = win.cuotasPorCategoriaGastoDelMes(refDate, 'total');
+    assert(Object.keys(resultado).length === 0,
+      `cuotasPorCategoriaGastoDelMes (mes no cerrado, cuota sin confirmar): no suma = {}`,
+      `Obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ---- cuotasPorCategoriaGastoDelMes (mes en curso/futuro, cuota SÍ confirmada: sí suma) ----
+  {
+    const refDate = new Date(2026, 9, 15); // 15 octubre 2026 (futuro respecto a "hoy")
+    const st = fixtureBase();
+    st.debts.push({
+      id:'dCatConf', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:50000, category:'Transporte',
+      manualPaidMonthKeys: [ mk(refDate) ], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.cuotasPorCategoriaGastoDelMes(refDate, 'total');
+    assert(resultado.Transporte === 50000 && Object.keys(resultado).length === 1,
+      `cuotasPorCategoriaGastoDelMes (mes no cerrado, cuota confirmada): sí suma = { Transporte: 50.000 }`,
+      `Obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ---- cuotasPorCategoriaGastoDelMes (filtro por cuentaId: deudas de otra cuenta no aparecen) ----
+  // Dos deudas con cuota activa el mismo mes (cerrado, para no depender de confirmación),
+  // cada una en una cuenta distinta. Al pedir la vista de 'acc1', solo debe aparecer la
+  // categoría de la deuda propia de 'acc1' (itemEnVista): 'Comida'. 'Salud' (de 'acc2')
+  // no debe aparecer.
+  {
+    const st = fixtureBase();
+    st.accounts.push({ id:'acc2', nombre:'Secundaria', orden:1, archivada:false });
+    st.debts.push({
+      id:'dCatAcc1', purchaseDate:'2025-12-01', numCuotas:1, totalAmount:45000, category:'Comida',
+      cuentaId:'acc1', manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    st.debts.push({
+      id:'dCatAcc2', purchaseDate:'2025-12-01', numCuotas:1, totalAmount:55000, category:'Salud',
+      cuentaId:'acc2', manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 0, 15); // 15 enero 2026 (cerrado)
+    const resultado = win.cuotasPorCategoriaGastoDelMes(refDate, 'acc1');
+    assert(resultado.Comida === 45000 && !('Salud' in resultado) && Object.keys(resultado).length === 1,
+      `cuotasPorCategoriaGastoDelMes (filtro cuentaId='acc1'): solo Comida (45.000), Salud de acc2 no aparece`,
+      `Obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ---- aporteMetaObjetivoEnMes ----
+  // Meta sin aporteAutomatico.activo -> null, sin importar el resto de sus campos.
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gObj1', nombre:'Meta sin auto', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: { activo:false, pausado:false, tipo:'monto', valor:0, monto:99999, diaDelMes:1, fechaActivacion:'2026-01-01' }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.aporteMetaObjetivoEnMes(goal, new Date(2026, 2, 15));
+    assert(resultado === null,
+      `aporteMetaObjetivoEnMes (sin aporteAutomatico.activo) = null`,
+      `Obtenido: ${resultado}`);
+  }
+
+  // ---- aporteMetaObjetivoEnMes (tipo 'monto': devuelve aa.monto tal cual) ----
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gObj2', nombre:'Meta monto fijo', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: { activo:true, pausado:false, tipo:'monto', valor:0, monto:12345, diaDelMes:1, fechaActivacion:'2026-01-01' }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.aporteMetaObjetivoEnMes(goal, new Date(2026, 2, 15));
+    assert(resultado === 12345,
+      `aporteMetaObjetivoEnMes (tipo 'monto') = aa.monto tal cual (12.345)`,
+      `Obtenido: ${resultado}`);
+  }
+
+  // ---- aporteMetaObjetivoEnMes (tipo 'porcentaje' CON aporte virtual ya calculado) ----
+  // Meta activada en enero 2026 (mes anterior al refDate), tipo porcentaje 10%, no pausada:
+  // aporteAutomaticoVirtualParaMes SÍ aplica ese mes -> aporteMetaObjetivoEnMes debe usar
+  // ese mismo monto. disponibleBaseDelMes(marzo 2026, 'total') = 200.000-50.000 = 150.000
+  // (sin cuotas, sin arrastre previo). va.monto = round(150.000*10/100) = 15.000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'iObj3', date:'2026-03-05', amount:200000, tipo:'Casual' });
+    st.expenses.push({ id:'eObj3', date:'2026-03-10', amount:50000, tipo:'Casual', category:'Comida' });
+    const goal = {
+      id:'gObj3', nombre:'Meta porcentaje activa', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: { activo:true, pausado:false, tipo:'porcentaje', valor:10, monto:0, diaDelMes:1, fechaActivacion:'2026-01-01' }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // 15 marzo 2026
+    const disponibleBase = win.disponibleBaseDelMes(refDate, 'total');
+    const va = win.aporteAutomaticoVirtualParaMes(goal, refDate);
+    const resultado = win.aporteMetaObjetivoEnMes(goal, refDate);
+    assert(disponibleBase === 150000 && va && va.monto === 15000 && resultado === va.monto,
+      `aporteMetaObjetivoEnMes (tipo 'porcentaje', con aporte virtual): usa va.monto = 15.000`,
+      `disponibleBase=${disponibleBase}, va=${JSON.stringify(va)}, resultado=${resultado}`);
+  }
+
+  // ---- aporteMetaObjetivoEnMes (tipo 'porcentaje' SIN aporte virtual: calcula por sí misma) ----
+  // Meta con aporteAutomatico.pausado=true: sigue "activa" (aa.activo=true, lo único que
+  // chequea aporteMetaObjetivoEnMes antes de entrar a la rama 'porcentaje'), pero
+  // aporteAutomaticoVirtualParaMes devuelve null por estar pausada -> cae al cálculo
+  // propio: Math.round(disponibleBaseDelMes(d,'total') * valor/100). disponibleBaseDelMes
+  // (abril 2026) = 220.000-40.000 = 180.000; con valor=15 -> round(180.000*15/100)=27.000.
+  // Verificación independiente: 180.000*0.15 = 27.000,0 exacto (sin residuo de redondeo).
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'iObj4', date:'2026-04-05', amount:220000, tipo:'Casual' });
+    st.expenses.push({ id:'eObj4', date:'2026-04-10', amount:40000, tipo:'Casual', category:'Comida' });
+    const goal = {
+      id:'gObj4', nombre:'Meta porcentaje pausada', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: { activo:true, pausado:true, tipo:'porcentaje', valor:15, monto:0, diaDelMes:1, fechaActivacion:'2026-01-01' }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 3, 15); // 15 abril 2026
+    const disponibleBase = win.disponibleBaseDelMes(refDate, 'total');
+    const va = win.aporteAutomaticoVirtualParaMes(goal, refDate);
+    const resultado = win.aporteMetaObjetivoEnMes(goal, refDate);
+    const esperado = Math.round(disponibleBase * 15 / 100);
+    assert(disponibleBase === 180000 && va === null && resultado === esperado && esperado === 27000,
+      `aporteMetaObjetivoEnMes (tipo 'porcentaje', sin aporte virtual por pausa): calcula 180.000*15% = 27.000`,
+      `disponibleBase=${disponibleBase}, va=${va}, resultado=${resultado}, esperado=${esperado}`);
   }
 
   renderResultados();
