@@ -115,7 +115,7 @@ button{font-family:inherit;}
   display:flex; align-items:center; justify-content:center; padding:4px; cursor:pointer;
   transition:color .15s ease, transform .15s ease;
 }
-.icon-btn:active{transform:scale(0.9); color:var(--gold);}
+.icon-btn:active{transform:scale(0.85); color:var(--gold);}
 
 /* ---------- MODO SOLO LECTURA (Tanda H.3): indicador discreto ---------- */
 .readonly-banner{
@@ -185,7 +185,7 @@ button{font-family:inherit;}
   background:none; border:none; color:var(--gold-dim); font-size:22px; cursor:pointer;
   padding:6px; transition:color .15s ease, transform .15s ease;
 }
-.month-select button:active{transform:scale(0.85); color:var(--gold);}
+.month-select button:active{transform:scale(0.80); color:var(--gold);}
 .month-label{font-size:18px; font-weight:500; color:var(--cream); min-width:160px; text-align:center;}
 
 /* ---------- SELECTOR DE CUENTA (Tanda C3) ---------- */
@@ -199,7 +199,7 @@ button{font-family:inherit;}
   color:var(--cream); font:inherit; font-size:13.5px; font-weight:500;
   padding:7px 14px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
 }
-.account-select-btn:active{transform:scale(0.97);}
+.account-select-btn:active{transform:scale(0.925);}
 .account-select-btn[aria-expanded="true"]{border-color:var(--gold-dim); background:var(--surface-3);}
 .account-select-btn .asb-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
 .account-select-btn .asb-k{color:var(--cream-dim); flex-shrink:0;}
@@ -392,7 +392,7 @@ button{font-family:inherit;}
   color:#FBEFE9; border-radius:10px; padding:9px 12px; font-size:12.5px; font-family:inherit;
   cursor:pointer; transition:background .15s ease, transform .12s ease;
 }
-.balance-detalle-btn:active{ transform:scale(0.98); }
+.balance-detalle-btn:active{ transform:scale(0.935); }
 .balance-detalle-btn .icon{ width:14px; height:14px; transition:transform .2s ease; }
 .balance-detalle-btn[aria-expanded="true"] .icon{ transform:rotate(180deg); }
 :root.hc .balance-detalle-btn{ border-width:2px; }
@@ -421,7 +421,7 @@ button{font-family:inherit;}
   background:var(--surface-2); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:8px;
   border:1px solid var(--border); cursor:pointer; transition:background .15s ease, transform .12s ease;
 }
-.cat-row:active{transform:scale(0.985); background:var(--surface-3);}
+.cat-row:active{transform:scale(0.94); background:var(--surface-3);}
 .cat-row .left{display:flex; align-items:center; gap:10px;}
 .cat-row .cat-sw{width:10px; height:10px; border-radius:3px; flex-shrink:0;}   /* Tanda R: leyenda de la dona */
 .cat-row .name{font-size:15px; color:#EADFD2;}
@@ -459,7 +459,7 @@ button{font-family:inherit;}
   padding:15px 16px; margin-bottom:9px; display:flex; align-items:center; gap:12px; cursor:pointer;
   transition:background .15s ease, transform .12s ease;
 }
-.list-item:active{transform:scale(0.985); background:var(--surface-3);}
+.list-item:active{transform:scale(0.94); background:var(--surface-3);}
 .list-item .li-icon{
   width:40px; height:40px; border-radius:11px; background:var(--surface-3);
   display:flex; align-items:center; justify-content:center; color:var(--gold); font-size:18px; flex-shrink:0;
@@ -510,7 +510,7 @@ button{font-family:inherit;}
   color:var(--gold); border-radius:var(--radius-sm); padding:10px; font-size:13px; font-weight:500;
   cursor:pointer; transition:all .15s ease;
 }
-.debt-action:active{transform:scale(0.98);}
+.debt-action:active{transform:scale(0.935);}
 .debt-action.undo{color:var(--cream-dim);}
 .debt-manual-note{
   font-size:11.5px; color:var(--gold-dim); margin:2px 0 0; display:flex; align-items:center; gap:5px;
@@ -536,7 +536,7 @@ button{font-family:inherit;}
 
 /* ---------- METAS (reutiliza .debt-card) ---------- */
 .goal-card{animation:fadeIn .3s ease; cursor:pointer;}
-.goal-card:active{transform:scale(0.99);}
+.goal-card:active{transform:scale(0.945);}
 .goal-card .progress-fill{background:linear-gradient(90deg, var(--gold-dim) 0%, var(--gold) 100%);}
 .goal-card.done .progress-fill{background:linear-gradient(90deg, var(--success) 0%, #A7C08D 100%);}
 .goal-done-badge{
@@ -558,7 +558,7 @@ button{font-family:inherit;}
   position:absolute; top:8px; right:8px; background:none; border:none; padding:7px;
   color:var(--gold-dim); cursor:pointer; z-index:2; line-height:0; transition:transform .12s ease, color .15s ease;
 }
-.card-edit:active{transform:scale(0.85); color:var(--gold);}
+.card-edit:active{transform:scale(0.80); color:var(--gold);}
 .card-edit .icon{width:17px; height:17px;}
 .goal-card .debt-top{padding-right:26px;}   /* deja aire para el lápiz */
 .goal-pause-badge{
@@ -598,7 +598,7 @@ button{font-family:inherit;}
   min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
 }
 .aporte-del .icon{width:15px; height:15px;}
-.aporte-del:active{transform:scale(0.9);}
+.aporte-del:active{transform:scale(0.85);}
 
 .row-expand{
   display:block; margin:8px 0 0 auto; background:none; border:none; color:var(--gold-dim);
@@ -649,7 +649,7 @@ button{font-family:inherit;}
   background:var(--surface-2); border:1px solid var(--border); color:var(--gold);
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s ease;
 }
-.hist-filter-btn:active{transform:scale(0.94);}
+.hist-filter-btn:active{transform:scale(0.90);}
 .hist-filter-btn.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
 .hist-filter-btn .icon{width:17px; height:17px;}
 /* Filtro Cuotas / Gastos normales (Tanda L): a la izquierda del embudo. Mismo alto que
@@ -712,7 +712,7 @@ button{font-family:inherit;}
   transition:background .15s ease, border-color .15s ease, transform .12s ease, color .15s ease;
 }
 .hist-cat-chip .icon, .hist-cat-chip .cat-emoji{width:15px; height:15px; font-size:14px; color:var(--gold); flex-shrink:0;}
-.hist-cat-chip:active{transform:scale(0.96);}
+.hist-cat-chip:active{transform:scale(0.92);}
 .hist-cat-chip.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
 .hist-cat-chip.on .icon, .hist-cat-chip.on .cat-emoji{color:#FBEFE9;}
 .hist-filter-panel{
@@ -749,9 +749,9 @@ button{font-family:inherit;}
   font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s ease;
 }
 .hist-rango-apply{background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9;}
-.hist-rango-apply:active{transform:scale(0.97);}
+.hist-rango-apply:active{transform:scale(0.93);}
 .hist-rango-clear{background:var(--surface-2); border:1px solid var(--border); color:var(--cream);}
-.hist-rango-clear:active{transform:scale(0.97);}
+.hist-rango-clear:active{transform:scale(0.93);}
 /* Chip "Rango: 15 ago – 3 sep" — deja claro que se salió de la vista mensual. */
 .hist-rango-chip{
   display:flex; align-items:center; gap:10px; margin:12px 0 4px;
@@ -766,7 +766,7 @@ button{font-family:inherit;}
   color:#FBEFE9; border-radius:14px; padding:5px 12px; font-family:inherit; font-size:12px;
   font-weight:600; cursor:pointer;
 }
-.hist-rango-chip .hrc-back:active{transform:scale(0.96);}
+.hist-rango-chip .hrc-back:active{transform:scale(0.92);}
 :root.hc .hist-rango-field input, :root.hc .hist-rango-chip, :root.hc .hist-rango-apply,
 :root.hc .hist-rango-clear{border-width:2px;}
 
@@ -797,7 +797,7 @@ button{font-family:inherit;}
 #btnIrAHoy.show{opacity:1; transform:translateY(0) scale(1);}
 #btnIrAHoy[hidden]{display:none;}
 #btnIrAHoy:active{background:var(--burgundy-light);}
-#btnIrAHoy.show:active{transform:scale(0.95);}
+#btnIrAHoy.show:active{transform:scale(0.91);}
 #btnIrAHoy .icon{width:14px; height:14px; stroke-width:2.5;}
 #btnIrAHoy .ahoy-ico-up{display:none;}
 .hist-ir-hoy-host.pos-top #btnIrAHoy .ahoy-ico-down{display:none;}
@@ -899,7 +899,7 @@ button{font-family:inherit;}
   box-shadow:0 6px 16px rgba(92,31,46,0.45);
   transition:transform .15s ease, background .15s ease;
 }
-.nav-add:active{transform:translateY(-16px) scale(0.92); background:var(--burgundy-light);}
+.nav-add:active{transform:translateY(-16px) scale(0.875); background:var(--burgundy-light);}
 .nav-add .icon{width:24px; height:24px; stroke-width:2.5;}
 .nav-btn .icon{width:21px; height:21px; transition:transform .18s ease;}
 .nav-btn.active{color:var(--gold);}
@@ -953,7 +953,7 @@ button{font-family:inherit;}
   flex:1; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
   padding:24px 14px; text-align:center; cursor:pointer; transition:all .15s ease;
 }
-.choice-card:active{transform:scale(0.96);}
+.choice-card:active{transform:scale(0.915);}
 .choice-card .icon{width:28px; height:28px; color:var(--gold); display:block; margin:0 auto 10px;}
 .choice-card.income i{color:var(--success);}
 .choice-card span{font-size:15px; color:var(--cream);}
@@ -1008,7 +1008,7 @@ button{font-family:inherit;}
 .hasta-cal .hc-day.is-inicio{background:var(--gold-dim); border-color:var(--gold); color:var(--bg); font-weight:700; cursor:default;}
 .hasta-cal .hc-day.in-rango{background:rgba(201,166,107,0.18); border-color:var(--gold-dim); color:var(--cream);}
 .hasta-cal .hc-day.is-hasta{background:var(--gold); border-color:var(--gold); color:var(--bg); font-weight:700;}
-.hasta-cal .hc-day:not(:disabled):not(.is-inicio):active{transform:scale(0.92);}
+.hasta-cal .hc-day:not(:disabled):not(.is-inicio):active{transform:scale(0.87);}
 :root.hc .hasta-cal .hc-day{border-color:var(--border);}
 :root.hc .hasta-cal .hc-day.is-disabled{opacity:0.5;}
 
@@ -1040,7 +1040,7 @@ button{font-family:inherit;}
   background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9; font-weight:600;
   padding:0 18px; border-radius:8px; transition:transform .12s ease, background .15s ease;
 }
-.add-inline .small-btn:active{transform:scale(0.96); background:var(--burgundy-light);}
+.add-inline .small-btn:active{transform:scale(0.92); background:var(--burgundy-light);}
 
 /* ---------- CHIPS DE GASTOS FRECUENTES ---------- */
 .chip-row{display:flex; flex-wrap:wrap; gap:8px;}
@@ -1049,7 +1049,7 @@ button{font-family:inherit;}
   border-radius:20px; padding:8px 13px; font-size:13px; cursor:pointer;
   display:flex; align-items:center; gap:7px; transition:all .15s ease; font-family:inherit;
 }
-.chip:active{transform:scale(0.96); background:var(--surface-3); border-color:var(--gold-dim);}
+.chip:active{transform:scale(0.92); background:var(--surface-3); border-color:var(--gold-dim);}
 .chip small{color:var(--gold-dim); font-size:11.5px;}
 
 /* ---------- CARRUSEL DE CHIPS (deslizable horizontal, contenido en el ancho del formulario) ----------
@@ -1085,7 +1085,7 @@ button{font-family:inherit;}
   border-radius:20px; padding:7px 12px; font-size:12.5px; cursor:pointer; font-family:inherit;
   transition:all .15s ease;
 }
-.chart-toggle:active{transform:scale(0.96);}
+.chart-toggle:active{transform:scale(0.92);}
 .chart-toggle .icon{width:15px; height:15px;}
 /* Tanda Y · pto 1: selector de vista del gráfico. Reusa el componente de "Tamaño de
    letra" (.toggle-row / .toggle-opt): mismo fondo, mismo burdeos para la opción activa.
@@ -1098,7 +1098,7 @@ button{font-family:inherit;}
   display:inline-flex; align-items:center; justify-content:center;
 }
 .seg-chart .toggle-opt .icon{width:16px; height:16px;}
-.seg-chart .toggle-opt:active{transform:scale(0.96);}
+.seg-chart .toggle-opt:active{transform:scale(0.92);}
 .chart-box{margin-bottom:8px;}
 .chart-box svg{display:block; width:100%; height:auto; overflow:visible;}
 .chart-note{font-size:11.5px; color:var(--gold-dim); margin:6px 0 0;}
@@ -1115,7 +1115,7 @@ button{font-family:inherit;}
   background:var(--surface-2); border:1px solid var(--border); color:var(--cream); font-size:13.5px;
   cursor:pointer; width:100%; font-family:inherit; transition:border-color .15s ease;
 }
-.palette-opt:active{transform:scale(0.99);}
+.palette-opt:active{transform:scale(0.945);}
 .palette-opt.active{border-color:var(--gold);}
 .palette-opt .sw{width:15px; height:15px; border-radius:4px; display:inline-block; border:1px solid rgba(255,255,255,0.1);}
 .small-btn{
@@ -1127,7 +1127,7 @@ button{font-family:inherit;}
   width:100%; background:var(--burgundy); color:#FBEFE9; border:none; border-radius:var(--radius-sm);
   padding:15px; font-size:16px; font-weight:600; cursor:pointer; margin-top:6px; transition:all .15s ease;
 }
-.btn-primary:active{transform:scale(0.98); background:var(--burgundy-light);}
+.btn-primary:active{transform:scale(0.935); background:var(--burgundy-light);}
 .btn-danger{
   width:100%; background:none; color:var(--danger); border:1px solid var(--danger); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; font-weight:600; cursor:pointer; margin-top:10px;
@@ -1143,7 +1143,7 @@ button{font-family:inherit;}
 .ob-btn-volver{
   width:auto; margin:0; padding:7px 13px; font-size:12.5px; font-weight:600; border-radius:20px;
 }
-.ob-btn-volver:active{transform:scale(0.96);}
+.ob-btn-volver:active{transform:scale(0.92);}
 
 .cuota-fields{
   max-height:0; overflow:hidden; transition:max-height .25s ease, opacity .2s ease; opacity:0;
@@ -1189,7 +1189,7 @@ button{font-family:inherit;}
   min-width:34px; min-height:34px; border-radius:8px;
   background:var(--surface-2); border:1px solid var(--border);
 }
-.cfg-icon-btn:active{transform:scale(0.9);}
+.cfg-icon-btn:active{transform:scale(0.85);}
 .cfg-icon-btn .icon{width:18px; height:18px;}
 .cfg-icon-btn .cat-emoji{font-size:17px;}
 /* Tope de gasto mensual por categoría: segunda línea de la fila de Configuración. */
@@ -1237,7 +1237,7 @@ button{font-family:inherit;}
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
   color:var(--gold); cursor:pointer; transition:transform .12s ease, border-color .15s ease;
 }
-.icon-grid button:active{transform:scale(0.92);}
+.icon-grid button:active{transform:scale(0.87);}
 .icon-grid button.active{border-color:var(--gold); background:var(--surface-3);}
 .icon-grid button .icon{width:21px; height:21px;}
 
@@ -1257,7 +1257,7 @@ button{font-family:inherit;}
    poco al presionarlo. Las reglas más específicas ya existentes (nav-add, btn-primary,
    card-edit, chips…) siguen ganando por especificidad. */
 button{ transition:transform var(--dur-fast) var(--ease-out); }
-button:active{ transform:scale(0.97); }
+button:active{ transform:scale(0.93); }
 
 /* Transición entre pantallas (Resumen / Historial / Cuotas / Metas): fade + slide
    corto según la dirección de navegación, en vez del corte seco. */
@@ -1265,6 +1265,14 @@ button:active{ transform:scale(0.97); }
 .screen.active.scr-back{ animation:scrInBack var(--dur-base) var(--ease-out); }
 @keyframes scrInFwd{ from{ opacity:0; transform:translateX(16px); } to{ opacity:1; transform:translateX(0); } }
 @keyframes scrInBack{ from{ opacity:0; transform:translateX(-16px); } to{ opacity:1; transform:translateX(0); } }
+
+/* Transición entre pasos del onboarding (Tanda G-2 · pto 1): el contenido vive dentro
+   de un sheet, no de una pantalla completa, así que usa su propia clase/keyframes en
+   vez de reutilizar scrInFwd/scrInBack (evita interferir con la navegación de pantallas). */
+#obBody.ob-step-fwd{ animation:obStepInFwd var(--dur-base) var(--ease-out); }
+#obBody.ob-step-back{ animation:obStepInBack var(--dur-base) var(--ease-out); }
+@keyframes obStepInFwd{ from{ opacity:0; transform:translateX(14px); } to{ opacity:1; transform:translateX(0); } }
+@keyframes obStepInBack{ from{ opacity:0; transform:translateX(-14px); } to{ opacity:1; transform:translateX(0); } }
 
 /* Botón "Guardar": destello + check breve antes de cerrar el formulario. */
 .btn-primary.btn-flash-ok{ background:var(--success); }
@@ -1305,7 +1313,17 @@ button:active{ transform:scale(0.97); }
 @keyframes grPop{ 0%{ transform:scale(1); } 35%{ transform:scale(1.35); } 100%{ transform:scale(1); } }
 
 /* Barra de progreso de cada meta / cuota: crece hacia su valor cada vez que se muestra. */
-.goal-card .progress-fill, #cList .progress-fill{ transition:width var(--dur-slow) var(--ease-out); }
+.goal-card .progress-fill, #cList .progress-fill, #obProgressBar .progress-fill{ transition:width var(--dur-slow) var(--ease-out); }
+
+/* Entrada de gráficos de torta y barra (Tanda G-2 · pto 3): corre en cada re-render
+   (cambio de mes/filtro/pestaña), no solo la primera vez, porque renderPieChart/
+   renderBarChart reconstruyen el SVG entero vía innerHTML cada vez que se llaman —
+   los elementos son siempre nodos nuevos, así que la animación se dispara sola sin
+   necesitar trucos de reflow. Simple y liviana a propósito (opacity+scale / scaleX),
+   sin "barrido" de ángulos, porque corre en cada filtro/mes. */
+.pie-slice-in{ transform-box:fill-box; transform-origin:center; animation:pieSliceIn var(--dur-base) var(--ease-out) backwards; }
+@keyframes pieSliceIn{ from{ opacity:0; transform:scale(.5); } to{ opacity:1; transform:scale(1); } }
+@keyframes cBarGrow{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
 
 /* Semáforo de salud financiera: cada punto encendido entra suave; al pasar a rojo,
    un único pulso. */
@@ -1437,7 +1455,7 @@ button:active{ transform:scale(0.97); }
   background:var(--gold); color:#1c1310; border:0; border-radius:8px; padding:9px 12px;
   font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
 }
-.insight-frase-btn:active{ transform:scale(0.98); }
+.insight-frase-btn:active{ transform:scale(0.935); }
 /* Tanda R4 · pto 4.3: píldora "estimado" junto a "Disponible proyectado" cuando la
    cifra incorpora el ingreso estimado del guardarraíl — no es una proyección firme. */
 .insight-proy-est-tag{
@@ -2334,6 +2352,9 @@ button:active{ transform:scale(0.97); }
     <div id="obProgressRow" style="display:none; align-items:center; justify-content:space-between; gap:10px; margin:-6px 0 6px;">
       <button type="button" class="btn-ghost ob-btn-volver" id="obBtnVolver">‹ Volver</button>
       <p class="sheet-note" id="obProgress" style="margin:0; font-weight:600; letter-spacing:.02em;"></p>
+    </div>
+    <div class="progress-track" id="obProgressBar" style="display:none; margin:0 0 14px;">
+      <div class="progress-fill" id="obProgressFill" style="width:0%;"></div>
     </div>
     <div id="obBody"></div>
   </div>
@@ -10427,12 +10448,13 @@ function renderPieChart(container, data, opts){
   const slices = items.map((d,i)=>{
     const frac = d.value / total;
     const col = colOf(d, i);
-    if(frac >= 0.999) return `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${col}"></circle>`;
+    const delay = `style="fill:${col}; animation-delay:${i * 45}ms"`;
+    if(frac >= 0.999) return `<circle class="pie-slice-in" cx="${cx}" cy="${cy}" r="${r}" ${delay}></circle>`;
     const a0 = ang, a1 = ang + frac * Math.PI * 2; ang = a1;
     const x0 = (cx + r*Math.cos(a0)).toFixed(2), y0 = (cy + r*Math.sin(a0)).toFixed(2);
     const x1 = (cx + r*Math.cos(a1)).toFixed(2), y1 = (cy + r*Math.sin(a1)).toFixed(2);
     const large = (a1 - a0) > Math.PI ? 1 : 0;
-    return `<path d="M${cx},${cy} L${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1} Z" style="fill:${col}"></path>`;
+    return `<path class="pie-slice-in" d="M${cx},${cy} L${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1} Z" ${delay}></path>`;
   }).join('');
   const svg = `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px;">${slices}</svg>`;
   const legend = `<div class="pie-legend">` + items.map((d,i)=>{
@@ -10504,7 +10526,7 @@ function renderBarChart(container, data, opts){
     const valCls = inside ? 'c-val-in' : 'c-val';
     return `
       <text x="0" y="${y - 4}" class="c-lbl">${escHtml(d.label)}</text>
-      <rect x="0" y="${y}" width="${bw}" height="${rowH}" rx="4" class="c-bar"></rect>
+      <rect x="0" y="${y}" width="${bw}" height="${rowH}" rx="4" class="c-bar c-bar-in" style="animation-delay:${i * 45}ms"></rect>
       <text x="${valX}" y="${y + 15}" text-anchor="${valAnchor}" class="${valCls}">${fmt(d.value)}</text>`;
   }).join('');
   container.innerHTML = svgWrap(w, h, body) + (opts.note ? `<p class="chart-note">${opts.note}</p>` : '');
@@ -10515,6 +10537,7 @@ function svgWrap(w, h, body){
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" xmlns="http://www.w3.org/2000/svg">
     <style>
       .c-bar{fill:var(--gold)}
+      .c-bar-in{transform-box:fill-box; transform-origin:0% 50%; animation:cBarGrow var(--dur-base) var(--ease-out) backwards}
       .c-line{stroke:var(--gold); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
       .c-area{fill:var(--burgundy); opacity:.20}
       .c-lbl{fill:var(--cream-dim); font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -11050,8 +11073,9 @@ function iniciarOnboarding(relanzamiento){
   openSheet('sheetOnboarding');
 }
 function onboardingAvanzarA(paso){
+  const dir = paso > onboardingPaso ? 'fwd' : 'back';
   onboardingPaso = paso;
-  onboardingRender();
+  onboardingRender(dir);
 }
 function onboardingFinalizar(marcarVisto){
   if(marcarVisto){
@@ -11078,23 +11102,36 @@ function onboardingLoopGuardado(){
   }
 }
 
-function onboardingRender(){
+function onboardingRender(dir){
   const prog = document.getElementById('obProgress');
   const progRow = document.getElementById('obProgressRow');
+  const progBar = document.getElementById('obProgressBar');
+  const progFill = document.getElementById('obProgressFill');
   const btnVolver = document.getElementById('obBtnVolver');
   const body = document.getElementById('obBody');
   if(onboardingPaso >= 1 && onboardingPaso <= 6){
     progRow.style.display = 'flex';
+    progBar.style.display = 'block';
     prog.textContent = `Paso ${onboardingPaso} de 6`;
+    progFill.style.width = (onboardingPaso / 6 * 100) + '%';
     btnVolver.style.visibility = onboardingPaso === 1 ? 'hidden' : 'visible';
   } else {
     progRow.style.display = 'none';
+    progBar.style.display = 'none';
   }
   const renderers = {
     0: renderObBienvenida, 1: renderObPaso1, 2: renderObPaso2, 3: renderObPaso3,
     4: renderObPaso4, 5: renderObPaso5, 6: renderObPaso6, 7: renderObCierre
   };
+  // Transición de entrada entre pasos (Tanda G-2 · pto 1): se retira la clase antes de
+  // reemplazar el contenido y se fuerza reflow para que la animación se re-dispare
+  // aunque el paso anterior ya la hubiera usado (el nodo #obBody no se recrea).
+  body.classList.remove('ob-step-fwd', 'ob-step-back');
   body.innerHTML = (renderers[onboardingPaso] || renderObBienvenida)();
+  if(dir){
+    void body.offsetWidth;
+    body.classList.add(dir === 'back' ? 'ob-step-back' : 'ob-step-fwd');
+  }
 }
 
 function renderObBienvenida(){
