@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Telora · Tests del motor financiero</title>
+<style>
+  body{ font-family: system-ui, sans-serif; max-width: 760px; margin: 32px auto; padding: 0 16px; }
+  h1{ font-size: 20px; }
+  .caso{ padding: 10px 12px; border-radius: 8px; margin: 8px 0; border: 1px solid #ddd; }
+  .ok{ background:#e8f7ee; border-color:#a7dfc0; }
+  .fail{ background:#fdeaea; border-color:#f0b8b8; }
+  .label{ font-weight:600; }
+  .detalle{ font-size: 13px; color:#444; margin-top:4px; white-space:pre-wrap; }
+  #resumen{ font-size:16px; font-weight:700; margin-top:20px; padding:12px; border-radius:8px; }
+  #resumen.ok{ background:#e8f7ee; }
+  #resumen.fail{ background:#fdeaea; }
+  #localStorageCheck{ margin-top:24px; font-size:13px; color:#666; }
+</style>
+</head>
+<body>
+<h1>Telora · Harness de pruebas del motor financiero (T4, diagnóstico)</h1>
+<p>Carga <code>index.html</code> completo en un iframe oculto, sustituye <code>state</code> por fixtures de prueba y llama a las funciones del motor directamente. No usa ningún framework de testing.</p>
+<div id="resultados">Cargando iframe…</div>
+<div id="resumen"></div>
+<div id="localStorageCheck"></div>
+
+<iframe id="appFrame" src="index.html" style="display:none"></iframe>
+
+<script>
+const resultados = [];
+function assert(condition, label, detalle){
+  resultados.push({ ok: !!condition, label, detalle: detalle || '' });
+}
+
+function renderResultados(){
+  const cont = document.getElementById('resultados');
+  cont.innerHTML = '';
+  resultados.forEach(r=>{
+    const div = document.createElement('div');
+    div.className = 'caso ' + (r.ok ? 'ok' : 'fail');
+    div.innerHTML = `<div class="label">${r.ok ? '✅ PASÓ' : '❌ FALLÓ'} — ${r.label}</div>` +
+      (r.detalle ? `<div class="detalle">${r.detalle}</div>` : '');
+    cont.appendChild(div);
+  });
+  const resumen = document.getElementById('resumen');
+  const total = resultados.length;
+  const pasaron = resultados.filter(r=>r.ok).length;
+  resumen.textContent = `${pasaron}/${total} pruebas pasaron`;
+  resumen.className = pasaron === total ? 'ok' : 'fail';
+}
+
+// Fixture mínimo de state: misma forma que produce loadState() (config con DEFAULTS +
+// migrarEstadoCuentas agrega accounts/transfers/cuentaActiva). Se arma a mano acá para no
+// depender de localStorage.
+function fixtureBase(){
+  return {
+    config: {
+      categorias: ["Comida","Arriendo/Vivienda","Cuentas y Servicios","Transporte","Salud","Cuidado personal","Vestimenta","Entretenimiento","Regalos","Ahorro","Varios"],
+      metodos: ["Efectivo","Débito","Crédito","Transferencia"],
+      fuentes: ["Sueldo","Trabajos extra","Ventas","Bono","Mesada","Interés","Otros"],
+      categoriaIconos: {},
+      categoriaTopes: {},
+      onboardingVisto: true,
+      cuentaActiva: 'total'
+    },
+    expenses: [],
+    incomes: [],
+    debts: [],
+    goals: [],
+    accounts: [{ id:'acc1', nombre:'Principal', orden:0, archivada:false }],
+    transfers: []
+  };
+}
+
+function resetCaches(win){
+  win.resetMoneyCache();
+  win.resetSaldoRowCache();
+}
+
+// HALLAZGO CLAVE (T4 Parte 1): `let state = loadState();` en index.html es una
+// declaración de nivel superior de un <script> clásico (no módulo). En el navegador,
+// un `let`/`const` global NO se convierte en propiedad de `window` (a diferencia de
+// `var` o de las funciones, que sí quedan colgadas de `window`). Por eso
+// `iframe.contentWindow.state = fixture` NO funciona como mecanismo de inyección: solo
+// crea una propiedad `state` nueva y aislada sobre el objeto `window`, sin ningún efecto
+// sobre el binding léxico `state` que leen las funciones del motor (se comprobó: con esa
+// vía, disponibleDelMes/cuotasPendientesDelMes/proyeccionFinDeMes seguían leyendo el
+// `state` real cargado al inicio — típicamente vacío o con datos de localStorage viejos
+// — y daban resultados en 0 o desalineados con el fixture).
+// Mecanismo que sí funciona: `iframe.contentWindow.eval(...)`. Un eval indirecto corre
+// como código global DENTRO del realm del iframe, compartiendo el mismo entorno global
+// léxico que el script de index.html — así que una asignación `state = {...}` dentro de
+// ese eval SÍ reasigna el binding real que usan disponibleDelMes() y compañía.
+function setState(win, fixture){
+  win.eval('state = ' + JSON.stringify(fixture) + ';');
+}
+
+function runTests(){
+  const iframe = document.getElementById('appFrame');
+  const win = iframe.contentWindow;
+
+  // Punto 1: confirmar que el iframe cargó y las funciones del motor existen.
+  const funcionesEsperadas = ['disponibleDelMes','cuotasPendientesDelMes','aporteAutomaticoAcumulado','proyeccionFinDeMes','resetMoneyCache','resetSaldoRowCache'];
+  funcionesEsperadas.forEach(nombre=>{
+    assert(typeof win[nombre] === 'function', `iframe.contentWindow.${nombre} existe y es function`,
+      `typeof = ${typeof win[nombre]}`);
+  });
+
+  // ---- Caso 1: disponibleDelMes ----
+  // Mes sin arrastre previo (único mes con datos): ingreso 200000 - gasto 50000 = 150000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i1', date:'2026-03-05', amount:200000, tipo:'Casual' });
+    st.expenses.push({ id:'e1', date:'2026-03-10', amount:50000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // 15 marzo 2026
+    const resultado = win.disponibleDelMes(refDate, 'total');
+    const esperado = 150000;
+    assert(resultado === esperado, `disponibleDelMes: ingreso 200.000 - gasto 50.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 2: cuotasPendientesDelMes ----
+  // Deuda comprada 2026-02-01 en 3 cuotas de 300000/3=100000 c/u. En marzo (cuota 1 de 3)
+  // debe aparecer como pendiente (no confirmada manualmente).
+  {
+    const st = fixtureBase();
+    st.debts.push({
+      id:'d1', purchaseDate:'2026-02-01', numCuotas:3, totalAmount:300000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // marzo 2026 = cuota 1 de la deuda
+    const resultado = win.cuotasPendientesDelMes(refDate, 'total');
+    const esperado = 100000;
+    assert(resultado === esperado, `cuotasPendientesDelMes: cuota 1/3 de 300.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 3: aporteAutomaticoAcumulado ----
+  // Meta con aporte automático de $20.000/mes activado en enero 2026. Hasta abril 2026
+  // (inclusive) generó ocurrencias en feb, mar, abr = 3 meses * 20000 = 60000.
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'g1', nombre:'Meta test', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: {
+        activo:true, pausado:false, tipo:'monto', valor:0, monto:20000,
+        diaDelMes:1, fechaActivacion:'2026-01-01'
+      }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const hastaDate = new Date(2026, 3, 15); // 15 abril 2026
+    const resultado = win.aporteAutomaticoAcumulado(goal, hastaDate);
+    const esperado = 60000;
+    assert(resultado === esperado, `aporteAutomaticoAcumulado: 3 meses (feb, mar, abr) * 20.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 4: proyeccionFinDeMes ----
+  // Mes YA CERRADO (enero 2026, anterior al mes real de hoy) con un solo ingreso y un
+  // solo gasto: la proyección de un mes cerrado no estima nada (dispRestantes=0), así
+  // que dispProyectado debe coincidir con el resultado real del mes: 100.000 - 40.000 = 60.000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i2', date:'2026-01-05', amount:100000, tipo:'Casual' });
+    st.expenses.push({ id:'e2', date:'2026-01-10', amount:40000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 0, 15); // 15 enero 2026 (mes cerrado respecto a hoy)
+    const resultado = win.proyeccionFinDeMes(refDate, 'total');
+    const esperado = 60000;
+    assert(resultado && resultado.dispProyectado === esperado,
+      `proyeccionFinDeMes (mes cerrado): dispProyectado = ingreso 100.000 - gasto 40.000 = ${esperado}`,
+      `Resultado obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  renderResultados();
+  checkLocalStorage();
+}
+
+// Verifica que abrir este harness no haya escrito nada en el localStorage real de este
+// origen (loadState() SOLO lee; saveState()/saveStateQuiet() nunca se llaman desde acá).
+function checkLocalStorage(){
+  const div = document.getElementById('localStorageCheck');
+  try{
+    const antes = window.__lsSnapshotAntes;
+    const ahora = JSON.stringify(Object.keys(localStorage).sort());
+    div.textContent = (ahora === antes)
+      ? '✅ localStorage del origen (ventana padre) sin cambios tras correr los tests.'
+      : `⚠️ localStorage del origen cambió. Antes: ${antes} — Ahora: ${ahora}`;
+  }catch(e){
+    div.textContent = 'No se pudo verificar localStorage: ' + e.message;
+  }
+}
+
+try{ window.__lsSnapshotAntes = JSON.stringify(Object.keys(localStorage).sort()); }catch(e){ window.__lsSnapshotAntes = null; }
+
+document.getElementById('appFrame').addEventListener('load', ()=>{
+  // Pequeño margen: aunque el script del iframe corre de forma síncrona durante el parseo
+  // (no hay guard DOMContentLoaded en index.html), se espera un tick extra por si algo
+  // async del iframe (fonts, etc.) dispara antes del evento load.
+  setTimeout(runTests, 50);
+});
+</script>
+</body>
+</html>
