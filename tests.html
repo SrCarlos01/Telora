@@ -95,12 +95,26 @@ function setState(win, fixture){
   win.eval('state = ' + JSON.stringify(fixture) + ';');
 }
 
+// monthKey de index.html es `const` de nivel superior (no `function`): por el mismo
+// motivo que `state`, NO queda expuesto como `window.monthKey` dentro del iframe
+// (verificado: typeof iframe.contentWindow.monthKey === 'undefined'). Se replica acá
+// la misma fórmula (index.html: `const monthKey = d => d.getFullYear()*12+d.getMonth();`)
+// para construir manualPaidMonthKeys en los fixtures, en vez de depender de una llamada
+// al iframe que no existe.
+function mk(d){ return d.getFullYear()*12 + d.getMonth(); }
+
 function runTests(){
   const iframe = document.getElementById('appFrame');
   const win = iframe.contentWindow;
 
   // Punto 1: confirmar que el iframe cargó y las funciones del motor existen.
-  const funcionesEsperadas = ['disponibleDelMes','cuotasPendientesDelMes','aporteAutomaticoAcumulado','proyeccionFinDeMes','resetMoneyCache','resetSaldoRowCache'];
+  const funcionesEsperadas = [
+    'disponibleDelMes','cuotasPendientesDelMes','aporteAutomaticoAcumulado','proyeccionFinDeMes',
+    'resetMoneyCache','resetSaldoRowCache',
+    'disponibleBaseDelMes','totalAportesMetasDelMes','saldoAcumuladoHasta',
+    'cuotaVencidaPorFecha','cuotaPagadaDelMes','cuotaEstadoMes','cuotasSinConfirmarDelMes',
+    'aporteMetaEnMes','aportePactadoDeMeta','calcularEstadoAportesDelMes'
+  ];
   funcionesEsperadas.forEach(nombre=>{
     assert(typeof win[nombre] === 'function', `iframe.contentWindow.${nombre} existe y es function`,
       `typeof = ${typeof win[nombre]}`);
@@ -177,6 +191,360 @@ function runTests(){
     assert(resultado && resultado.dispProyectado === esperado,
       `proyeccionFinDeMes (mes cerrado): dispProyectado = ingreso 100.000 - gasto 40.000 = ${esperado}`,
       `Resultado obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ==================== T4 PARTE 2 — FRENTE A: más casos por función ====================
+
+  // ---- Caso 1b: disponibleDelMes (normal, datos distintos + una cuota activa) ----
+  // Junio 2026: ingreso 300.000 - gasto 80.000 - cuota 50.000 (deuda comprada en mayo,
+  // 2 cuotas de 50.000) = 170.000. La fecha de compra (mayo) no genera movimiento propio
+  // en mayo (su primera cuota es en junio), así que el arrastre de mayo sigue en 0.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i3', date:'2026-06-05', amount:300000, tipo:'Casual' });
+    st.expenses.push({ id:'e3', date:'2026-06-20', amount:80000, tipo:'Casual', category:'Comida' });
+    st.debts.push({
+      id:'d2', purchaseDate:'2026-05-01', numCuotas:2, totalAmount:100000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 5, 15); // 15 junio 2026
+    const resultado = win.disponibleDelMes(refDate, 'total');
+    const esperado = 170000;
+    assert(resultado === esperado, `disponibleDelMes (caso normal 2): 300.000 - 80.000 - cuota 50.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 1c: disponibleDelMes (límite: mes sin ningún movimiento) ----
+  // state completamente vacío: sin arrastre, sin flujo, sin metas -> 0.
+  {
+    const st = fixtureBase();
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 6, 15); // julio 2026, sin datos en ningún lado
+    const resultado = win.disponibleDelMes(refDate, 'total');
+    const esperado = 0;
+    assert(resultado === esperado, `disponibleDelMes (límite: mes sin movimientos) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 2b: cuotasPendientesDelMes (normal: dos deudas, una ya confirmada pagada) ----
+  // Julio 2026: Deuda X (comprada junio, 4 cuotas de 100.000) tiene su cuota 1 en julio,
+  // sin confirmar -> cuenta. Deuda Y (comprada mayo, 3 cuotas de 100.000) tiene su cuota 2
+  // en julio, PERO confirmada como pagada (manualPaidMonthKeys) -> no cuenta. Total: 100.000.
+  {
+    const st = fixtureBase();
+    const refDate = new Date(2026, 6, 15); // 15 julio 2026
+    st.debts.push({
+      id:'dX', purchaseDate:'2026-06-01', numCuotas:4, totalAmount:400000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    st.debts.push({
+      id:'dY', purchaseDate:'2026-05-01', numCuotas:3, totalAmount:300000,
+      manualPaidMonthKeys: [ mk(refDate) ], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.cuotasPendientesDelMes(refDate, 'total');
+    const esperado = 100000;
+    assert(resultado === esperado, `cuotasPendientesDelMes (normal 2: una pagada, una no) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 2c: cuotasPendientesDelMes (límite: cambio de año) ----
+  // Deuda comprada 2025-12-01 en 1 cuota: su única cuota cae en enero 2026 (cruce de año
+  // en addMonths). No confirmada -> pendiente por el total: 90.000.
+  {
+    const st = fixtureBase();
+    st.debts.push({
+      id:'dAnio', purchaseDate:'2025-12-01', numCuotas:1, totalAmount:90000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 0, 15); // 15 enero 2026
+    const resultado = win.cuotasPendientesDelMes(refDate, 'total');
+    const esperado = 90000;
+    assert(resultado === esperado, `cuotasPendientesDelMes (límite: cambio de año, dic->ene) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 3b: aporteAutomaticoAcumulado (normal, datos distintos) ----
+  // Activado 2026-03-01, $15.000/mes, hasta agosto 2026: ocurrencias en abr, may, jun,
+  // jul, ago = 5 meses * 15.000 = 75.000.
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gB', nombre:'Meta test B', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: {
+        activo:true, pausado:false, tipo:'monto', valor:0, monto:15000,
+        diaDelMes:15, fechaActivacion:'2026-03-01'
+      }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const hastaDate = new Date(2026, 7, 20); // 20 agosto 2026
+    const resultado = win.aporteAutomaticoAcumulado(goal, hastaDate);
+    const esperado = 75000;
+    assert(resultado === esperado, `aporteAutomaticoAcumulado (normal 2): 5 meses (abr-ago) * 15.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 3c: aporteAutomaticoAcumulado (límite: hastaDate en el mismo mes de activación) ----
+  // Activado 2026-05-01; hastaDate = 15 de mayo 2026 (mismo mes). El aporte automático solo
+  // genera ocurrencias en meses POSTERIORES al de activación, así que todavía no hay
+  // ninguna: acumulado = 0.
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gC', nombre:'Meta test C', indefinida:false, aportes:[], goalEndMonthKey:null,
+      aporteAutomatico: {
+        activo:true, pausado:false, tipo:'monto', valor:0, monto:10000,
+        diaDelMes:1, fechaActivacion:'2026-05-01'
+      }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const hastaDate = new Date(2026, 4, 20); // 20 mayo 2026, mismo mes que la activación
+    const resultado = win.aporteAutomaticoAcumulado(goal, hastaDate);
+    const esperado = 0;
+    assert(resultado === esperado, `aporteAutomaticoAcumulado (límite: mismo mes de activación) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Caso 4b: proyeccionFinDeMes (normal: mes FUTURO) ----
+  // Diciembre 2026 (futuro respecto a hoy): ningún gasto/ingreso "ya ocurrió" (mkRef >
+  // mkHoy siempre da yaOcurrio=false), así que el gasto conocido pasa entero a
+  // fijosCuotasRestantes y el estimado variable es 0 (cero días transcurridos).
+  // dispProyectado = 0 (arrastre) + 200.000 (ingreso) - 30.000 (gasto conocido) = 170.000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i4', date:'2026-12-05', amount:200000, tipo:'Casual' });
+    st.expenses.push({ id:'e4', date:'2026-12-10', amount:30000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 11, 15); // 15 diciembre 2026 (mes futuro)
+    const resultado = win.proyeccionFinDeMes(refDate, 'total');
+    const esperado = 170000;
+    assert(resultado && resultado.dispProyectado === esperado && resultado.diasTranscurridos === 0,
+      `proyeccionFinDeMes (normal: mes futuro) dispProyectado = ${esperado}`,
+      `Resultado obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ---- Caso 4c: proyeccionFinDeMes (límite: mes cerrado sin ningún movimiento) ----
+  // state completamente vacío en un mes ya cerrado: sin ingresos (y sin ningún mes previo
+  // del que estimar uno), sin gastos, sin cuotas, sin metas -> todo en 0.
+  {
+    const st = fixtureBase();
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 1, 15); // 15 febrero 2026, sin datos en ningún lado
+    const resultado = win.proyeccionFinDeMes(refDate, 'total');
+    const esperado = 0;
+    assert(resultado && resultado.dispProyectado === esperado && resultado.proyGastos === 0 && resultado.ingresosProy === 0,
+      `proyeccionFinDeMes (límite: mes cerrado sin movimientos) dispProyectado = ${esperado}`,
+      `Resultado obtenido: ${JSON.stringify(resultado)}`);
+  }
+
+  // ==================== T4 PARTE 2 — FRENTE B: funciones nuevas ====================
+
+  // ---- disponibleBaseDelMes ----
+  // Abril 2026: ingreso 120.000 - gasto 20.000, sin cuotas ni arrastre = 100.000
+  // (disponibleBaseDelMes NO resta metas, a diferencia de disponibleDelMes).
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i5', date:'2026-04-03', amount:120000, tipo:'Casual' });
+    st.expenses.push({ id:'e5', date:'2026-04-25', amount:20000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 3, 15); // 15 abril 2026
+    const resultado = win.disponibleBaseDelMes(refDate, 'total');
+    const esperado = 100000;
+    assert(resultado === esperado, `disponibleBaseDelMes: 120.000 - 20.000 (sin metas) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- totalAportesMetasDelMes ----
+  // Mayo 2026: meta con un aporte manual de 5.000 registrado en mayo + un aporte
+  // automático de 8.000/mes activado en abril (mayo es el primer mes posterior, así que
+  // sí genera ocurrencia) y sin quedar pausado (el ingreso de mayo alcanza de sobra).
+  // Total: 5.000 + 8.000 = 13.000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i6', date:'2026-05-03', amount:50000, tipo:'Casual' });
+    st.goals.push({
+      id:'gD', nombre:'Meta test D', indefinida:false, goalEndMonthKey:null,
+      aportes: [ { id:'apM1', fecha:'2026-05-10', monto:5000, tipo:'manual' } ],
+      aporteAutomatico: {
+        activo:true, pausado:false, tipo:'monto', valor:0, monto:8000,
+        diaDelMes:1, fechaActivacion:'2026-04-01'
+      }
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 4, 15); // 15 mayo 2026
+    const resultado = win.totalAportesMetasDelMes(refDate, 'total');
+    const esperado = 13000;
+    assert(resultado === esperado, `totalAportesMetasDelMes: manual 5.000 + automático 8.000 = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- saldoAcumuladoHasta ----
+  // Enero 2026: ingreso 100.000 - gasto 30.000 = arrastre +70.000. Febrero 2026: ingreso
+  // 50.000 - gasto 20.000 = arrastre +30.000. Sin datos en marzo: saldoAcumuladoHasta(marzo)
+  // debe sumar los dos meses anteriores = 70.000 + 30.000 = 100.000.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i7', date:'2026-01-05', amount:100000, tipo:'Casual' });
+    st.expenses.push({ id:'e7', date:'2026-01-20', amount:30000, tipo:'Casual', category:'Comida' });
+    st.incomes.push({ id:'i8', date:'2026-02-05', amount:50000, tipo:'Casual' });
+    st.expenses.push({ id:'e8', date:'2026-02-20', amount:20000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // 15 marzo 2026 (sin datos propios)
+    const resultado = win.saldoAcumuladoHasta(refDate, 'total');
+    const esperado = 100000;
+    assert(resultado === esperado, `saldoAcumuladoHasta: arrastre de enero (+70.000) y febrero (+30.000) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- Clúster cuotas: cuotaVencidaPorFecha / cuotaPagadaDelMes / cuotaEstadoMes /
+  //      cuotasSinConfirmarDelMes ----
+  // PRIORIDAD ALTA (T4): esta es exactamente el área del bug histórico de criterio
+  // "vencida"/"pagada" invertido. Dos deudas construidas a propósito para contrastar:
+  //   · Deuda "vencida sin confirmar": comprada 2025-12-01 (1 cuota/mes, 6 cuotas), su
+  //     cuota 1 vence el 2026-01-01 -> en enero 2026 (mes cerrado hace mucho respecto a
+  //     hoy) el día de vencimiento YA PASÓ y nadie la confirmó como pagada.
+  //   · Deuda "pagada antes de vencer": comprada 2026-11-01 (3 cuotas), su cuota 1 vence
+  //     el 2026-12-01 -> en diciembre 2026 (mes FUTURO respecto a hoy) el día de
+  //     vencimiento AÚN NO llega, pero se confirma manualmente como pagada de todos modos
+  //     (alguien pagó por adelantado).
+  // El criterio correcto (post Tanda P, revertido el bug de Tanda I/J) es: SOLO la
+  // confirmación manual decide "pagada". Vencida-sin-confirmar debe seguir en "activas"
+  // (con aviso porConfirmar), y pagada-antes-de-vencer debe contar como "pagada" igual.
+  {
+    const refVencida = new Date(2026, 0, 15);   // 15 enero 2026
+    const refPagada = new Date(2026, 11, 15);   // 15 diciembre 2026
+
+    const debtVencida = {
+      id:'dVenc', purchaseDate:'2025-12-01', numCuotas:6, totalAmount:600000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const debtPagadaAntes = {
+      id:'dPagAntes', purchaseDate:'2026-11-01', numCuotas:3, totalAmount:300000,
+      manualPaidMonthKeys: [ mk(refPagada) ], manualUnpaidMonthKeys: []
+    };
+
+    const st = fixtureBase();
+    st.debts.push(debtVencida, debtPagadaAntes);
+    setState(win, st);
+    resetCaches(win);
+
+    // cuotaVencidaPorFecha: true para la vencida sin confirmar, false para la que aún no
+    // llega a su fecha de vencimiento (independiente de que esté pagada o no).
+    const vencida1 = win.cuotaVencidaPorFecha(debtVencida, refVencida);
+    const vencida2 = win.cuotaVencidaPorFecha(debtPagadaAntes, refPagada);
+    assert(vencida1 === true && vencida2 === false,
+      `cuotaVencidaPorFecha: vencida-sin-confirmar=true, pagada-antes-de-vencer=false`,
+      `Obtenido: vencida1=${vencida1}, vencida2=${vencida2}`);
+
+    // cuotaPagadaDelMes: SOLO decide la confirmación manual, no la fecha de vencimiento.
+    const pagada1 = win.cuotaPagadaDelMes(debtVencida, refVencida);
+    const pagada2 = win.cuotaPagadaDelMes(debtPagadaAntes, refPagada);
+    assert(pagada1 === false && pagada2 === true,
+      `cuotaPagadaDelMes: vencida-sin-confirmar=false, pagada-antes-de-vencer=true`,
+      `Obtenido: pagada1=${pagada1}, pagada2=${pagada2}`);
+
+    // cuotaEstadoMes: caso especialmente cuidado por el bug histórico. La vencida sin
+    // confirmar debe quedar en 'activas' con porConfirmar:true (aviso, no reclasificación).
+    // La pagada antes de vencer debe quedar en 'pagadas' con confirmada:true.
+    const estado1 = win.cuotaEstadoMes(debtVencida, refVencida);
+    const estado2 = win.cuotaEstadoMes(debtPagadaAntes, refPagada);
+    assert(estado1.tab === 'activas' && estado1.confirmada === false && estado1.porConfirmar === true,
+      `cuotaEstadoMes (vencida sin confirmar) = activas/porConfirmar, NO pagada`,
+      `Obtenido: ${JSON.stringify(estado1)}`);
+    assert(estado2.tab === 'pagadas' && estado2.confirmada === true,
+      `cuotaEstadoMes (pagada antes de vencer) = pagadas/confirmada, pese a no estar vencida`,
+      `Obtenido: ${JSON.stringify(estado2)}`);
+
+    // cuotasSinConfirmarDelMes: en enero 2026 solo la deuda vencida-sin-confirmar tiene
+    // cuota activa (la otra recién empieza en diciembre) -> count:1, total:100.000.
+    const sinConfirmar = win.cuotasSinConfirmarDelMes(refVencida, 'total');
+    assert(sinConfirmar.count === 1 && sinConfirmar.total === 100000,
+      `cuotasSinConfirmarDelMes (enero 2026): count=1, total=100.000`,
+      `Obtenido: ${JSON.stringify(sinConfirmar)}`);
+  }
+
+  // ---- aporteMetaEnMes ----
+  // Meta SIN aporte automático activo, con un aporte manual de 15.000 registrado en marzo
+  // 2026 -> aporteMetaEnMes debe devolver solo ese manual: 15.000.
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gE', nombre:'Meta test E', indefinida:false, goalEndMonthKey:null,
+      aportes: [ { id:'apM2', fecha:'2026-03-10', monto:15000, tipo:'manual' } ],
+      aporteAutomatico: { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null, tipo:'monto', valor:0 }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // 15 marzo 2026
+    const resultado = win.aporteMetaEnMes(goal, refDate);
+    const esperado = 15000;
+    assert(resultado === esperado, `aporteMetaEnMes: solo aporte manual (sin automático activo) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- aportePactadoDeMeta ----
+  // Meta con aporte automático activo tipo 'monto' de 25.000: el pactado es simplemente
+  // ese monto fijo (no depende de ningún mes ni de disponibleBaseDelMes, a diferencia del
+  // tipo 'porcentaje').
+  {
+    const st = fixtureBase();
+    const goal = {
+      id:'gF', nombre:'Meta test F', indefinida:false, goalEndMonthKey:null,
+      aportes:[],
+      aporteAutomatico: { activo:true, pausado:false, tipo:'monto', valor:0, monto:25000, diaDelMes:1, fechaActivacion:'2026-01-01' }
+    };
+    st.goals.push(goal);
+    setState(win, st);
+    resetCaches(win);
+    const resultado = win.aportePactadoDeMeta(goal);
+    const esperado = 25000;
+    assert(resultado === esperado, `aportePactadoDeMeta (tipo monto, fijo) = ${esperado}`,
+      `Resultado obtenido: ${resultado}`);
+  }
+
+  // ---- calcularEstadoAportesDelMes ----
+  // Marzo 2026, dos metas activadas en febrero (ambas ya generan ocurrencia en marzo),
+  // compartiendo el mismo presupuesto ('total' porque ninguna tiene cuentaId propio):
+  // Meta 1 (creada primero) $30.000/mes, Meta 2 (creada después) $40.000/mes. Con un
+  // ingreso de 50.000 en marzo y sin arrastre previo, disponibleBaseDelMes(marzo)=50.000.
+  // 30.000+40.000=70.000 > 50.000 -> no caben las dos: se prioriza la más antigua (Meta 1
+  // pasa completa, acumulado 30.000) y la Meta 2 queda pausada este mes (30.000+40.000
+  // excede el disponible).
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'i9', date:'2026-03-05', amount:50000, tipo:'Casual' });
+    const goal1 = {
+      id:'gPausa1', nombre:'Meta prioridad 1', indefinida:false, goalEndMonthKey:null, aportes:[],
+      aporteAutomatico: { activo:true, pausado:false, tipo:'monto', valor:0, monto:30000, diaDelMes:1, fechaActivacion:'2026-02-01' }
+    };
+    const goal2 = {
+      id:'gPausa2', nombre:'Meta prioridad 2', indefinida:false, goalEndMonthKey:null, aportes:[],
+      aporteAutomatico: { activo:true, pausado:false, tipo:'monto', valor:0, monto:40000, diaDelMes:1, fechaActivacion:'2026-02-01' }
+    };
+    st.goals.push(goal1, goal2);
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 2, 15); // 15 marzo 2026
+    const resultado = win.calcularEstadoAportesDelMes(refDate);
+    assert(resultado.size === 1 && resultado.has('gPausa2') && !resultado.has('gPausa1'),
+      `calcularEstadoAportesDelMes: con 50.000 disponibles y 30k+40k pactados, se pausa solo la meta más nueva`,
+      `Obtenido: [${[...resultado].join(', ')}]`);
   }
 
   renderResultados();
