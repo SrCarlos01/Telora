@@ -770,23 +770,39 @@ button{font-family:inherit;}
 :root.hc .hist-rango-field input, :root.hc .hist-rango-chip, :root.hc .hist-rango-apply,
 :root.hc .hist-rango-clear{border-width:2px;}
 
-/* Botón flotante "Ir a hoy" (Historial). Disimulado a propósito: pill chica, no un
-   FAB — ancla en el borde inferior derecho del frame de la app, sobre la bottom-zone. */
+/* Botón flotante "Ir a hoy" (Historial). Pill chica, no un FAB, pero con el mismo
+   color de acento que el "+" y los CTA primarios (var(--burgundy): en la paleta por
+   defecto es un vino, pero es la MISMA variable que en la paleta "Verde petróleo" es
+   un verde/teal — por eso se reutiliza en vez de fijar un color nuevo). La posición
+   (arriba/abajo) la decide refreshIrAHoyBtn() vía la clase .pos-top en el host; el
+   ícono de dirección se resuelve solo en CSS a partir de esa misma clase. */
 .hist-ir-hoy-host{
-  position:fixed; left:50%; transform:translateX(-50%); bottom:calc(88px + env(safe-area-inset-bottom));
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(88px + env(safe-area-inset-bottom)); top:auto;
   width:100%; max-width:480px; display:flex; justify-content:flex-end;
   padding:0 20px; pointer-events:none; z-index:15;
 }
-#btnIrAHoy{
-  pointer-events:auto; display:flex; align-items:center; gap:4px;
-  background:var(--surface-3); color:var(--gold-dim); border:1px solid var(--border);
-  border-radius:14px; padding:6px 12px 6px 10px; font-family:inherit; font-size:12px; font-weight:600;
-  cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.35);
+.hist-ir-hoy-host.pos-top{
+  top:calc(10px + env(safe-area-inset-top)); bottom:auto;
 }
+#btnIrAHoy{
+  pointer-events:auto; display:flex; align-items:center; gap:5px;
+  background:var(--burgundy); color:#FBEFE9; border:none;
+  border-radius:16px; padding:7px 14px 7px 11px; font-family:inherit; font-size:12.5px; font-weight:700;
+  cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.4);
+  opacity:0; transform:translateY(8px) scale(0.92);
+  transition:opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), background .15s ease;
+}
+.hist-ir-hoy-host.pos-top #btnIrAHoy{transform:translateY(-8px) scale(0.92);}
+#btnIrAHoy.show{opacity:1; transform:translateY(0) scale(1);}
 #btnIrAHoy[hidden]{display:none;}
-#btnIrAHoy:active{transform:scale(0.95);}
+#btnIrAHoy:active{background:var(--burgundy-light);}
+#btnIrAHoy.show:active{transform:scale(0.95);}
 #btnIrAHoy .icon{width:14px; height:14px; stroke-width:2.5;}
-:root.hc #btnIrAHoy{border-width:2px; color:var(--cream);}
+#btnIrAHoy .ahoy-ico-up{display:none;}
+.hist-ir-hoy-host.pos-top #btnIrAHoy .ahoy-ico-down{display:none;}
+.hist-ir-hoy-host.pos-top #btnIrAHoy .ahoy-ico-up{display:inline-block;}
+:root.hc #btnIrAHoy{border:2px solid var(--cream);}
 
 /* ---------- HISTORIAL: separador de día (estilo app bancaria) ---------- */
 .hist-day-sep{
@@ -1120,6 +1136,14 @@ button{font-family:inherit;}
   width:100%; background:none; color:var(--cream-dim); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; cursor:pointer; margin-top:8px;
 }
+
+/* Botón "Volver" del onboarding: variante compacta de btn-ghost para convivir con el
+   indicador "Paso X de 6" en una sola fila. Jerarquía menor a propósito — sigue
+   siendo la acción secundaria del paso, no debe competir con Continuar/Saltar. */
+.ob-btn-volver{
+  width:auto; margin:0; padding:7px 13px; font-size:12.5px; font-weight:600; border-radius:20px;
+}
+.ob-btn-volver:active{transform:scale(0.96);}
 
 .cuota-fields{
   max-height:0; overflow:hidden; transition:max-height .25s ease, opacity .2s ease; opacity:0;
@@ -1751,7 +1775,8 @@ button:active{ transform:scale(0.97); }
          hoy (otro mes, o scrolleado lejos de la fila de hoy en el mes actual). -->
     <div class="hist-ir-hoy-host">
       <button type="button" id="btnIrAHoy" hidden aria-label="Ir a hoy">
-        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg class="icon ahoy-ico-down" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg class="icon ahoy-ico-up" viewBox="0 0 24 24" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
         <span>Hoy</span>
       </button>
     </div>
@@ -2307,7 +2332,7 @@ button:active{ transform:scale(0.97); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div id="obProgressRow" style="display:none; align-items:center; justify-content:space-between; gap:10px; margin:-6px 0 6px;">
-      <button type="button" class="btn-ghost" id="obBtnVolver" style="width:auto; margin:0; padding:0; border:none; background:none; font-size:12px; color:var(--cream-dim); cursor:pointer;">‹ Volver</button>
+      <button type="button" class="btn-ghost ob-btn-volver" id="obBtnVolver">‹ Volver</button>
       <p class="sheet-note" id="obProgress" style="margin:0; font-weight:600; letter-spacing:.02em;"></p>
     </div>
     <div id="obBody"></div>
@@ -7773,27 +7798,61 @@ function renderHistMonthTotals(){
 /* Botón "Ir a hoy": usa un IntersectionObserver sobre el separador de día de hoy
    (data-date, ver groupByDayHtml) en vez de escuchar scroll y calcular posiciones a
    mano. Se reengancha en cada renderHistorial() porque el separador se recrea junto
-   con el resto de #hList. */
+   con el resto de #hList. La posición (arriba/abajo del viewport de #app) se decide
+   comparando boundingClientRect del separador contra rootBounds del observer, y se
+   refleja en la clase .pos-top del host (ver CSS: también cambia el ícono). */
 let irAHoyObserver = null;
+let irAHoyHideTimer = null;
+function mostrarAhoyBtn(posArriba){
+  const btn = document.getElementById('btnIrAHoy');
+  const host = document.querySelector('.hist-ir-hoy-host');
+  if(!btn || !host) return;
+  host.classList.toggle('pos-top', !!posArriba);
+  if(irAHoyHideTimer){ clearTimeout(irAHoyHideTimer); irAHoyHideTimer = null; }
+  if(btn.hidden){
+    btn.hidden = false;
+    if(prefersReducedMotion()){ btn.classList.add('show'); }
+    else{ requestAnimationFrame(()=> requestAnimationFrame(()=> btn.classList.add('show'))); }
+  } else {
+    btn.classList.add('show');
+  }
+}
+function ocultarAhoyBtn(){
+  const btn = document.getElementById('btnIrAHoy');
+  if(!btn || btn.hidden) return;
+  btn.classList.remove('show');
+  if(irAHoyHideTimer) clearTimeout(irAHoyHideTimer);
+  if(prefersReducedMotion()){ btn.hidden = true; return; }
+  irAHoyHideTimer = setTimeout(()=>{ btn.hidden = true; irAHoyHideTimer = null; }, 300);
+}
 function refreshIrAHoyBtn(){
   const btn = document.getElementById('btnIrAHoy');
   if(!btn) return;
   if(irAHoyObserver){ irAHoyObserver.disconnect(); irAHoyObserver = null; }
   // Con un rango de fechas activo el botón no cambia de rango (misma guarda que
   // prevMonth/nextMonth) — más simple y claro mostrarlo oculto que deshabilitado.
-  if(hRango){ btn.hidden = true; return; }
+  if(hRango){ ocultarAhoyBtn(); return; }
   if(monthKey(currentDate) !== monthKey(mesActualReal())){
-    btn.hidden = false;   // mes distinto al actual: siempre "lejos" de hoy
+    // Mes distinto al actual: siempre "lejos" de hoy. No hay una dirección real de
+    // scroll que comparar todavía (el separador de hoy no está ni renderizado), así
+    // que el default es abajo — misma posición que tenía el botón antes de esta tanda.
+    mostrarAhoyBtn(false);
     return;
   }
   const box = document.getElementById('hList');
   const enListView = box && box.style.display !== 'none';
   const hoySep = enListView ? box.querySelector('.hist-day-sep[data-date="' + fechaHoyLocalISO() + '"]') : null;
-  if(!hoySep){ btn.hidden = true; return; }   // sin movimientos hoy: nada que alcanzar
-  btn.hidden = true;   // estado inicial; el observer decide en su primer callback
+  if(!hoySep){ ocultarAhoyBtn(); return; }   // sin movimientos hoy: nada que alcanzar
+  ocultarAhoyBtn();   // estado inicial; el observer decide en su primer callback
+  const root = document.getElementById('app');
   irAHoyObserver = new IntersectionObserver(entries=>{
-    entries.forEach(entry=>{ btn.hidden = entry.isIntersecting; });
-  }, { root: document.getElementById('app') });
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){ ocultarAhoyBtn(); return; }
+      const rootRect = entry.rootBounds || root.getBoundingClientRect();
+      const posArriba = entry.boundingClientRect.bottom < rootRect.top;
+      mostrarAhoyBtn(posArriba);
+    });
+  }, { root });
   irAHoyObserver.observe(hoySep);
 }
 function irAHoyClick(){
@@ -7805,9 +7864,8 @@ function irAHoyClick(){
   }
   const box = document.getElementById('hList');
   const hoySep = box ? box.querySelector('.hist-day-sep[data-date="' + fechaHoyLocalISO() + '"]') : null;
-  if(hoySep) hoySep.scrollIntoView({behavior:'smooth', block:'start'});
-  const btn = document.getElementById('btnIrAHoy');
-  if(btn) btn.hidden = true;
+  if(hoySep) hoySep.scrollIntoView({behavior: prefersReducedMotion() ? 'auto' : 'smooth', block:'center'});
+  ocultarAhoyBtn();
 }
 (function(){
   const btn = document.getElementById('btnIrAHoy');
@@ -11059,7 +11117,7 @@ function renderObPaso1(){
     <p class="sheet-note">Marca las que apliquen. Puedes agregar más después en Configuración.</p>
     <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
     <button class="btn-primary" data-ob="continuar-fuentes">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-fuentes">Saltar este paso</button>
+    <button class="btn-ghost" data-ob="saltar-fuentes">Saltar</button>
   `;
 }
 function renderObPaso2(){
@@ -11069,7 +11127,7 @@ function renderObPaso2(){
     <p class="sheet-note">Registra tus ingresos habituales (sueldo, honorarios, etc.) — quedan como "Fijo" y se repiten solos cada mes.</p>
     ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'ingreso agregado':'ingresos agregados'}.</p>` : ''}
     <button class="btn-primary" data-ob="agregar-ingreso">${n===0?'Agregar ingreso':'Agregar otro ingreso'}</button>
-    <button class="btn-ghost" data-ob="saltar-ingreso">${n===0?'Saltar este paso':'Continuar'}</button>
+    <button class="btn-ghost" data-ob="saltar-ingreso">${n===0?'Saltar':'Continuar'}</button>
   `;
 }
 function renderObPaso3(){
@@ -11084,7 +11142,7 @@ function renderObPaso3(){
     <p class="sheet-note">Ya vienen marcadas las básicas — suma las que te apliquen o desmarca las que no uses.</p>
     <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
     <button class="btn-primary" data-ob="continuar-categorias">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-categorias">Saltar este paso</button>
+    <button class="btn-ghost" data-ob="saltar-categorias">Saltar</button>
   `;
 }
 function renderObPaso4(){
@@ -11109,7 +11167,7 @@ function renderObPaso4(){
     <p class="sheet-note">Marca los que tengas y ajusta el monto si no calza. Máximo ${ONBOARDING_LOOP_LIMITE}.</p>
     <div style="max-height:300px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
     <button class="btn-primary" data-ob="continuar-fijos">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-fijos">Saltar este paso</button>
+    <button class="btn-ghost" data-ob="saltar-fijos">Saltar</button>
   `;
 }
 function renderObPaso5(){
@@ -11119,7 +11177,7 @@ function renderObPaso5(){
     <p class="sheet-note">Si tienes compras a crédito en cuotas, regístralas aquí (el método queda en "Crédito").</p>
     ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'cuota agregada':'cuotas agregadas'}.</p>` : ''}
     <button class="btn-primary" data-ob="agregar-cuota">${n===0?'Agregar cuota':'Agregar otra cuota'}</button>
-    <button class="btn-ghost" data-ob="saltar-cuota">${n===0?'Saltar este paso':'Continuar'}</button>
+    <button class="btn-ghost" data-ob="saltar-cuota">${n===0?'Saltar':'Continuar'}</button>
   `;
 }
 function renderObPaso6(){
@@ -11133,7 +11191,7 @@ function renderObPaso6(){
       ${filas}
       <button type="button" class="btn-ghost" data-ob="meta-otro" style="text-align:left;">Otro…</button>
     </div>
-    <button class="btn-ghost" data-ob="saltar-meta">Saltar este paso</button>
+    <button class="btn-ghost" data-ob="saltar-meta">Saltar</button>
   `;
 }
 function renderObCierre(){
