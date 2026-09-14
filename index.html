@@ -6441,7 +6441,7 @@ function renderResumen(){
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = listaRows.map(([cat,val])=>`
       <div class="cat-row" data-cat="${cat}">
-        <div class="left"><span class="cat-sw" style="background:${dona.colorDeCat[cat] || 'var(--cream-dim)'}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${escHtml(cat)}</span></div>
+        <div class="left"><span class="cat-sw" style="background:${colorDeCategoria(cat)}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${escHtml(cat)}</span></div>
         <span class="val">${money(val)}</span>${topeBar(cat, val)}
       </div>`).join('');
     box.querySelectorAll('[data-cat]').forEach(el=>{
