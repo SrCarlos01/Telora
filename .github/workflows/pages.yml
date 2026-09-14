@@ -41,10 +41,17 @@ jobs:
       - name: Configurar Pages
         uses: actions/configure-pages@v6
 
+      # tests.html es el harness de pruebas del motor financiero (T4) para uso en
+      # desarrollo local: debe seguir en el repo, pero no corresponde publicarlo en el
+      # sitio. Se borra de esta copia efímera del checkout (el runner la descarta al
+      # terminar el job) antes de armar el artefacto — el repo real no se toca.
+      - name: Excluir tests.html del artefacto público
+        run: rm -f tests.html
+
       # Sube el árbol tal cual (sin Jekyll). actions/upload-pages-artifact@v5
       # excluye .git, .github y archivos ocultos por defecto: se publica el
       # mismo conjunto de archivos que el deploy por rama (el repo no tiene
-      # dotfiles que el sitio necesite servir).
+      # dotfiles que el sitio necesite servir), salvo tests.html que se quita arriba.
       - name: Subir artefacto del sitio
         uses: actions/upload-pages-artifact@v5
         with:
