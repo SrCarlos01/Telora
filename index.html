@@ -2628,7 +2628,8 @@ const DEFAULTS = {
   fuentes: ["Sueldo","Trabajos extra","Ventas","Bono","Mesada","Interés","Otros"],
   categoriaIconos: {},  // { "Nombre categoría": {tipo:'emoji'|'icono', valor:'...'} }
   categoriaTopes: {},   // { "Nombre categoría": monto CLP entero > 0 } — clave ausente = sin tope
-  onboardingVisto: false   // Onboarding interactivo de primer uso: true = ya se completó o se saltó
+  onboardingVisto: false,   // Onboarding interactivo de primer uso: true = ya se completó o se saltó
+  notifCuotasConcedido: null   // Notificación de cuota próxima a vencer: null = nunca se preguntó, true/false = respuesta del navegador
 };
 
 /* Tanda T11 · versión de esquema del estado guardado (raíz de `state`, no de config).
@@ -2926,6 +2927,12 @@ function loadState(){
         || (Array.isArray(parsed.debts) && parsed.debts.length)
         || (Array.isArray(parsed.goals) && parsed.goals.length);
       parsed.config.onboardingVisto = !!teniaDatos;
+    }
+    // Notificación de cuota próxima a vencer: tri-estado null/true/false. Un estado de
+    // antes de esta tanda no trae el campo -> null (nunca se preguntó, se pedirá permiso
+    // la próxima vez que haya algo real que avisar).
+    if(parsed.config.notifCuotasConcedido !== true && parsed.config.notifCuotasConcedido !== false){
+      parsed.config.notifCuotasConcedido = null;
     }
     const migrado = migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
     migrado.schemaVersion = CURRENT_SCHEMA_VERSION;   // Tanda T11: el estado que sale de acá siempre queda al día
@@ -6065,6 +6072,43 @@ function cuotasPendientesDelMes(refDate, cuentaId){
     if(info && !cuotaPagadaDelMes(d, refDate)) total += info.monto;
   });
   return total;
+}
+// Notificación de cuota próxima a vencer (Tanda de notificaciones): deudas con cuota
+// activa este mes (cuotaInfoForMonth != null), sin confirmar como pagada
+// (cuotaPagadaDelMes), cuyo día de vencimiento cae dentro de los próximos
+// DIAS_AVISO_CUOTA_VENCIMIENTO días. El día de vencimiento se calcula IGUAL que en
+// cuotaVencidaPorFecha (día de purchaseDate, recortado al último día del mes si no
+// existe, reconstruido con el constructor Date(y,m,d) en vez de sumar meses a mano) —
+// eso evita a propósito el desborde de setMonth() que sí afecta a addMonths(): acá
+// nunca se suma un mes al día de compra, solo se recorta su número de día contra el
+// último día del mes en curso.
+//
+// HALLAZGO (verificado, NO corregido en esta tanda): addMonths()/cuotaInfoForMonth()
+// SÍ tienen ese desborde para compras de día 29/30/31. Ejemplo probado: purchaseDate
+// '2026-08-31' -> addMonths(+1) da '2026-10-01' (salta septiembre) en vez de
+// '2026-09-30', porque new Date(...).setMonth() no clampea el día al desbordar. Esto
+// puede correr un mes entero la cuota #1 (y todo el ciclo) de una compra de día 31 si
+// el mes siguiente tiene menos días. Es un comportamiento preexistente a esta tanda,
+// usado en toda la app (pestaña Cuotas, Disponible, etc.) — corregirlo ahí es un
+// cambio de alcance mucho mayor que esta tanda, que solo necesitaba el día-de-mes
+// (por eso este archivo usa el patrón clamp+Date(y,m,d) en vez de addMonths). Queda
+// pendiente para una tanda futura que revise addMonths()/cuotaInfoForMonth() a fondo.
+const DIAS_AVISO_CUOTA_VENCIMIENTO = 3;
+function cuotasProximasAVencer(refDate){
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const out = [];
+  state.debts.forEach(d=>{
+    const info = cuotaInfoForMonth(d, refDate);
+    if(!info || cuotaPagadaDelMes(d, refDate)) return;
+    const diaVenc = new Date(d.purchaseDate + "T00:00:00").getDate();
+    const ultimoDia = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).getDate();
+    const venc = new Date(refDate.getFullYear(), refDate.getMonth(), Math.min(diaVenc, ultimoDia));
+    const diasRestantes = Math.round((venc - hoy) / 86400000);
+    if(diasRestantes >= 0 && diasRestantes <= DIAS_AVISO_CUOTA_VENCIMIENTO){
+      out.push({ debt: d, diasRestantes });
+    }
+  });
+  return out;
 }
 // Insight "Cuotas por confirmar este mes": mismo criterio y misma fuente que
 // cuotasPendientesDelMes() (itemEnVista + cuotaInfoForMonth + cuotaPagadaDelMes), pero
@@ -9632,6 +9676,12 @@ function migrateBackup(parsed){
     config.onboardingVisto = !!(expenses.length || incomes.length || debts.length || goals.length);
   }
 
+  // Notificación de cuota próxima a vencer: mismo tri-estado null/true/false que
+  // loadState(). Un respaldo sin este campo (o con basura) entra como "nunca se preguntó".
+  if(config.notifCuotasConcedido !== true && config.notifCuotasConcedido !== false){
+    config.notifCuotasConcedido = null;
+  }
+
   // Tanda C1: modelo multi-cuenta. Se conservan accounts/transfers si el respaldo
   // los trae; migrarEstadoCuentas() los normaliza, crea "Principal" si faltan,
   // fija config.cuentaActiva y reasigna a "Principal" cualquier cuentaId huérfano
@@ -10948,6 +10998,84 @@ const DIA_MS = 86400000;
     }
   }catch(_){}
 })();
+
+/* ---- Notificación local de cuota próxima a vencer ----
+   Alcance de esta tanda: solo avisa mientras la app está abierta o vuelve a primer
+   plano (al cargar, y en cada visibilitychange a "visible"). No hay push real con la
+   app cerrada — eso requiere backend (Push API) o Periodic Background Sync
+   (experimental, sin soporte en Safari/iOS), fuera de alcance acá.
+
+   Igual que storageShield(): pide el permiso del navegador una sola vez (no insiste si
+   ya quedó concedido o denegado) y, a diferencia de storageShield, NO lo pide de
+   entrada al abrir la app — recién cuando hay una cuota real próxima a vencer, para no
+   interrumpir con un permiso sin contexto (ver cuotasProximasAVencer()). El resultado
+   queda en state.config.notifCuotasConcedido (null = nunca se preguntó). */
+function notificarCuotasProximas(){
+  try{
+    if(!('Notification' in window) || !('serviceWorker' in navigator)) return;
+    if(!state.config) state.config = {};
+
+    const proximas = cuotasProximasAVencer(mesActualReal());
+    if(!proximas.length) return;
+
+    const concedido = state.config.notifCuotasConcedido;
+    if(concedido === false) return;   // el usuario ya dijo que no: no se vuelve a preguntar ni a avisar
+
+    if(concedido === true){
+      // El estado guardado dice "concedido", pero el permiso vive en el navegador: si
+      // se revocó desde fuera de la app (ajustes del sistema), se refleja acá para no
+      // quedar reintentando en silencio para siempre.
+      if(Notification.permission === 'granted') dispararNotificacionesCuotas(proximas);
+      else if(Notification.permission === 'denied'){ state.config.notifCuotasConcedido = false; saveStateQuiet(); }
+      return;
+    }
+
+    // concedido === null: nunca se preguntó, y hoy sí hay algo real que avisar.
+    Notification.requestPermission().then(permiso=>{
+      state.config.notifCuotasConcedido = (permiso === 'granted');
+      saveStateQuiet();
+      if(permiso === 'granted') dispararNotificacionesCuotas(proximas);
+    }).catch(()=>{});
+  }catch(_){}
+}
+// Muestra la notificación (vía el SW ya registrado, mejor soporte en PWA instalada que
+// `new Notification()` directo) de cada cuota próxima a vencer que no se haya avisado
+// ya HOY — la marca vive en localStorage (no en state.config: es un dato de "ya se
+// mostró en este dispositivo hoy", no algo que tenga sentido llevar en un respaldo).
+function dispararNotificacionesCuotas(proximas){
+  try{
+    const hoyIso = fechaHoyLocalISO();
+    let marca = null;
+    try{ marca = JSON.parse(localStorage.getItem('misfinanzas_notifCuotasVistas') || 'null'); }catch(_){ marca = null; }
+    if(!marca || marca.fecha !== hoyIso || !Array.isArray(marca.ids)) marca = { fecha: hoyIso, ids: [] };
+
+    const pendientes = proximas.filter(p => !marca.ids.includes(p.debt.id));
+    if(!pendientes.length) return;
+
+    navigator.serviceWorker.ready.then(reg=>{
+      pendientes.forEach(p=>{
+        const nombre = p.debt.description || 'una compra';
+        let cuerpo;
+        if(p.diasRestantes === 0) cuerpo = `Cuota de ${nombre} vence hoy.`;
+        else if(p.diasRestantes === 1) cuerpo = `Cuota de ${nombre} vence mañana.`;
+        else cuerpo = `Cuota de ${nombre} vence en ${p.diasRestantes} días.`;
+        reg.showNotification('Cuota próxima a vencer', {
+          body: cuerpo,
+          icon: './icon.svg',
+          tag: 'misfinanzas-cuota-' + p.debt.id,
+          data: { url: './index.html' }
+        }).catch(()=>{});
+      });
+    }).catch(()=>{});
+
+    marca.ids = marca.ids.concat(pendientes.map(p => p.debt.id));
+    try{ localStorage.setItem('misfinanzas_notifCuotasVistas', JSON.stringify(marca)); }catch(_){}
+  }catch(_){}
+}
+notificarCuotasProximas();
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') notificarCuotasProximas();
+});
 
 /* ---- ptos 3 y 4: banners discretos (recordatorio de respaldo + instalar app) ---- */
 function appIsInstalled(){
