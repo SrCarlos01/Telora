@@ -846,6 +846,33 @@ function runTests(){
       `disponibleBase=${disponibleBase}, va=${va}, resultado=${resultado}, esperado=${esperado}`);
   }
 
+  // ---- addMonths / cuotaInfoForMonth (desborde de setMonth() en compras día 29/30/31) ----
+  // HALLAZGO de la tanda anterior (ver comentario junto a addMonths() en index.html):
+  // Date.setMonth() no recorta el día al mes destino, así que una compra el 2026-08-31
+  // hace que addMonths(+1) desborde a octubre ('2026-10-01') saltándose septiembre entero.
+  // Deuda comprada 2026-08-31 en 3 cuotas de 300.000/3=100.000 c/u: el ciclo CORRECTO debe
+  // ser cuotaNum 1 en septiembre 2026 (addMonths(purchaseDate,1) recortado a 2026-09-30),
+  // cuotaNum 2 en octubre, cuotaNum 3 en noviembre. Este assert codifica el comportamiento
+  // CORRECTO esperado (septiembre reconocido como cuotaNum 1/3, saldoRestante=200.000): con
+  // el bug de desborde todavía presente, cuotaInfoForMonth(debt, septiembre) da null (porque
+  // addMonths salta a octubre) y el assert FALLA — esa falla es la evidencia del bug antes
+  // de corregir addMonths(). Tras el fix debe pasar sin tocar este bloque.
+  {
+    const debt = {
+      id:'dOverflow', purchaseDate:'2026-08-31', numCuotas:3, totalAmount:300000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    };
+    const st = fixtureBase();
+    st.debts.push(debt);
+    setState(win, st);
+    resetCaches(win);
+    const infoSept = win.cuotaInfoForMonth(debt, new Date(2026, 8, 15)); // 15 septiembre 2026
+    assert(infoSept !== null && infoSept.cuotaNum === 1 && infoSept.total === 3 &&
+      infoSept.saldoRestante === 200000,
+      `cuotaInfoForMonth (compra 2026-08-31, desborde de addMonths): septiembre debe ser cuotaNum 1/3, saldoRestante=200.000`,
+      `Obtenido: ${JSON.stringify(infoSept)}`);
+  }
+
   renderResultados();
   checkLocalStorage();
 }

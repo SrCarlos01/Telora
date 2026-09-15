@@ -6095,8 +6095,12 @@ document.getElementById('intMeses').addEventListener('input', calcInteres);
 /* ==================== CUOTAS: cálculo ==================== */
 function addMonths(dateStr, n){
   const d = new Date(dateStr+"T00:00:00");
-  d.setMonth(d.getMonth()+n);
-  return d;
+  // Mismo criterio que cuotaVencidaPorFecha/cuotasProximasAVencer: se recorta el día al
+  // último día real del mes destino en vez de dejar que Date.setMonth() desborde al mes
+  // siguiente cuando el día de origen (29/30/31) no existe ahí.
+  const targetMonth = new Date(d.getFullYear(), d.getMonth()+n, 1);
+  const ultimoDia = new Date(targetMonth.getFullYear(), targetMonth.getMonth()+1, 0).getDate();
+  return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), Math.min(d.getDate(), ultimoDia));
 }
 function cuotaInfoForMonth(debt, refDate){
   const firstCuota = addMonths(debt.purchaseDate, 1);
@@ -6247,16 +6251,11 @@ function cuotasPendientesDelMes(refDate, cuentaId){
 // nunca se suma un mes al día de compra, solo se recorta su número de día contra el
 // último día del mes en curso.
 //
-// HALLAZGO (verificado, NO corregido en esta tanda): addMonths()/cuotaInfoForMonth()
-// SÍ tienen ese desborde para compras de día 29/30/31. Ejemplo probado: purchaseDate
-// '2026-08-31' -> addMonths(+1) da '2026-10-01' (salta septiembre) en vez de
-// '2026-09-30', porque new Date(...).setMonth() no clampea el día al desbordar. Esto
-// puede correr un mes entero la cuota #1 (y todo el ciclo) de una compra de día 31 si
-// el mes siguiente tiene menos días. Es un comportamiento preexistente a esta tanda,
-// usado en toda la app (pestaña Cuotas, Disponible, etc.) — corregirlo ahí es un
-// cambio de alcance mucho mayor que esta tanda, que solo necesitaba el día-de-mes
-// (por eso este archivo usa el patrón clamp+Date(y,m,d) en vez de addMonths). Queda
-// pendiente para una tanda futura que revise addMonths()/cuotaInfoForMonth() a fondo.
+// CORREGIDO (tanda posterior): addMonths() tenía este mismo desborde para compras de
+// día 29/30/31 (ej. purchaseDate '2026-08-31' -> addMonths(+1) daba '2026-10-01',
+// saltándose septiembre por completo). Se corrigió aplicando el mismo criterio
+// clamp+Date(y,m,d) directamente dentro de addMonths(), así que ya no hace falta el
+// rodeo que usa esta función — se documenta acá solo como referencia histórica.
 const DIAS_AVISO_CUOTA_VENCIMIENTO = 3;
 function cuotasProximasAVencer(refDate){
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
