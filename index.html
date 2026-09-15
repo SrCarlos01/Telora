@@ -878,6 +878,17 @@ button{font-family:inherit;}
 .cuota-proy-line b{color:var(--cream); font-weight:600; text-align:right; overflow-wrap:anywhere;}
 .cuota-proy-note{font-size:12px; color:var(--gold-dim); line-height:1.5; margin:12px 0 14px;}
 
+/* Tanda T11 · aviso "respaldo de una versión más nueva" en sheetConfirmRestore.
+   Mismo tratamiento visual que .insight-alerta (tinte + borde), pero como bloque
+   propio porque va dentro de un sheet distinto y no participa de esa lista. */
+.restore-schema-warning{
+  display:flex; align-items:flex-start; gap:8px; font-size:12.5px; line-height:1.5; color:var(--cream);
+  background:rgba(180,84,74,0.10); border:1px solid rgba(180,84,74,0.35); border-radius:var(--radius-sm);
+  padding:10px 12px; margin:12px 0 0;
+}
+.restore-schema-warning .icon{width:15px; height:15px; flex-shrink:0; margin-top:1px; color:var(--danger);}
+:root.hc .restore-schema-warning{border-width:2px;}
+
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
 .premium-badge{
   display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.08em;
@@ -2422,6 +2433,10 @@ button:active{ transform:scale(0.93); }
       <div class="cuota-proy-line"><span>Deudas / cuotas</span><b id="rcDeudas"></b></div>
       <div class="cuota-proy-line"><span>Metas</span><b id="rcMetas"></b></div>
     </div>
+    <div class="restore-schema-warning" id="restoreSchemaWarning" style="display:none;">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Este respaldo viene de una versión más nueva de la app. Podría traer datos que esta versión no reconoce. Puedes seguir igual, pero revisa que todo se vea bien después de restaurar.</span>
+    </div>
     <button class="btn-danger" id="btnConfirmRestore">Sí, restaurar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
@@ -2616,6 +2631,14 @@ const DEFAULTS = {
   onboardingVisto: false   // Onboarding interactivo de primer uso: true = ya se completó o se saltó
 };
 
+/* Tanda T11 · versión de esquema del estado guardado (raíz de `state`, no de config).
+   Se estampa en loadState()/migrateBackup() para poder avisar si un respaldo viene de
+   una versión MÁS NUEVA que esta app. NO gatilla ni reemplaza las migraciones de
+   loadState(): esas siguen corriendo siempre, incondicionalmente, sin mirar este número.
+   Es la primera vez que se introduce el concepto — las Tandas anteriores a esta no se
+   numeran retroactivamente. */
+const CURRENT_SCHEMA_VERSION = 1;
+
 /* ==================== ONBOARDING · LISTAS MAESTRAS ====================
    Solo se usan dentro de la encuesta de bienvenida (Pasos 1, 3, 4 y 6). No
    reemplazan a DEFAULTS: son un catálogo más amplio para que la persona elija
@@ -2798,6 +2821,10 @@ function loadState(){
   try{ s = localStorage.getItem('misfinanzas_data'); }catch(_){ s = null; }
   if(s){
     const parsed = JSON.parse(s);
+    // Tanda T11: si `parsed.schemaVersion` no viene o no es un número válido, es un
+    // estado de antes de esta tanda (no un error) — se trata como versión 0 y sigue
+    // migrando igual. No gatilla ninguna migración: las de abajo corren siempre,
+    // incondicionalmente. Al final se deja estampada la versión actual.
     if(parsed.config && !parsed.config.categoriaIconos) parsed.config.categoriaIconos = {};   // íconos por categoría
     // Topes de gasto mensual por categoría (mapa aparte, como categoriaIconos): clave
     // ausente = sin tope. Se saldan valores basura para que catTope()/la barra de
@@ -2900,9 +2927,11 @@ function loadState(){
         || (Array.isArray(parsed.goals) && parsed.goals.length);
       parsed.config.onboardingVisto = !!teniaDatos;
     }
-    return migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
+    const migrado = migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
+    migrado.schemaVersion = CURRENT_SCHEMA_VERSION;   // Tanda T11: el estado que sale de acá siempre queda al día
+    return migrado;
   }
-  return migrarEstadoCuentas({ config: {...DEFAULTS, categoriaIconos: {}, categoriaTopes: {}}, expenses: [], incomes: [], debts: [], goals: [] });
+  return migrarEstadoCuentas({ config: {...DEFAULTS, categoriaIconos: {}, categoriaTopes: {}}, expenses: [], incomes: [], debts: [], goals: [], schemaVersion: CURRENT_SCHEMA_VERSION });
 }
 /* ==================== GUARDADO BLINDADO (Tanda Q · pto 1) ====================
    saveState() puede fallar: cuota excedida (QuotaExceededError), modo privado o
@@ -9610,7 +9639,9 @@ function migrateBackup(parsed){
   const migrado = { config, expenses, incomes, debts, goals,
     accounts: Array.isArray(src.accounts) ? src.accounts : [],
     transfers: Array.isArray(src.transfers) ? src.transfers : [] };
-  return migrarEstadoCuentas(migrado);
+  const resultado = migrarEstadoCuentas(migrado);
+  resultado.schemaVersion = CURRENT_SCHEMA_VERSION;   // Tanda T11: el resultado de migrar siempre queda al día
+  return resultado;
 }
 let reconciliacionImport = null;   // {metodos:[], fuentes:[]} recuperado por la última migrateBackup()
 function fillRestoreCompare(backup){
@@ -9640,9 +9671,18 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
         showToast(errMsg, 'error');
         return;
       }
+      // Tanda T11: versión de esquema de origen del archivo — 0 si no viene o no es un
+      // número válido (respaldo de antes de esta tanda, no es un error). Se lee acá, del
+      // `parsed` crudo, porque ya está disponible en este scope antes de migrar; no hace
+      // falta que migrateBackup() la exponga.
+      const backupSchemaVersion = (typeof parsed.schemaVersion === 'number' && isFinite(parsed.schemaVersion)) ? parsed.schemaVersion : 0;
       // Se migra ya al leer, así el conteo (actual vs. a importar) refleja los datos migrados.
       pendingRestoreData = migrateBackup(parsed);
       fillRestoreCompare(pendingRestoreData);
+      // Si el respaldo viene de una versión más nueva que esta app, se avisa dentro del
+      // propio sheet — no bloquea, el usuario decide si sigue.
+      const warnBox = document.getElementById('restoreSchemaWarning');
+      if(warnBox) warnBox.style.display = (backupSchemaVersion > CURRENT_SCHEMA_VERSION) ? 'flex' : 'none';
       closeSheet('sheetConfig');
       openSheet('sheetConfirmRestore');
     }catch(err){
