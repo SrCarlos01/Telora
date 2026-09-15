@@ -1434,7 +1434,7 @@ button:active{ transform:scale(0.93); }
 :root.hc .add-inline input, :root.hc .config-item .cfg-icon-btn, :root.hc .btn-ghost,
 :root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button,
 :root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
-:root.hc .hist-cat-chip, :root.hc .hist-check input{ border-width:2px; }
+:root.hc .hist-cat-chip, :root.hc .hist-check input, :root.hc .racha-registro{ border-width:2px; }
 :root.hc .li-muted{ font-style:normal; color:var(--cream); }
 :root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note,
 :root.hc .ahorrado-nota, :root.hc .int-disclaimer, :root.hc .li-sub, :root.hc .debt-foot,
@@ -1611,6 +1611,16 @@ button:active{ transform:scale(0.93); }
 .goal-racha-none{font-size:12px; color:var(--cream-dim); line-height:1.5; margin:2px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
 :root.hc .goal-racha-none{color:var(--cream);}
 :root.hc .goal-racha .gr-count{color:var(--cream);}
+
+/* ---------- RESUMEN: racha de registro diario (Tanda F-C5) ---------- */
+.racha-registro-wrap{margin:0 0 18px;}
+.racha-registro{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:12px 14px; font-size:13px; color:var(--cream);
+}
+.racha-registro .rr-count{font-weight:700; color:var(--gold);}
+.racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:4px 0 0;}
+:root.hc .racha-registro .rr-count{color:var(--cream);}
 </style>
 </head>
 <body>
@@ -1743,6 +1753,7 @@ button:active{ transform:scale(0.93); }
       <button type="button" class="balance-detalle-btn" id="tgResumenDetalle" aria-expanded="false"></button>
       <div class="balance-detalle" id="rDetalle"></div>
     </div>
+    <div class="racha-registro-wrap" id="rRachaRegistro"></div>
     <div class="toggle-row seg-chart" id="segResumen" role="tablist" aria-label="Vista del gráfico"></div>
     <p class="section-title">Gasto por categoría</p>
     <div id="rCategorias"></div>
@@ -5488,6 +5499,77 @@ function rachaMetaHtml(g){
   return html;
 }
 
+/* ---------- RESUMEN: racha de registro diario (Tanda F-C5) ----------
+   Distinta de rachaMeta(): esa cuenta MESES en que se cumplió el aporte automático de
+   una meta; esta cuenta DÍAS con al menos un gasto o ingreso registrado (no cuotas ni
+   aportes a metas, que ya tienen su propia racha). No está atada a ninguna meta.
+   Un hueco de hasta 4 días calendario seguidos sin ningún registro NO corta la racha
+   (esos días igual suman al contador); un hueco de 5 SÍ la corta, en el día donde se
+   cumple el quinto día sin registro. Hoy nunca corta mientras el día esté en curso
+   (mismo criterio que usa rachaMeta con enCurso). Se recalcula siempre desde
+   state.expenses/state.incomes: no necesita ningún campo nuevo en el estado. */
+function rachaRegistroFechaISO(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function rachaRegistro(expenses, incomes){
+  const fechas = new Set();
+  (expenses||[]).forEach(e=>{ if(e && e.date) fechas.add(e.date); });
+  (incomes||[]).forEach(i=>{ if(i && i.date) fechas.add(i.date); });
+  if(fechas.size === 0) return { streak: 0, rota: null };
+
+  const hoyStr = fechaHoyLocalISO();
+  const hoy = new Date(hoyStr + "T00:00:00");
+
+  // Límite hacia atrás: el mes de inicio de registro si está definido, si no la fecha
+  // registrada más antigua. Tope duro adicional de ~3 años (pto 5) para no recorrer
+  // día por día indefinidamente en cuentas muy longevas.
+  const inicioMk = mesInicioRegistroMk();
+  let limite = inicioMk !== null
+    ? new Date(Math.floor(inicioMk / 12), inicioMk % 12, 1)
+    : new Date([...fechas].sort()[0] + "T00:00:00");
+  const TOPE_DIAS = 1100;
+  const minLimite = new Date(hoy); minLimite.setDate(minLimite.getDate() - TOPE_DIAS);
+  if(limite < minLimite) limite = minLimite;
+
+  let cursor = new Date(limite);
+  let inicioRachaActual = new Date(limite);
+  let hueco = 0, rota = null, dias = 0;
+  while(cursor <= hoy && dias <= TOPE_DIAS){
+    const key = rachaRegistroFechaISO(cursor);
+    const esHoy = key === hoyStr;
+    if(fechas.has(key)){
+      hueco = 0;
+    } else if(!esHoy){   // el día de hoy en curso nunca corta ni acumula hueco
+      hueco++;
+      if(hueco >= 5){
+        rota = { fecha: key };
+        inicioRachaActual = new Date(cursor); inicioRachaActual.setDate(inicioRachaActual.getDate() + 1);
+        hueco = 0;
+      }
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    dias++;
+  }
+  const streak = Math.round((hoy - inicioRachaActual) / 86400000) + 1;
+  return { streak: Math.max(0, streak), rota };
+}
+function rachaRegistroHtml(){
+  const r = rachaRegistro(state.expenses, state.incomes);
+  if(r.streak === 0 && !r.rota) return '';
+  const plural = r.streak === 1 ? 'día' : 'días';
+  let html = `<div class="racha-registro">Racha de registro: <span class="rr-count">${r.streak === 0 ? '0' : '🔥 ' + r.streak}</span> ${plural}`;
+  if(r.rota){
+    html += `<p class="racha-registro-rota">La racha se cortó el ${fmtDiaMes(r.rota.fecha)}: pasaron 5 días sin registrar ningún gasto ni ingreso.</p>`;
+  }
+  html += `</div>`;
+  return html;
+}
+function renderRachaRegistro(){
+  const box = document.getElementById('rRachaRegistro');
+  if(!box) return;
+  box.innerHTML = rachaRegistroHtml();
+}
+
 /* ==================== RENDER: METAS ==================== */
 function renderMetas(){
   const box = document.getElementById('mList');
@@ -6545,6 +6627,7 @@ function renderResumen(){
 
   renderDonaResumen(dona);
   renderResumenDetalle();
+  renderRachaRegistro();
   renderInsights();
   renderTendencia();
 }
