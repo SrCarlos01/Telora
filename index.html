@@ -1581,6 +1581,24 @@ button:active{ transform:scale(0.93); }
 }
 :root.hc .insight-cuota-libre{border-width:2px;}
 
+/* Tanda F-B1: pantalla de cierre de mes — secciones "Lo positivo"/"Lo negativo".
+   Los ítems positivos reusan .insight-cuota-libre tal cual (ya verde/success). Para
+   los negativos genéricos (sin categoría/razón, que ya tienen su propia tarjeta en
+   .insight-alerta) se usa .cierre-item-neg: mismo patrón visual, en rojo/danger — el
+   equivalente que ya usa el semáforo de salud financiera para "mal", no un color
+   nuevo. Los títulos de sección reusan .section-title, solo con el color de acento
+   cambiado. */
+.cierre-mes-section{margin:18px 0 0;}
+.cierre-mes-section .section-title{margin-bottom:10px;}
+.cierre-mes-section.cm-pos .section-title{color:var(--success);}
+.cierre-mes-section.cm-neg .section-title{color:var(--danger);}
+.cierre-item-neg{
+  font-size:13px; color:var(--cream); line-height:1.5; margin:0 0 8px;
+  padding:11px 13px; background:rgba(180,84,74,0.10); border:1px solid rgba(180,84,74,0.35);
+  border-left:3px solid var(--danger); border-radius:var(--radius-sm);
+}
+:root.hc .cierre-item-neg{border-width:2px;}
+
 /* Insight "patrón de gasto por día de la semana": destaca cuál de los dos baldes gasta
    más, con el mismo color que usa el resto del Resumen para "gasto" (mv-gasto = danger)
    — no es una alerta, solo el tono ya asociado a montos de gasto en la app. */
@@ -1675,19 +1693,6 @@ button:active{ transform:scale(0.93); }
     <div class="notice-bar-actions">
       <button type="button" class="nb-primary" id="ubApply">Actualizar</button>
       <button type="button" class="nb-ghost" id="ubLater">Después</button>
-    </div>
-  </div>
-
-  <!-- Tanda R3 · pto 3: el mes recién cerrado dejó cuotas vencidas sin confirmar.
-       Aviso NO bloqueante: no marca nada solo, solo informa y ofrece ir a revisarlas. -->
-  <div class="notice-bar" id="cierreCuotasBanner" hidden>
-    <div class="notice-bar-txt">
-      <strong id="ccbTitulo"></strong>
-      <span id="ccbHint">Revisa si las pagaste — cuentan como gasto de ese mes.</span>
-    </div>
-    <div class="notice-bar-actions">
-      <button type="button" class="nb-primary" id="ccbRevisar">Revisar</button>
-      <button type="button" class="nb-ghost" id="ccbDismiss">Entendido</button>
     </div>
   </div>
 
@@ -2402,6 +2407,31 @@ button:active{ transform:scale(0.93); }
       <div class="progress-fill" id="obProgressFill" style="width:0%;"></div>
     </div>
     <div id="obBody"></div>
+  </div>
+</div>
+
+<!-- SHEET: Tanda F-B1 — pantalla de cierre de mes. Reemplaza el banner discreto
+     cierreCuotasBanner (Tanda R3): mismo peso visual que el onboarding (sheet-overlay +
+     data-nodismiss, no se cierra con swipe/backdrop/Escape) y SIEMPRE dos secciones,
+     "Lo positivo" y "Lo negativo", del mes que acaba de cerrar — nunca solo buenas
+     noticias. Contenido ensamblado por abrirPantallaCierreMes()/datosCierreMes() (ver
+     motor de insights) a partir de funciones ya existentes, sin recalcular ningún
+     criterio nuevo. -->
+<div class="sheet-overlay" id="sheetCierreMes" data-nodismiss>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="cmTitulo">Mes cerrado</h2>
+    <div class="insight-semaforo" id="cmSemaforo" role="img"></div>
+    <div class="insight-proy-main" id="cmDisponible"></div>
+    <div class="cierre-mes-section cm-pos">
+      <p class="section-title">Lo positivo</p>
+      <div id="cmPositivos"></div>
+    </div>
+    <div class="cierre-mes-section cm-neg">
+      <p class="section-title">Lo negativo</p>
+      <div id="cmNegativos"></div>
+    </div>
+    <button type="button" class="btn-primary" id="cmAccion"></button>
   </div>
 </div>
 
@@ -7138,6 +7168,155 @@ function metasRecienCumplidas(){
   });
 }
 
+/* ==================== Tanda F-B1 · PANTALLA DE CIERRE DE MES ====================
+   Reemplaza el banner cierreCuotasBanner (Tanda R3, solo avisaba de cuotas sin
+   confirmar) por una pantalla completa con SIEMPRE dos secciones — "Lo positivo" y
+   "Lo negativo" — del mes que acaba de cerrar. Ensamblaje puro: reusa el motor de
+   insights ya existente (categoriasEnAlerta, categoriasBajoControl, variacionCategorias,
+   proyeccionFinDeMes, metaEstaCompleta) sin recalcular ningún criterio nuevo. Alcance
+   SIEMPRE 'total' (todas las cuentas), igual que el banner viejo (deudasQueTerminanPronto
+   y el propio cierreCuotasBanner ya ignoraban cuentaId) y que chequearMetaCompletada.
+
+   `prevDate` es el mes que se está cerrando (mesActualReal() menos 1 mes) — no
+   currentDate, que es el mes que el usuario esté navegando en el resto de la app. */
+function datosCierreMes(prevDate){
+  const cta = 'total';
+  const prevPrevDate = new Date(prevDate.getFullYear(), prevDate.getMonth()-1, 1);
+  const inicioMk = mesInicioRegistroMk();
+  // Mismo guardarraíl que renderInsights (R3 · pto 4): no comparar contra un mes
+  // anterior al "Mes de inicio de registro" declarado por el usuario.
+  const prevPrevFueraDeRegistro = inicioMk !== null && monthKey(prevPrevDate) < inicioMk;
+  const prevPrevTiene = !prevPrevFueraDeRegistro && mesTieneMovimientos(prevPrevDate, cta);
+
+  const dataPrev = insightsMesData(prevDate, cta);
+  const dataPrevPrev = insightsMesData(prevPrevDate, cta);
+  // prevDate SIEMPRE está cerrado (es el mes justo antes de mesActualReal()): acá
+  // proyeccionFinDeMes() no proyecta nada (diasRestantes=0, variableEstimado=0) — su
+  // dispProyectado es el disponible REAL final de ese mes, no una estimación.
+  const proy = proyeccionFinDeMes(prevDate, cta);
+  const disp = proy.dispProyectado;
+  const alertas = categoriasEnAlerta(dataPrev, dataPrevPrev, prevPrevTiene);
+  const hayAlerta = alertas.length > 0;
+
+  // Mismo criterio del semáforo que renderInsights (sección a), evaluado sobre el mes
+  // ya cerrado en vez del mes en curso.
+  let semEstado;
+  if(disp < 0) semEstado = 'sem-rojo';
+  else if(disp === 0 || disp < 0.10 * proy.ingresosProy || hayAlerta) semEstado = 'sem-ambar';
+  else semEstado = 'sem-verde';
+
+  const positivos = [], negativos = [];
+
+  // ---- Lo negativo ----
+  const cuotasSC = cuotasSinConfirmarDelMes(prevDate, cta);
+  if(cuotasSC.count > 0){
+    negativos.push(`<div class="cierre-item-neg">Quedaron ${
+      cuotasSC.count === 1 ? '1 cuota' : cuotasSC.count + ' cuotas'
+    } sin confirmar por ${money(cuotasSC.total)}.</div>`);
+  }
+  // Mismo template que renderInsights (bloque e) para las categorías en alerta.
+  alertas.forEach(a=>{
+    const razones = [];
+    if(a.c1) razones.push('subió +25% vs. mes anterior');
+    if(a.c2) razones.push('más del 35% del gasto del mes');
+    const doble = a.c1 && a.c2;
+    negativos.push(`<div class="insight-alerta${doble ? ' doble' : ''}">
+      <span class="ia-cat">${doble ? '⚠⚠' : '⚠'} ${escHtml(a.cat)} · ${money(a.val)}</span>
+      <span class="ia-razon">${razones.join(' + ')}</span>
+    </div>`);
+  });
+  if(disp < 0){
+    negativos.push(`<div class="cierre-item-neg">El mes cerró con disponible negativo: ${money(disp)}.</div>`);
+  }
+
+  // ---- Lo positivo ----
+  // Sin el tope de 2 que usa renderInsights (grupo1, núcleo siempre visible): esta
+  // pantalla es un recuento único del mes, no un panel que compite por espacio en cada
+  // visita a Resumen — mostrar todas las categorías que mejoraron es más útil acá.
+  categoriasBajoControl(dataPrev, dataPrevPrev, prevPrevTiene).forEach(b=>{
+    positivos.push(`<div class="insight-cuota-libre">Gastaste ${money(b.ahorro)} menos en ${escHtml(b.cat)} que el mes anterior.</div>`);
+  });
+  // Metas completadas DENTRO del mes que cierra (fechaCumplida cae en prevDate) — a
+  // propósito distinto de metasRecienCumplidas() (ventana móvil de 30 días desde HOY,
+  // pensada para el núcleo de Resumen): acá el recorte es por mes calendario.
+  const mkPrev = monthKey(prevDate);
+  (state.goals || []).forEach(g=>{
+    if(!g.fechaCumplida) return;
+    if(monthKey(new Date(g.fechaCumplida+"T00:00:00")) !== mkPrev) return;
+    if(!metaEstaCompleta(g)) return;   // sigue cumplida de verdad hoy
+    positivos.push(`<div class="insight-cuota-libre">Completaste tu meta «${escHtml(g.name)}»: ahorraste ${money(g.montoObjetivo)}.</div>`);
+  });
+  // "Mejora mes a mes": mismo dato que la fila "Disponible" de la comparación de
+  // Insights (disponibleLibre, upIsGood=true), acá como ítem positivo si mejoró.
+  if(prevPrevTiene && dataPrev.disponibleLibre > dataPrevPrev.disponibleLibre){
+    const delta = dataPrev.disponibleLibre - dataPrevPrev.disponibleLibre;
+    const base = dataPrevPrev.disponibleLibre;
+    const pctTxt = base !== 0 ? ` (${Math.round(delta / Math.abs(base) * 100)}%)` : '';
+    positivos.push(`<div class="insight-cuota-libre">Tu disponible subió ${money(delta)}${pctTxt} respecto a ${MESES[prevPrevDate.getMonth()].toLowerCase()}.</div>`);
+  }
+
+  // ---- Acción única (prioridad ya decidida: cuotas > categoría en sobregasto > Entendido) ----
+  let accion;
+  if(cuotasSC.count > 0){
+    accion = { tipo:'cuotas', label:'Confirmar cuotas' };
+  } else {
+    // "el mismo dato ya usado en categoría bajo control invertido" = categoriasEnAlerta
+    // (c1: subió +25%, el criterio opuesto de categoriasBajoControl), ya ordenada por
+    // valor descendente. Si no hay ninguna en alerta, cae a la categoría con mayor
+    // variación (variacionCategorias, mismo dato que renderInsights bloque d).
+    const topAumento = variacionCategorias(dataPrev.catTotals, dataPrevPrev.catTotals)
+      .filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
+    const catObjetivo = alertas.length ? alertas[0].cat : (prevPrevTiene && topAumento ? topAumento.cat : null);
+    accion = catObjetivo ? { tipo:'categoria', label:'Ver categoría', cat:catObjetivo } : { tipo:'ok', label:'Entendido' };
+  }
+
+  return { disp, semEstado, positivos, negativos, accion };
+}
+
+// Pinta y abre #sheetCierreMes con los datos de `prevDate` (el mes que cierra).
+// `marcarVistoFn` es la MISMA marca de "una vez por mes" que ya usaba el banner viejo
+// (ver initDataShieldBanners más abajo) — se llama al presionar el único botón, tanto si
+// hay una acción de seguimiento como si no.
+function abrirPantallaCierreMes(prevDate, marcarVistoFn){
+  const info = datosCierreMes(prevDate);
+  document.getElementById('cmTitulo').textContent = `${MESES[prevDate.getMonth()]} ${prevDate.getFullYear()} cerró así`;
+
+  const semDot = c => `<span class="sem-dot ${c}${c === info.semEstado ? ' on' : ''}"></span>`;
+  const semTxt = info.semEstado === 'sem-verde' ? 'en verde' : (info.semEstado === 'sem-ambar' ? 'en amarillo' : 'en rojo');
+  const semBox = document.getElementById('cmSemaforo');
+  semBox.innerHTML = semDot('sem-verde') + semDot('sem-ambar') + semDot('sem-rojo');
+  semBox.setAttribute('aria-label', 'Salud financiera: ' + semTxt);
+
+  const dispEl = document.getElementById('cmDisponible');
+  dispEl.classList.toggle('neg', info.disp < 0);
+  dispEl.innerHTML = `<span>Disponible final</span><b>${money(info.disp)}</b>`;
+
+  const posBox = document.getElementById('cmPositivos');
+  posBox.innerHTML = info.positivos.length ? info.positivos.join('')
+    : `<p class="insight-nodata">Ningún punto positivo que destacar este mes.</p>`;
+  const negBox = document.getElementById('cmNegativos');
+  negBox.innerHTML = info.negativos.length ? info.negativos.join('')
+    : `<p class="insight-nodata">Ningún punto negativo que destacar este mes.</p>`;
+
+  const btn = document.getElementById('cmAccion');
+  btn.textContent = info.accion.label;
+  btn.onclick = ()=>{
+    marcarVistoFn();
+    closeSheet('sheetCierreMes');
+    if(info.accion.tipo === 'cuotas'){
+      currentDate.setFullYear(prevDate.getFullYear(), prevDate.getMonth(), 1);
+      cTab = 'activas';
+      switchScreen('cuotas');
+    } else if(info.accion.tipo === 'categoria'){
+      currentDate.setFullYear(prevDate.getFullYear(), prevDate.getMonth(), 1);
+      switchScreen('resumen');   // renderAll() ya corrió acá: currentDate queda al día para lo de abajo
+      const normalExpenses = getExpensesForMonth(currentDate, 'total').filter(e=> !e.debtId);
+      openCategoriaDetalle(info.accion.cat, normalExpenses);
+    }
+  };
+  openSheet('sheetCierreMes');
+}
+
 // Insight "Patrón de gasto por día de la semana": compara el promedio diario de gasto
 // de fin de semana (sáb+dom) contra el de entre semana (lun-vie).
 // "Gasto de contado del mes" = mismo conjunto que variableOcurrido en
@@ -11389,12 +11568,19 @@ function isIOSDevice(){
     }
   }
 
-  // Tanda R3 · pto 3 — aviso al abrir la app en un mes nuevo si el mes RECIÉN CERRADO
-  // dejó cuotas vencidas sin confirmar. No marca nada: solo informa (esas cuotas ya
-  // cuentan como gasto de ese mes) y ofrece ir a revisarlas. Se muestra una sola vez por
-  // mes (marca en localStorage, no toca el estado guardado).
-  const ccb = document.getElementById('cierreCuotasBanner');
-  if(ccb){
+  // Tanda F-B1 — reemplaza el banner discreto de Tanda R3 (avisaba solo de cuotas sin
+  // confirmar) por la pantalla completa de cierre de mes (#sheetCierreMes, ver
+  // abrirPantallaCierreMes/datosCierreMes más arriba). MISMO mecanismo "una vez por
+  // cambio de mes" que ya usaba el banner viejo — misma clave de localStorage
+  // (misfinanzas_avisoCierre), mismo guardarraíl de "Mes de inicio de registro"
+  // (dentroDeRegistro): no se toca el estado guardado, así que restaurar un respaldo o
+  // cambiar de mes navegando (que no vuelve a correr este IIFE — solo se ejecuta una
+  // vez al cargar el script) no la resetea ni la duplica. Antes solo se disparaba si
+  // había cuotas sin confirmar (n > 0); ahora la pantalla siempre trae algo que
+  // mostrar (positivo y/o negativo), así que el guardarraíl pasa a ser "¿el mes que
+  // cierra tuvo algún movimiento propio?" (mesTieneMovimientos) — un mes sin uso de la
+  // app no amerita una pantalla que interrumpe.
+  if(document.getElementById('sheetCierreMes')){
     const prev = mesActualReal();
     prev.setMonth(prev.getMonth() - 1);
     const prevMk = monthKey(prev);
@@ -11402,26 +11588,9 @@ function isIOSDevice(){
     const dentroDeRegistro = inicioMk === null || prevMk >= inicioMk;
     let vistoMk = null;
     try{ vistoMk = localStorage.getItem('misfinanzas_avisoCierre'); }catch(_){}
-    if(dentroDeRegistro && vistoMk !== String(prevMk)){
-      let n = 0, total = 0;
-      state.debts.forEach(d=>{
-        const info = cuotaInfoForMonth(d, prev);
-        if(info && !cuotaPagadaDelMes(d, prev)){ n++; total += info.monto; }
-      });
-      if(n > 0){
-        const marcarVisto = ()=>{ try{ localStorage.setItem('misfinanzas_avisoCierre', String(prevMk)); }catch(_){} };
-        document.getElementById('ccbTitulo').textContent =
-          `${MESES[prev.getMonth()]} cerró con ${n === 1 ? '1 cuota' : n + ' cuotas'} sin confirmar por ${money(total)}.`;
-        ccb.hidden = false;
-        document.getElementById('ccbRevisar').onclick = ()=>{
-          marcarVisto();
-          ccb.hidden = true;
-          currentDate.setFullYear(prev.getFullYear(), prev.getMonth(), 1);
-          cTab = 'activas';
-          switchScreen('cuotas');
-        };
-        document.getElementById('ccbDismiss').onclick = ()=>{ marcarVisto(); ccb.hidden = true; };
-      }
+    if(dentroDeRegistro && vistoMk !== String(prevMk) && mesTieneMovimientos(prev, 'total')){
+      const marcarVisto = ()=>{ try{ localStorage.setItem('misfinanzas_avisoCierre', String(prevMk)); }catch(_){} };
+      abrirPantallaCierreMes(prev, marcarVisto);
     }
   }
 })();
