@@ -1604,11 +1604,33 @@ button:active{ transform:scale(0.93); }
    — no es una alerta, solo el tono ya asociado a montos de gasto en la app. */
 .insight-dow-mayor{color:var(--mv-gasto); font-weight:600;}
 
-/* CAMBIO A: el descarte individual por "x" (insight-x/insight-dismiss) se retira —
-   ahora el único control de visibilidad es el desplegable "Más insights"
-   (.insights-alertas, GRUPO 2), que reutiliza el patrón .cfg-group de Configuración.
-   Arranca siempre abierto porque el atributo `open` se escribe en cada render de
-   renderInsights(); no se guarda ningún estado de colapsado. */
+/* Tanda día 14: reactiva el descarte individual ("x") de Tanda V, pero SOLO para las
+   tarjetas del núcleo fijo (GRUPO 1) de renderInsights — frase del mes, cuotas por
+   confirmar, cuota que termina pronto, categoría bajo control y meta recién cumplida.
+   El descarte dura el resto del día (reaparece a la medianoche local si la condición
+   sigue vigente); ver insightsDescartadosHoy()/descartarInsight(). GRUPO 2
+   ("Más insights", .insights-alertas más abajo) sigue sin "x": su único control de
+   visibilidad es el desplegable, que arranca siempre abierto. La tarjeta descartable
+   lleva position:relative (clase .insight-dismiss) y reserva un hueco a la derecha
+   para que el texto no quede bajo el botón. z-index:1 basta porque .bottom-zone ya
+   tiene z-index:10 (ver Fix Tanda AA más abajo) — la "x" nunca queda por delante de
+   la barra inferior. */
+.insight-dismiss{position:relative;}
+.insight-x{
+  position:absolute; top:5px; right:5px; z-index:1;
+  width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+  background:transparent; border:0; border-radius:7px; cursor:pointer;
+  color:var(--cream-dim); font-size:15px; line-height:1; -webkit-tap-highlight-color:transparent;
+}
+.insight-x:active{transform:scale(0.9);}
+:root.hc .insight-x{color:var(--cream);}
+.insight-frase.insight-dismiss > p:first-of-type{padding-right:24px;}
+.insight-cuota-libre.insight-dismiss{padding-right:32px;}
+.insight-todo-descartado{margin-top:6px;}
+
+/* El desplegable "Más insights" (GRUPO 2) reutiliza el patrón .cfg-group de
+   Configuración. Arranca siempre abierto porque el atributo `open` se escribe en cada
+   render de renderInsights(); no se guarda ningún estado de colapsado. */
 .insights-alertas{border-top:1px solid var(--border); border-bottom:none; margin-top:2px;}
 .insights-alertas > summary{padding-top:11px;}
 
@@ -7362,18 +7384,47 @@ function patronGastoSemana(refDate, cuentaId){
   return { promFinde, promSemana, mayor, promMayor, promMenor, deltaPct };
 }
 
-/* ==================== CAMBIO A — insightsDescartados queda INERTE ====================
-   Hasta esta tanda cada tarjeta llevaba una "x" (insight-x) que la ocultaba por el
-   resto del día, guardando { fecha, ids } en state.config.insightsDescartados. Ese
-   mecanismo se retira: el único control de visibilidad ahora es el desplegable
-   "Más insights" (ver renderInsights). El campo insightsDescartados NO se migra
-   ni se borra — un respaldo viejo que lo traiga simplemente deja de leerse y de
-   escribirse (queda como dato muerto). fechaHoyLocalISO() se conserva porque
-   loadState/migrateBackup todavía la usan para sanear ese campo en respaldos
-   importados (ver esas dos funciones). */
+/* ==================== Tanda día 14 — insightsDescartados REACTIVADO ====================
+   Vuelve a leerse/escribirse, pero acotado al núcleo fijo (GRUPO 1) de renderInsights
+   — GRUPO 2 ("Más insights") sigue sin descarte individual. Cada tarjeta descartable
+   lleva una "x" (insight-x). Al tocarla, se oculta por lo que queda del día y
+   reaparece a la MEDIANOCHE LOCAL (no 24 h después) si su condición sigue vigente —
+   no es un descarte permanente.
+
+   Dónde se guarda: state.config.insightsDescartados, junto al resto de preferencias
+   de UI. Estructura: { fecha: "YYYY-MM-DD", ids: ["frase-mes-<mk>", ...] }. Es un
+   bucket de UN solo día: al guardar se reescribe entero con la fecha de hoy, así
+   nunca acumula días anteriores. Al leer, solo cuenta si `fecha` es la de hoy;
+   cualquier bucket de otro día se ignora (y se purga en loadState/migrateBackup, que
+   ya saneaban este campo mientras estuvo inerte — ver esas dos funciones).
+
+   Los ids son ESTABLES y no dependen del texto ni del monto (un cambio de cifra no
+   "revive" el insight el mismo día). Los que dependen del mes que se esté NAVEGANDO
+   en Resumen (currentDate) además llevan su monthKey (<mk>) para que descartar la
+   instancia de un mes no oculte la de otro mes distinto visto el mismo día:
+       frase-mes-<mk>                     → frase resumen del mes (currentDate)
+       cuotas-por-confirmar-<mk>          → cuotas sin confirmar del mes (currentDate)
+       categoria-bajo-control-<mk>-<cat>  → categoría que bajó ≥25% (currentDate)
+   Los que NO dependen de currentDate (ya anclados a mesActualReal() u HOY) no llevan
+   mk propio — ya son estables sin él:
+       cuota-libre-<mk>      → aviso de cuota terminada (mk = mes en que termina)
+       meta-cumplida-<id>    → meta recién cumplida (id estable de la meta)
+   El semáforo NO se descarta: es el mínimo que queda si el usuario cierra todo. */
 function fechaHoyLocalISO(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function insightsDescartadosHoy(){
+  const b = state.config && state.config.insightsDescartados;
+  if(!b || typeof b !== 'object' || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)) return new Set();
+  return new Set(b.ids);
+}
+function descartarInsight(id){
+  const cur = insightsDescartadosHoy();   // ya filtrado a hoy: descarta cualquier resto de días previos
+  cur.add(id);
+  state.config.insightsDescartados = { fecha: fechaHoyLocalISO(), ids: [...cur] };
+  saveState();
+  renderInsights();
 }
 
 function renderInsights(){
@@ -7409,6 +7460,12 @@ function renderInsights(){
   // Tanda S · pto 3: el ayudante local "signedMoney" que estaba acá duplicaba money()
   // (mismo resultado: money() ya pone el signo antes del "$"). Se unifica — se llama
   // money() directo en todo este bloque.
+  // Tanda día 14: mkActual identifica el mes que se está NAVEGANDO (currentDate) — se
+  // agrega a los ids de descarte que dependen de él (ver comentario junto a
+  // insightsDescartadosHoy). xIns es el botón "x" que llevan las tarjetas del núcleo
+  // fijo (GRUPO 1) descartables.
+  const mkActual = monthKey(currentDate);
+  const xIns = `<button type="button" class="insight-x" aria-label="Descartar por hoy" title="Descartar por hoy">${icon('x')}</button>`;
 
   // ---- a) Semáforo de salud financiera ----
   // Tanda CAMBIO 2: el umbral usa el ingreso PROYECTADO (proy.ingresosProy), no solo el
@@ -7451,7 +7508,8 @@ function renderInsights(){
   } else {
     frase = 'Vas bien encaminado este mes.';
   }
-  const fraseHtml = `<div class="insight-frase${fraseCTA ? ' insight-frase-cta' : ''}"><p>${frase}</p>${
+  const fraseId = 'frase-mes-' + mkActual;
+  const fraseHtml = `<div class="insight-frase insight-dismiss${fraseCTA ? ' insight-frase-cta' : ''}" data-insight-id="${fraseId}">${xIns}<p>${frase}</p>${
     fraseCTA ? `<button type="button" class="insight-frase-btn" id="insightRegistrarIngresoBtn">Registrar ingreso</button>` : ''
   }</div>`;
 
@@ -7462,13 +7520,16 @@ function renderInsights(){
   // problema real (ingreso sin registrar); esto es una buena noticia, no urgente.
   // Un id estable POR MES de término (cuota-libre-<mk>): no depende del monto ni de
   // cuántas cuotas terminan, así un recálculo de la cifra no lo "revive" el mismo día.
+  // deudasQueTerminanPronto() está anclado a mesActualReal() (no a currentDate) — el
+  // id no necesita mkActual: es el mismo aviso sin importar qué mes se esté navegando.
   const cuotaLibreCards = deudasQueTerminanPronto().map(g=>{
     const mesNom = MESES[g.mk % 12].toLowerCase();
-    return `<div class="insight-cuota-libre">${
+    const id = 'cuota-libre-' + g.mk;
+    return { id, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="${id}">${xIns}${
       g.count > 1
         ? `En ${mesNom} terminan ${g.count} cuotas y se te liberan ${money(g.total)} al mes.`
         : `En ${mesNom} se te liberan ${money(g.total)} al mes.`
-    }</div>`;
+    }</div>` };
   });
 
   // ---- b3) Tanda P3: categoría bajo control + meta recién cumplida ----
@@ -7476,12 +7537,18 @@ function renderInsights(){
   // noticia determinística, recalculada en cada render, no compite con las alertas
   // (esas viven en el bloque "Más insights", colapsable). Máximo 2 categorías para no
   // saturar el núcleo siempre visible del panel.
-  const bajoControlCards = categoriasBajoControl(data, prevData, prevTiene).slice(0, 2).map(b=>
-    `<div class="insight-cuota-libre">Gastaste ${money(b.ahorro)} menos en ${escHtml(b.cat)} que el mes pasado.</div>`
-  );
-  const metaCumplidaCards = metasRecienCumplidas().map(g=>
-    `<div class="insight-cuota-libre">Completaste tu meta «${escHtml(g.name)}»: ahorraste ${money(g.montoObjetivo)}.</div>`
-  );
+  // Id por categoría + mkActual (categoriasBajoControl depende de currentDate vía
+  // data/prevData): así descartar "comida" en septiembre no oculta "comida" en
+  // octubre. metasRecienCumplidas() en cambio está anclado a HOY (no a currentDate,
+  // ver su comentario), así que el id de meta no necesita mk propio.
+  const bajoControlCards = categoriasBajoControl(data, prevData, prevTiene).slice(0, 2).map(b=>{
+    const id = 'categoria-bajo-control-' + mkActual + '-' + b.cat;
+    return { id, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="${escAttr(id)}">${xIns}Gastaste ${money(b.ahorro)} menos en ${escHtml(b.cat)} que el mes pasado.</div>` };
+  });
+  const metaCumplidaCards = metasRecienCumplidas().map(g=>{
+    const id = 'meta-cumplida-' + g.id;
+    return { id, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="${id}">${xIns}Completaste tu meta «${escHtml(g.name)}»: ahorraste ${money(g.montoObjetivo)}.</div>` };
+  });
 
   // ---- c) Comparación mes a mes ----
   const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
@@ -7625,7 +7692,10 @@ function renderInsights(){
   // montoCuotasSinConfirmar arriba (cerradoActual ? 0 : ...): no tiene sentido
   // "confirmar" retroactivamente algo que la app ya no reincorpora al Disponible.
   const cuotasPorConfirmar = cerradoActual ? { count:0, total:0 } : cuotasSinConfirmarDelMes(currentDate, cta);
-  const cuotasPorConfirmarHtml = cuotasPorConfirmar.count > 0 ? `<div class="insight-frase insight-frase-cta"><p>Este mes tienes ${cuotasPorConfirmar.count===1 ? '1 cuota por confirmar' : cuotasPorConfirmar.count+' cuotas por confirmar'}, por ${money(cuotasPorConfirmar.total)}.</p><button type="button" class="insight-frase-btn" id="insightIrCuotasBtn">Ir a Cuotas</button></div>` : '';
+  // Id con mkActual (depende de currentDate, no de mesActualReal): descartar "cuotas
+  // por confirmar" de septiembre no debe ocultar la de octubre si se navega el mismo día.
+  const cuotasPorConfirmarId = 'cuotas-por-confirmar-' + mkActual;
+  const cuotasPorConfirmarHtml = cuotasPorConfirmar.count > 0 ? `<div class="insight-frase insight-frase-cta insight-dismiss" data-insight-id="${cuotasPorConfirmarId}">${xIns}<p>Este mes tienes ${cuotasPorConfirmar.count===1 ? '1 cuota por confirmar' : cuotasPorConfirmar.count+' cuotas por confirmar'}, por ${money(cuotasPorConfirmar.total)}.</p><button type="button" class="insight-frase-btn" id="insightIrCuotasBtn">Ir a Cuotas</button></div>` : '';
 
   // ---- g) Insight NUEVO: patrón de gasto por día de la semana ----
   // Exploratorio y sin relación con el resto (no depende de cuotas/proyección) — va al
@@ -7639,13 +7709,28 @@ function renderInsights(){
   })() : '';
 
   // ---- CAMBIO A: GRUPO 1 (núcleo fijo) + GRUPO 2 (desplegable "Más insights") ----
-  // Núcleo, siempre visible y sin botón de ocultar: semáforo, frase del mes, "cuotas
-  // por confirmar" y "cuotas que terminan pronto" (en ese orden — este último se movió
-  // acá en una tanda posterior, ver deudasQueTerminanPronto()). El resto de insights de
+  // Núcleo, siempre visible salvo descarte individual del día (Tanda día 14, ver
+  // insightsDescartadosHoy): semáforo (nunca se descarta), frase del mes, "cuotas por
+  // confirmar" y "cuotas que terminan pronto" (en ese orden — este último se movió acá
+  // en una tanda posterior, ver deudasQueTerminanPronto()). El resto de insights de
   // antes va dentro de un <details class="cfg-group"> — mismo patrón que Configuración —
   // que se reconstruye con `open` en cada render: no hay estado de colapsado que
-  // recordar, siempre abre expandido al entrar a Resumen o al cambiar de mes.
-  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml + cuotaLibreCards.join('') + bajoControlCards.join('') + metaCumplidaCards.join('');
+  // recordar, siempre abre expandido al entrar a Resumen o al cambiar de mes. GRUPO 2
+  // no tiene descarte individual — sigue exactamente como antes de esta tanda.
+  const descHoy = insightsDescartadosHoy();
+  const grupo1Items = [
+    { id: fraseId, html: fraseHtml },
+    ...(cuotasPorConfirmarHtml ? [{ id: cuotasPorConfirmarId, html: cuotasPorConfirmarHtml }] : []),
+    ...cuotaLibreCards,
+    ...bajoControlCards,
+    ...metaCumplidaCards
+  ];
+  const grupo1Visibles = grupo1Items.filter(it=> !descHoy.has(it.id));
+  // Si se descartó todo el núcleo, no queda un contenedor vacío con el separador de
+  // GRUPO 2 colgando — mismo mensaje breve que usaba Tanda V.
+  const grupo1Html = grupo1Visibles.length
+    ? grupo1Visibles.map(it=> it.html).join('')
+    : `<p class="insight-nodata insight-todo-descartado">Descartaste los insights de hoy. Vuelven mañana.</p>`;
   const grupo2Items = [
     cmpHtml,
     varHtml,
@@ -7672,6 +7757,14 @@ function renderInsights(){
 
   const irCuotasBtn = box.querySelector('#insightIrCuotasBtn');
   if(irCuotasBtn) irCuotasBtn.addEventListener('click', ()=>{ cTab = 'activas'; switchScreen('cuotas'); });
+
+  // Tanda día 14: "x" de descarte — solo existe en tarjetas de GRUPO 1 (núcleo fijo).
+  box.querySelectorAll('.insight-x').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const card = btn.closest('[data-insight-id]');
+      if(card && card.dataset.insightId) descartarInsight(card.dataset.insightId);
+    });
+  });
 
   // Semáforo: un único pulso cuando el estado pasa a rojo (entrar, no en cada render).
   if(!prefersReducedMotion() && semEstado === 'sem-rojo' && lastSemEstado && lastSemEstado !== 'sem-rojo'){
