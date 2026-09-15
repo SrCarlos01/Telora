@@ -2917,6 +2917,19 @@ function loadState(){
       if(!g.aporteAutomatico) g.aporteAutomatico = { activo:false, monto:0, diaDelMes:1, pausado:false, razonPausa:null };
       if(!g.aporteAutomatico.tipo) g.aporteAutomatico.tipo = 'monto';           // 'monto' | 'porcentaje'
       if(typeof g.aporteAutomatico.valor !== 'number') g.aporteAutomatico.valor = 0;  // % cuando tipo='porcentaje'
+      // Tanda P3: fecha en que la meta cruzó 0->100% por primera vez (null si aún no
+      // se ha observado esa transición EN VIVO). Un estado de antes de esta tanda no
+      // trae el campo — se normaliza a null y NUNCA se estampa con la fecha de hoy acá,
+      // aunque la meta ya esté cumplida: no se sabe realmente cuándo pasó, y mostrar el
+      // aviso de "recién cumplida" en ese caso sería una buena noticia falsa.
+      if(g.fechaCumplida === undefined) g.fechaCumplida = null;
+      // Tanda P3 (rediseño): _ultimoDoneVisto (línea de base para chequearMetaCompletada)
+      // NO se siembra acá a propósito: calcularla requiere ahorradoDeMeta(), que para un
+      // aporte automático tipo % necesita disponibleBaseDelMes() -> MONEY_CACHE/state, y
+      // ninguno de los dos existe todavía en este punto de loadState() (TDZ: `let state =
+      // loadState()` todavía no terminó de ejecutar, `let MONEY_CACHE` se declara más
+      // abajo en el archivo). Queda undefined acá; sembrarUltimoDoneVistoSiFalta() la
+      // completa apenas `state` es real (ver el IIFE junto a renderAll()).
     });
     // Tanda V · pto 1: insightsDescartados es un bucket de UN día (fecha + ids). Si lo
     // guardado no es de hoy (o está mal formado), se limpia al cargar — así nunca crece
@@ -3978,6 +3991,66 @@ function aporteAutomaticoAcumulado(goal, hastaDate){
     if(va) total += va.monto;
   }
   return total;
+}
+// Tanda P3 (rediseño): fórmula única de "cuánto lleva ahorrado" una meta — aportes
+// manuales guardados + lo devengado por el aporte automático (que NUNCA se guarda en
+// g.aportes; se recalcula solo, ver aporteAutomaticoAcumulado arriba). Antes estaba
+// duplicada en 6 lugares del archivo; todos deben llamar a esta función.
+function ahorradoDeMeta(g, refDate){
+  return (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, refDate);
+}
+// "Completa" = MISMO criterio que el badge "META CUMPLIDA" de la tarjeta de meta
+// (renderGoals, pct/done más abajo): pct = Math.min(100, Math.round(ahorrado/objetivo*100)),
+// done = pct >= 100 — no una comparación directa ahorrado >= objetivo. Con el redondeo,
+// el badge ya se enciende desde ahorrado >= objetivo*0.995 (p.ej. $99.600 de $100.000
+// redondea a 100%); usar acá un criterio más estricto haría que la tarjeta dijera "META
+// CUMPLIDA" sin que fechaCumplida se estampe nunca — dos fuentes de verdad divergentes
+// para la misma palabra. Una meta indefinida (sin monto objetivo) nunca es "completa" —
+// no tiene con qué compararse.
+function metaEstaCompleta(g){
+  if(g.indefinida || !(g.montoObjetivo > 0)) return false;
+  const pct = Math.min(100, Math.round(ahorradoDeMeta(g, mesActualReal()) / g.montoObjetivo * 100));
+  return pct >= 100;
+}
+// Siembra g._ultimoDoneVisto con el estado ACTUAL de cada meta que todavía no lo tiene
+// (undefined) — SIN pasar por chequearMetaCompletada ni tocar fechaCumplida. Es la
+// diferencia entre "sellar la línea de base" y "detectar una transición": una meta que ya
+// viene cumplida de antes (de un estado guardado por una versión anterior de esta tanda,
+// o de un respaldo restaurado) se sembraría en `true` acá y jamás dispara el aviso de
+// "recién cumplida" — evita el falso positivo retroactivo. Se llama una vez al cargar la
+// app (ver el IIFE cerca de renderAll()) y una vez tras restaurar un respaldo, nunca desde
+// loadState()/migrateBackup(): ahí `state`/MONEY_CACHE todavía no existen (TDZ) y
+// disponibleBaseDelMes() (aporte automático tipo %) los necesita.
+function sembrarUltimoDoneVistoSiFalta(){
+  (state.goals||[]).forEach(g=>{
+    if(g._ultimoDoneVisto === undefined) g._ultimoDoneVisto = metaEstaCompleta(g);
+  });
+}
+// Única función que decide si una meta "se acaba de completar" y estampa fechaCumplida.
+// ahorrado puede cruzar el 100% sin ningún evento discreto (aporte automático + paso del
+// calendario) o con uno puntual (aporte manual, bajar el objetivo a mano) — en vez de
+// repetir el chequeo en cada sitio, todos llaman a esta función después del cambio.
+// NUNCA se llama desde renderAll() ni ninguna función de render: renderAll() reconstruye
+// la pantalla completa en cada cambio de estado, y este chequeo casi siempre no tiene nada
+// nuevo que detectar (el Estudio Exhaustivo T7 ya advirtió no sumarle trabajo sin medir).
+function chequearMetaCompletada(g){
+  const done = metaEstaCompleta(g);
+  let changed = false;
+  if(done && !g._ultimoDoneVisto && !g.fechaCumplida){
+    // Fecha LOCAL, no toISOString() (UTC): metasRecienCumplidas() mide la ventana de 30
+    // días contra fechaHoyLocalISO() — mezclarlas desalinea la fecha en zonas GMT- durante
+    // la noche (p.ej. Chile) y la tarjeta de "recién cumplida" no aparecería el mismo día.
+    g.fechaCumplida = fechaHoyLocalISO();
+    changed = true;
+  }
+  if(g._ultimoDoneVisto !== done){ g._ultimoDoneVisto = done; changed = true; }
+  if(changed) saveState();
+}
+// Barrido completo — el único camino que detecta el caso silencioso del aporte
+// automático (sin aportar ni editar nada, solo por el paso del calendario). Se conecta
+// más abajo al patrón de "una vez por mes" que ya usa el aviso de cierre de cuotas.
+function chequearTodasLasMetasCompletadas(){
+  (state.goals||[]).forEach(chequearMetaCompletada);
 }
 
 /* ==================== PAUSA DE APORTES AUTOMÁTICOS POR MES (Día 11) ==================== */
@@ -5362,6 +5435,10 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     g.fechaLimite = indefinida ? "" : (fechaLimite || "");
     g.aporteAutomatico = construirAA(g.aporteAutomatico);
     if(metaCuentaId) g.cuentaId = metaCuentaId;   // Tanda L3: mueve la meta entre vistas
+    // Tanda P3 (rediseño): bajar el objetivo puede completar la meta sin ningún aporte
+    // nuevo — el único otro camino (junto con el aporte automático) que no pasa por
+    // btnAportarConfirmar. chequearMetaCompletada() decide si corresponde estampar.
+    chequearMetaCompletada(g);
     haptic(HAPTIC_OK);
     saveState(); closeSheet('sheetMeta'); renderAll();
     return;
@@ -5378,6 +5455,8 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     montoObjetivo: indefinida ? 0 : montoObjetivo,
     fechaLimite: indefinida ? "" : (fechaLimite || ""),
     fechaCreacion: new Date().toISOString().slice(0,10),
+    fechaCumplida: null,   // Tanda P3: se estampa la primera vez que se observa 0->100% en vivo
+    _ultimoDoneVisto: false,   // Tanda P3 (rediseño): línea de base para chequearMetaCompletada()
     aportes: [],
     aporteAutomatico: construirAA(null),
     cuentaId: metaCuentaId   // Tanda L3
@@ -5600,7 +5679,7 @@ function renderMetas(){
     if(chartView.metas === 'barra'){
       const definidas = visibles.filter(g=> !g.indefinida);
       const data = definidas.map(g=>{
-        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
+        const ahorrado = ahorradoDeMeta(g, mesActualReal());
         const pct = g.montoObjetivo > 0 ? Math.min(100, Math.round(ahorrado / g.montoObjetivo * 100)) : 0;
         return { label: g.name, value: pct };
       });
@@ -5614,7 +5693,7 @@ function renderMetas(){
     } else {
       // 'torta': proporción del ahorrado entre TODAS las metas activas (incluye indefinidas).
       const data = visibles.map(g=>{
-        const ahorrado = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
+        const ahorrado = ahorradoDeMeta(g, mesActualReal());
         return { label: g.name, value: ahorrado };
       });
       renderPieChart(chartBox, data, { empty: 'Aún no hay ahorro registrado para graficar.' });
@@ -5630,8 +5709,7 @@ function renderMetas(){
     const aporteMensualTxt = esPctAuto ? `${aa.valor || 0}% del Disponible` : money(aa.monto || 0);
     // "Ahorrado" = aportes manuales reales + lo ya devengado por el aporte automático
     // (mismo dinero que se descontó del Disponible mes a mes). Ver nota en el reporte.
-    const ahorradoManual = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0);
-    const ahorrado = ahorradoManual + aporteAutomaticoAcumulado(g, mesActualReal());
+    const ahorrado = ahorradoDeMeta(g, mesActualReal());
     // Aporte mensual pactado, siempre visible (igual que el monto por cuota en debt-card).
     const aporteLine = `<span>Aporte mensual <b>${aporteMensualTxt}</b></span>`;
     const pausada = aa.activo && pausadasAuto.has(g.id);
@@ -5859,11 +5937,15 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
     state.config.avisosAporteExceso = false;   // preferencia: no volver a advertir excesos
   }
   if(!Array.isArray(g.aportes)) g.aportes = [];
-  // ¿Este aporte completa la meta por primera vez? -> vibración de celebración.
+  // ¿Este aporte completa la meta por primera vez? -> vibración/confeti de celebración.
+  // Es solo la señal para la animación puntual; el bookkeeping de fechaCumplida lo decide
+  // chequearMetaCompletada() más abajo — la ÚNICA función que la estampa (Tanda P3
+  // rediseño: ahorrado puede completarse también sin ningún aporte, ver aporteAutomaticoAcumulado).
   const objetivo = g.montoObjetivo || 0;
-  const ahorradoAntes = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
+  const ahorradoAntes = ahorradoDeMeta(g, mesActualReal());
   g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
   const completaMeta = !g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo;
+  chequearMetaCompletada(g);
   if(completaMeta) haptic(HAPTIC_GOAL);
   else haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetAportar');
@@ -5980,7 +6062,7 @@ function calcInteres(){
   }
   const aa = g.aporteAutomatico || {};
   const i = (tasaAnual / 100) / 12;                 // tasa mensual
-  const inicial = (g.aportes||[]).reduce((s,a)=> s + a.monto, 0) + aporteAutomaticoAcumulado(g, mesActualReal());
+  const inicial = ahorradoDeMeta(g, mesActualReal());
   let aporteMensual, notaPct = '';
   if(aa.activo && aa.tipo === 'porcentaje'){
     // El % varía mes a mes según el Disponible: no se puede proyectar un monto fijo.
@@ -7004,6 +7086,23 @@ function categoriasEnAlerta(data, prevData, prevTiene){
   return res.sort((a,b)=> b.val - a.val);
 }
 
+// Tanda P3 · pto 4.1: "categoría bajo control" — el caso contrario de categoriasEnAlerta
+// c1: en vez de "subió +25% vs. mes anterior", categorías que BAJARON más de 25% vs. el
+// mes anterior. Mismo umbral (0.25), invertido — no uno nuevo. Requiere mes anterior
+// comparable (prevTiene), igual que c1: sin "antes" no hay variación que calcular.
+// Solo considera categorías que SÍ tuvieron gasto el mes anterior (pv > 0) — igual que
+// c1 (pv > 0 evita división por cero y "categoría nueva" no cuenta como una que bajó).
+function categoriasBajoControl(data, prevData, prevTiene){
+  if(!prevTiene) return [];
+  const res = [];
+  Object.entries(prevData.catTotals).forEach(([cat, pv])=>{
+    if(pv <= 0) return;
+    const val = data.catTotals[cat] || 0;
+    if((pv - val) / pv > 0.25) res.push({ cat, val, pv, ahorro: pv - val });
+  });
+  return res.sort((a,b)=> b.ahorro - a.ahorro);   // mejora más grande (en $) primero
+}
+
 // Tanda S · pto 2: deudas cuya ÚLTIMA cuota cae en el mes en curso real o el
 // siguiente. Anclado a mesActualReal() (no a currentDate/el mes que se está
 // navegando) — es una noticia sobre lo que se libera pronto, no algo que dependa de
@@ -7022,6 +7121,22 @@ function deudasQueTerminanPronto(){
     g.count += 1;
   });
   return Array.from(porMes.values()).sort((a,b)=> a.mk - b.mk);
+}
+
+// Tanda P3 · pto 4.2: metas cuya fechaCumplida cae dentro de la ventana reciente (30
+// días) desde HOY (fecha real, no el mes que se esté navegando en Resumen — mismo
+// anclaje que deudasQueTerminanPronto()). Se recalcula en cada render: si pasan los 30
+// días, o si la meta dejó de estar cumplida de verdad (p.ej. se borró el aporte que la
+// completó), deja de mostrarse sola — no hace falta un mecanismo de descarte aparte.
+function metasRecienCumplidas(){
+  const VENTANA_DIAS = 30;
+  const hoyMs = new Date(fechaHoyLocalISO()+"T00:00:00").getTime();
+  return state.goals.filter(g=>{
+    if(!g.fechaCumplida) return false;
+    const dias = Math.round((hoyMs - new Date(g.fechaCumplida+"T00:00:00").getTime()) / 86400000);
+    if(dias < 0 || dias > VENTANA_DIAS) return false;
+    return metaEstaCompleta(g);   // sigue cumplida de verdad hoy (no solo cuando se estampó)
+  });
 }
 
 // Insight "Patrón de gasto por día de la semana": compara el promedio diario de gasto
@@ -7177,6 +7292,18 @@ function renderInsights(){
         : `En ${mesNom} se te liberan ${money(g.total)} al mes.`
     }</div>`;
   });
+
+  // ---- b3) Tanda P3: categoría bajo control + meta recién cumplida ----
+  // Mismo patrón visual/de ubicación que el aviso de cuota terminada (b2): buena
+  // noticia determinística, recalculada en cada render, no compite con las alertas
+  // (esas viven en el bloque "Más insights", colapsable). Máximo 2 categorías para no
+  // saturar el núcleo siempre visible del panel.
+  const bajoControlCards = categoriasBajoControl(data, prevData, prevTiene).slice(0, 2).map(b=>
+    `<div class="insight-cuota-libre">Gastaste ${money(b.ahorro)} menos en ${escHtml(b.cat)} que el mes pasado.</div>`
+  );
+  const metaCumplidaCards = metasRecienCumplidas().map(g=>
+    `<div class="insight-cuota-libre">Completaste tu meta «${escHtml(g.name)}»: ahorraste ${money(g.montoObjetivo)}.</div>`
+  );
 
   // ---- c) Comparación mes a mes ----
   const cmpRow = (label, curr, prev, upIsGood, mvClass)=>{
@@ -7340,7 +7467,7 @@ function renderInsights(){
   // antes va dentro de un <details class="cfg-group"> — mismo patrón que Configuración —
   // que se reconstruye con `open` en cada render: no hay estado de colapsado que
   // recordar, siempre abre expandido al entrar a Resumen o al cambiar de mes.
-  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml + cuotaLibreCards.join('');
+  const grupo1Html = fraseHtml + cuotasPorConfirmarHtml + cuotaLibreCards.join('') + bajoControlCards.join('') + metaCumplidaCards.join('');
   const grupo2Items = [
     cmpHtml,
     varHtml,
@@ -9554,6 +9681,10 @@ function validGoalShape(g){
      || !optNum(g.montoObjetivo) || !optStr(g.fechaLimite) || !optStr(g.fechaCreacion)
      || !optStr(g.cuentaId)                                                    // Tanda L1: cuenta (opcional en respaldos viejos)
      || !optPlainObj(g.aporteAutomatico)) return false;
+  // Tanda P3: fechaCumplida acepta ausente, null o fecha ISO — nunca otro tipo.
+  if(g.fechaCumplida !== undefined && g.fechaCumplida !== null && !isIsoDate(g.fechaCumplida)) return false;
+  // Tanda P3 (rediseño): _ultimoDoneVisto acepta ausente o booleano.
+  if(!optBool(g._ultimoDoneVisto)) return false;
   if(g.aportes !== undefined && (!Array.isArray(g.aportes) || !g.aportes.every(validAporteShape))) return false;
   return true;
 }
@@ -9714,6 +9845,10 @@ function migrateBackup(parsed){
       montoObjetivo: isNum(g.montoObjetivo) ? g.montoObjetivo : 0,
       fechaLimite: isStr(g.fechaLimite) ? g.fechaLimite : '',
       fechaCreacion: isStr(g.fechaCreacion) ? g.fechaCreacion : new Date().toISOString().slice(0,10),
+      // Tanda P3: se conserva tal cual si es una fecha ISO válida; cualquier otra cosa
+      // (ausente, basura) entra como null — nunca se estampa con la fecha de HOY acá,
+      // que sería inventar cuándo se cumplió una meta que ya viene cumplida en el archivo.
+      fechaCumplida: isIsoDate(g.fechaCumplida) ? g.fechaCumplida : null,
       aportes: arrOf(g.aportes).map(a=>({
         id: isStr(a.id) ? a.id : gen(),
         fecha: isStr(a.fecha) ? a.fecha : new Date().toISOString().slice(0,10),
@@ -9733,6 +9868,14 @@ function migrateBackup(parsed){
     if(aa.fechaActivacion !== undefined) o.aporteAutomatico.fechaActivacion = aa.fechaActivacion;
     if(g.goalEndMonthKey !== undefined) o.goalEndMonthKey = g.goalEndMonthKey;
     if(isStr(g.cuentaId)) o.cuentaId = g.cuentaId;   // Tanda L1: se conserva; migrarEstadoCuentas lo valida/asigna
+    // Tanda P3 (rediseño): se conserva tal cual si el archivo trae un booleano real (p.ej.
+    // un respaldo exportado por esta misma app). Si no, se deja SIN el campo — nunca se
+    // calcula acá "a ojo": requiere ahorradoDeMeta()/disponibleBaseDelMes(), que leen el
+    // `state` GLOBAL (expenses/incomes actuales, no los de este respaldo, que todavía no
+    // se han asignado a `state`) — calcularlo acá daría un resultado de la cuenta
+    // equivocada. Queda para sembrarUltimoDoneVistoSiFalta(), llamada justo después de
+    // `state = pendingRestoreData` (btnConfirmRestore), cuando `state` ya es el correcto.
+    if(typeof g._ultimoDoneVisto === 'boolean') o._ultimoDoneVisto = g._ultimoDoneVisto;
     return o;
   });
 
@@ -9831,6 +9974,14 @@ document.getElementById('btnConfirmRestore').onclick = ()=>{
     state = pendingRestoreData;   // ya viene migrado y normalizado por migrateBackup()
     aplicarPaleta((state.config && state.config.paleta) || 'cafe');   // aplica la paleta del respaldo
     aplicarFontScale((state.config && state.config.fontScale) || '1'); // aplica el tamaño de letra del respaldo
+    // Tanda P3 (rediseño): sella _ultimoDoneVisto para toda meta que llegó del respaldo
+    // sin el campo, ANTES de guardar. `state` ya es el del respaldo (línea de arriba), así
+    // que ahorradoDeMeta()/disponibleBaseDelMes() calculan contra los datos correctos. Sin
+    // este paso, una meta ya cumplida en el respaldo pero sin el campo quedaría con
+    // _ultimoDoneVisto undefined -> la primera vez que el usuario la toque (aportar/editar,
+    // incluso sin recargar la página) chequearMetaCompletada() la tomaría por "recién
+    // cumplida" y estamparía una fecha falsa.
+    sembrarUltimoDoneVistoSiFalta();
     saveState();
     pendingRestoreData = null;
   }
@@ -11036,6 +11187,32 @@ function renderAll(){
   if(currentScreen==='metas') renderMetas();
   checkMigracionCuotasMetasLegacy();   // Tanda L1: aviso de deudas/metas legacy sin cuenta (≥2 cuentas)
 }
+// Tanda P3 (rediseño): barrido de "meta completada" — cubre el único camino sin evento
+// discreto (aporte automático que cruza 0->100% solo por el paso del calendario, ver
+// ahorradoDeMeta/aporteAutomaticoAcumulado). Mismo patrón que el aviso de cierre de cuotas
+// (más abajo, initDataShieldBanners): localStorage con el último monthKey chequeado, para
+// correr el barrido una sola vez por mes. Va ANTES del primer renderAll() (verificado con
+// evidencia: con el orden invertido, un aporte automático que completa una meta silenciosa
+// entre una carga y otra quedaba con fechaCumplida ya estampado en memoria pero el primer
+// pintado de Resumen —hecho antes del barrido— no mostraba la card hasta la siguiente
+// interacción del usuario) y NUNCA dentro de renderAll() ni de ninguna función de render:
+// esa función reconstruye la pantalla completa en cada cambio de estado (Estudio Exhaustivo
+// T7), y este chequeo casi siempre no tiene nada nuevo que detectar. Puede ir acá (y no en
+// loadState(), que corre antes de que existan — TDZ) porque `state` y `let MONEY_CACHE`
+// (más arriba en el archivo) ya se ejecutaron para cuando el script llega a esta línea.
+(function chequearMetasCompletadasAlAbrir(){
+  // Siembra ANTES del barrido: una meta que nunca tuvo _ultimoDoneVisto se sella con su
+  // estado ACTUAL (no con `false` a ciegas) — así el barrido de abajo nunca confunde "ya
+  // estaba cumplida antes de esta tanda" con "se acaba de cumplir ahora".
+  sembrarUltimoDoneVistoSiFalta();
+  const mkHoy = monthKey(mesActualReal());
+  let ultimoMk = null;
+  try{ ultimoMk = localStorage.getItem('misfinanzas_metasCheckMk'); }catch(_){}
+  if(ultimoMk !== String(mkHoy)){
+    chequearTodasLasMetasCompletadas();
+    try{ localStorage.setItem('misfinanzas_metasCheckMk', String(mkHoy)); }catch(_){}
+  }
+})();
 renderAll();
 
 /* ====================================================================================
@@ -11249,6 +11426,7 @@ function isIOSDevice(){
     }
   }
 })();
+
 
 /* ---- pto 6: Service Worker (precache · HTML network-first · assets cache-first) ----
    El aviso "Versión nueva disponible" se apoya en que sw.js cambia byte a byte en
