@@ -833,6 +833,9 @@ button{font-family:inherit;}
   margin:16px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--border);
 }
 .hist-day-sep:first-child{margin-top:2px;}
+/* Tanda día 14 · pto 3: encabezado del día real de hoy (fechaHoyLocalISO(), no
+   currentDate) resaltado — negrita + más contraste que el resto de los separadores. */
+.hist-day-sep-hoy{color:var(--cream); font-weight:700; border-bottom-color:var(--gold);}
 
 /* ---------- HISTORIAL "Todo": saldo acumulado por fila ---------- */
 /* columna derecha (monto + saldo). Ancho acotado para no ahogar el texto de la izquierda. */
@@ -1434,7 +1437,7 @@ button:active{ transform:scale(0.93); }
 :root.hc .add-inline input, :root.hc .config-item .cfg-icon-btn, :root.hc .btn-ghost,
 :root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button,
 :root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
-:root.hc .hist-cat-chip, :root.hc .hist-check input, :root.hc .racha-registro{ border-width:2px; }
+:root.hc .hist-cat-chip, :root.hc .hist-check input, :root.hc .racha-badge{ border-width:2px; }
 :root.hc .li-muted{ font-style:normal; color:var(--cream); }
 :root.hc .chart-note, :root.hc .li-saldo, :root.hc .debt-manual-note,
 :root.hc .ahorrado-nota, :root.hc .int-disclaimer, :root.hc .li-sub, :root.hc .debt-foot,
@@ -1627,6 +1630,17 @@ button:active{ transform:scale(0.93); }
 .insight-frase.insight-dismiss > p:first-of-type{padding-right:24px;}
 .insight-cuota-libre.insight-dismiss{padding-right:32px;}
 .insight-todo-descartado{margin-top:6px;}
+/* Tanda día 14 · pto 2: enlace para restaurar insights del núcleo descartados hoy —
+   se usa tanto para el descarte parcial (junto a las tarjetas visibles) como para el
+   total (junto al mensaje "vuelven mañana"). */
+.insight-restore-link{
+  display:inline-flex; align-items:center; gap:4px; margin:2px 0 12px;
+  background:transparent; border:0; padding:0; cursor:pointer;
+  font-family:inherit; font-size:12px; font-weight:600; color:var(--gold-dim);
+  text-decoration:underline; text-underline-offset:2px;
+}
+.insight-restore-link:active{ transform:scale(0.97); }
+:root.hc .insight-restore-link{color:var(--cream);}
 
 /* El desplegable "Más insights" (GRUPO 2) reutiliza el patrón .cfg-group de
    Configuración. Arranca siempre abierto porque el atributo `open` se escribe en cada
@@ -1653,14 +1667,20 @@ button:active{ transform:scale(0.93); }
 :root.hc .goal-racha .gr-count{color:var(--cream);}
 
 /* ---------- RESUMEN: racha de registro diario (Tanda F-C5) ---------- */
-.racha-registro-wrap{margin:0 0 18px;}
-.racha-registro{
-  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
-  padding:12px 14px; font-size:13px; color:var(--cream);
+/* Tanda día 14 · pto 1: la fila combina la insignia de racha (izquierda) con el
+   selector segmentado de vista (derecha); si no hay nada que mostrar en ninguno de
+   los dos, la fila colapsa sola porque ambos hijos quedan vacíos. */
+.resumen-toprow{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 8px;}
+.racha-registro-wrap{flex:0 1 auto; min-width:0;}
+.racha-badge{
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+  padding:5px 10px; font-size:12.5px; font-weight:700; color:var(--gold); line-height:1.2;
+  white-space:nowrap;
 }
-.racha-registro .rr-count{font-weight:700; color:var(--gold);}
-.racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:4px 0 0;}
-:root.hc .racha-registro .rr-count{color:var(--cream);}
+:root.hc .racha-badge{color:var(--cream);}
+#rRachaRegistroRota:empty{display:none;}
+.racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:0 0 18px;}
 </style>
 </head>
 <body>
@@ -1780,8 +1800,11 @@ button:active{ transform:scale(0.93); }
       <button type="button" class="balance-detalle-btn" id="tgResumenDetalle" aria-expanded="false"></button>
       <div class="balance-detalle" id="rDetalle"></div>
     </div>
-    <div class="racha-registro-wrap" id="rRachaRegistro"></div>
-    <div class="toggle-row seg-chart" id="segResumen" role="tablist" aria-label="Vista del gráfico"></div>
+    <div class="resumen-toprow">
+      <div class="racha-registro-wrap" id="rRachaRegistro"></div>
+      <div class="toggle-row seg-chart" id="segResumen" role="tablist" aria-label="Vista del gráfico"></div>
+    </div>
+    <div id="rRachaRegistroRota"></div>
     <p class="section-title">Gasto por categoría</p>
     <div id="rCategorias"></div>
     <div class="chart-box" id="rChart" style="display:none;"></div>
@@ -5686,19 +5709,21 @@ function rachaRegistro(expenses, incomes){
 }
 function rachaRegistroHtml(){
   const r = rachaRegistro(state.expenses, state.incomes);
-  if(r.streak === 0 && !r.rota) return '';
+  if(r.streak === 0 && !r.rota) return { badge: '', rota: '' };
   const plural = r.streak === 1 ? 'día' : 'días';
-  let html = `<div class="racha-registro">Racha de registro: <span class="rr-count">${r.streak === 0 ? '0' : '🔥 ' + r.streak}</span> ${plural}`;
-  if(r.rota){
-    html += `<p class="racha-registro-rota">La racha se cortó el ${fmtDiaMes(r.rota.fecha)}: pasaron 5 días sin registrar ningún gasto ni ingreso.</p>`;
-  }
-  html += `</div>`;
-  return html;
+  const badge = `<span class="racha-badge" title="Racha de registro: ${r.streak} ${plural}" aria-label="Racha de registro: ${r.streak} ${plural}">${r.streak === 0 ? '0' : '🔥 ' + r.streak}</span>`;
+  const rota = r.rota
+    ? `<p class="racha-registro-rota">La racha se cortó el ${fmtDiaMes(r.rota.fecha)}: pasaron 5 días sin registrar ningún gasto ni ingreso.</p>`
+    : '';
+  return { badge, rota };
 }
 function renderRachaRegistro(){
   const box = document.getElementById('rRachaRegistro');
-  if(!box) return;
-  box.innerHTML = rachaRegistroHtml();
+  const rotaBox = document.getElementById('rRachaRegistroRota');
+  if(!box || !rotaBox) return;
+  const { badge, rota } = rachaRegistroHtml();
+  box.innerHTML = badge;
+  rotaBox.innerHTML = rota;
 }
 
 /* ==================== RENDER: METAS ==================== */
@@ -7426,6 +7451,16 @@ function descartarInsight(id){
   saveState();
   renderInsights();
 }
+// Tanda día 14 · pto 2: restaura TODOS los insights del núcleo descartados hoy. El
+// bucket insightsDescartados es de un solo día y solo el núcleo fijo escribe en él
+// (GRUPO 2 no tiene descarte), así que limpiarlo entero nunca revive un descarte de
+// un día anterior ni afecta "Más insights".
+function restaurarInsightsDescartadosHoy(){
+  if(!state.config) return;
+  delete state.config.insightsDescartados;
+  saveState();
+  renderInsights();
+}
 
 function renderInsights(){
   const box = document.getElementById('rInsights');
@@ -7726,11 +7761,20 @@ function renderInsights(){
     ...metaCumplidaCards
   ];
   const grupo1Visibles = grupo1Items.filter(it=> !descHoy.has(it.id));
+  // Tanda día 14 · pto 2: cuántas tarjetas del núcleo quedan ocultas por descarte hoy —
+  // maneja tanto el caso parcial (enlace junto a las visibles) como el total (enlace
+  // junto al mensaje "vuelven mañana"). Solo cuenta contra el núcleo del mes que se
+  // está viendo (grupo1Items), no contra descHoy.size (que puede incluir ids de otro
+  // mes navegado hoy).
+  const ocultosHoy = grupo1Items.length - grupo1Visibles.length;
+  const restoreLinkHtml = ocultosHoy > 0
+    ? `<button type="button" class="insight-restore-link" id="insightRestoreBtn">↺ Mostrar ${ocultosHoy} ${ocultosHoy === 1 ? 'insight oculto' : 'insights ocultos'}</button>`
+    : '';
   // Si se descartó todo el núcleo, no queda un contenedor vacío con el separador de
   // GRUPO 2 colgando — mismo mensaje breve que usaba Tanda V.
   const grupo1Html = grupo1Visibles.length
-    ? grupo1Visibles.map(it=> it.html).join('')
-    : `<p class="insight-nodata insight-todo-descartado">Descartaste los insights de hoy. Vuelven mañana.</p>`;
+    ? grupo1Visibles.map(it=> it.html).join('') + restoreLinkHtml
+    : `<p class="insight-nodata insight-todo-descartado">Descartaste los insights de hoy. Vuelven mañana.</p>` + restoreLinkHtml;
   const grupo2Items = [
     cmpHtml,
     varHtml,
@@ -7765,6 +7809,9 @@ function renderInsights(){
       if(card && card.dataset.insightId) descartarInsight(card.dataset.insightId);
     });
   });
+
+  const restoreBtn = box.querySelector('#insightRestoreBtn');
+  if(restoreBtn) restoreBtn.addEventListener('click', restaurarInsightsDescartadosHoy);
 
   // Semáforo: un único pulso cuando el estado pasa a rojo (entrar, no en cada render).
   if(!prefersReducedMotion() && semEstado === 'sem-rojo' && lastSemEstado && lastSemEstado !== 'sem-rojo'){
@@ -8841,10 +8888,12 @@ function fmtDayHeader(iso){
 // cada vez que cambia la fecha y arma cada fila con rowHtml(item).
 function groupByDayHtml(items, rowHtml){
   let html = '', lastDay = null;
+  const hoyIso = fechaHoyLocalISO();   // fecha real del sistema, no currentDate
   for(const it of items){
     if(it.date !== lastDay){
       lastDay = it.date;
-      html += `<div class="hist-day-sep" data-date="${it.date}">${fmtDayHeader(it.date)}</div>`;
+      const esHoy = it.date === hoyIso;
+      html += `<div class="hist-day-sep${esHoy ? ' hist-day-sep-hoy' : ''}" data-date="${it.date}">${fmtDayHeader(it.date)}</div>`;
     }
     html += rowHtml(it);
   }
