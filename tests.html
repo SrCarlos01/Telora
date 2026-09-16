@@ -873,6 +873,130 @@ function runTests(){
       `Obtenido: ${JSON.stringify(infoSept)}`);
   }
 
+  // ==================== TANDA 15 — prepararDatosResumenImagen() ====================
+  // Extraída de generarResumenImagen() (Día 15): esta función pura calcula los datos
+  // del "Resumen como imagen" sin tocar el DOM ni el canvas, así que sí es testeable acá.
+
+  // ---- (a) totalGastos == resumenTotalesDelMes().gastos + .cuotasGasto, mes con cuotas activas ----
+  // Junio 2026: gasto normal 80.000 + deuda comprada mayo (2 cuotas de 50.000) con cuota
+  // activa en junio. Se compara contra T.gastos+T.cuotasGasto calculado en el propio test,
+  // no contra un número fijo, tal como pide el encargo.
+  {
+    const st = fixtureBase();
+    st.incomes.push({ id:'iP1', date:'2026-06-05', amount:300000, tipo:'Casual' });
+    st.expenses.push({ id:'eP1', date:'2026-06-20', amount:80000, tipo:'Casual', category:'Comida' });
+    st.debts.push({
+      id:'dP1', purchaseDate:'2026-05-01', numCuotas:2, totalAmount:100000,
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
+    });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 5, 15); // 15 junio 2026, con cuota activa
+    const T = win.resumenTotalesDelMes(refDate, 'total');
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(datos.totalGastos === T.gastos + T.cuotasGasto,
+      `prepararDatosResumenImagen: totalGastos (mes con cuotas activas) = resumenTotalesDelMes().gastos + .cuotasGasto`,
+      `T.gastos=${T.gastos}, T.cuotasGasto=${T.cuotasGasto}, datos.totalGastos=${datos.totalGastos}`);
+  }
+
+  // ---- (b) disponible == resumenTotalesDelMes().dispLibre, mes abierto (actual) y mes cerrado ----
+  {
+    // Mes abierto/actual: septiembre 2026 (hoy es 16-09-2026, así que este mes sigue abierto).
+    const st = fixtureBase();
+    st.incomes.push({ id:'iP2a', date:'2026-09-05', amount:150000, tipo:'Casual' });
+    st.expenses.push({ id:'eP2a', date:'2026-09-10', amount:40000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 8, 15); // 15 septiembre 2026
+    const T = win.resumenTotalesDelMes(refDate, 'total');
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(T.cerrado === false && datos.disponible === T.dispLibre,
+      `prepararDatosResumenImagen: disponible (mes abierto/actual) = resumenTotalesDelMes().dispLibre`,
+      `T.cerrado=${T.cerrado}, T.dispLibre=${T.dispLibre}, datos.disponible=${datos.disponible}`);
+  }
+  {
+    // Mes cerrado: enero 2026, muy anterior al mes real de hoy.
+    const st = fixtureBase();
+    st.incomes.push({ id:'iP2b', date:'2026-01-05', amount:100000, tipo:'Casual' });
+    st.expenses.push({ id:'eP2b', date:'2026-01-10', amount:30000, tipo:'Casual', category:'Comida' });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 0, 15); // 15 enero 2026
+    const T = win.resumenTotalesDelMes(refDate, 'total');
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(T.cerrado === true && datos.disponible === T.dispLibre,
+      `prepararDatosResumenImagen: disponible (mes cerrado) = resumenTotalesDelMes().dispLibre`,
+      `T.cerrado=${T.cerrado}, T.dispLibre=${T.dispLibre}, datos.disponible=${datos.disponible}`);
+  }
+
+  // ---- (c) 8 categorías: agrupa desde la 6ª en 'Otros' ----
+  // Montos conocidos, distintos y ya en orden descendente (donaResumenData ordena por
+  // value descendente, ver comentario junto a `orden` en donaResumenData): las 5 mayores
+  // quedan individuales y las 3 restantes (6ª a 8ª) se agrupan en "Otros" = 50.000+40.000+30.000=120.000.
+  {
+    const st = fixtureBase();
+    const refDate = new Date(2026, 7, 15); // 15 agosto 2026
+    [
+      ['Comida', 100000], ['Arriendo/Vivienda', 90000], ['Cuentas y Servicios', 80000],
+      ['Transporte', 70000], ['Salud', 60000], ['Cuidado personal', 50000],
+      ['Vestimenta', 40000], ['Entretenimiento', 30000]
+    ].forEach(([cat, amount], i)=>{
+      st.expenses.push({ id:'eP3-'+i, date:'2026-08-10', amount, tipo:'Casual', category: cat });
+    });
+    setState(win, st);
+    resetCaches(win);
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(datos.grouped.length === 6 && datos.grouped[5].label === 'Otros' && datos.grouped[5].value === 120000,
+      `prepararDatosResumenImagen: 8 categorías -> grouped.length=6, grouped[5]={Otros, 120.000}`,
+      `Obtenido: ${JSON.stringify(datos.grouped)}`);
+  }
+
+  // ---- (d) exactamente 6 categorías: no agrupa ("Otros" no aparece) ----
+  {
+    const st = fixtureBase();
+    const refDate = new Date(2026, 7, 15); // 15 agosto 2026
+    [
+      ['Comida', 60000], ['Arriendo/Vivienda', 50000], ['Cuentas y Servicios', 40000],
+      ['Transporte', 30000], ['Salud', 20000], ['Cuidado personal', 10000]
+    ].forEach(([cat, amount], i)=>{
+      st.expenses.push({ id:'eP4-'+i, date:'2026-08-10', amount, tipo:'Casual', category: cat });
+    });
+    setState(win, st);
+    resetCaches(win);
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(datos.grouped.length === 6 && datos.cats.length === 6 && !datos.grouped.some(g=> g.label === 'Otros'),
+      `prepararDatosResumenImagen: exactamente 6 categorías -> grouped.length=cats.length=6, sin 'Otros'`,
+      `Obtenido: ${JSON.stringify(datos.grouped)}`);
+  }
+
+  // ---- (e) mes sin ningún gasto: hayCats = false ----
+  {
+    const st = fixtureBase();
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 6, 15); // julio 2026, sin datos
+    const datos = win.prepararDatosResumenImagen(refDate, 'total');
+    assert(datos.hayCats === false,
+      `prepararDatosResumenImagen: mes sin gastos -> hayCats = false`,
+      `Obtenido: hayCats=${datos.hayCats}, cats=${JSON.stringify(datos.cats)}`);
+  }
+
+  // ---- (f) ctaLabel: '' en cta='total', 'Cuenta: <nombre real>' en cuenta específica ----
+  // Mismo mecanismo multi-cuenta que cuotasPorCategoriaGastoDelMes (filtro por cuentaId):
+  // se agrega una segunda cuenta con nombre propio a accounts.
+  {
+    const st = fixtureBase();
+    st.accounts.push({ id:'acc2', nombre:'Ahorros', orden:1, archivada:false });
+    setState(win, st);
+    resetCaches(win);
+    const refDate = new Date(2026, 7, 15); // 15 agosto 2026
+    const datosTotal = win.prepararDatosResumenImagen(refDate, 'total');
+    const datosCuenta = win.prepararDatosResumenImagen(refDate, 'acc2');
+    assert(datosTotal.ctaLabel === '' && datosCuenta.ctaLabel === 'Cuenta: Ahorros',
+      `prepararDatosResumenImagen: ctaLabel = '' en 'total', 'Cuenta: Ahorros' en cuenta 'acc2'`,
+      `Obtenido: total="${datosTotal.ctaLabel}", acc2="${datosCuenta.ctaLabel}"`);
+  }
+
   renderResultados();
   checkLocalStorage();
 }

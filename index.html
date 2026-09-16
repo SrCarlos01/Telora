@@ -10915,21 +10915,7 @@ function fitText(ctx, str, maxW){
   return str + '…';
 }
 
-function generarResumenImagen(){
-  if(resumenImgBusy) return;
-  resumenImgBusy = true;
-  const W = 1080, pad = 64, colW = W - pad*2;
-  const cv = name => (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim() || '#888888';
-  const COL = {
-    bg: cv('--bg'), surface: cv('--surface-2'), border: cv('--border'),
-    text: cv('--cream'), dim: cv('--cream-dim'),
-    gold: cv('--gold'), goldDim: cv('--gold-dim'),
-    pos: cv('--success'), neg: cv('--danger')
-  };
-  const CATC = ['--gold','--burgundy-light','--success','--gold-dim','--danger','--cream-dim','--burgundy'].map(cv);
-  const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
-  const SERIF = "Georgia, 'Times New Roman', serif";
-
+function prepararDatosResumenImagen(currentDate, cta){
   // --- Datos del mes: MISMA fuente que renderResumen(), no recálculo propio ---
   // Fix (Día 14): esta función tenía su propia fórmula, congelada desde antes de la
   // unificación "Gasto = Contado + Cuotas" (a2e9182, Día 11) — el resultado no coincidía
@@ -10937,11 +10923,9 @@ function generarResumenImagen(){
   // por categoría. Ahora lee resumenTotalesDelMes() y donaResumenData(), los mismos
   // valores ya calculados que usa renderResumen() para Ingresos/Gastos/Disponible y su
   // desglose — así quedan atados a una sola fuente y no pueden volver a divergir.
-  const cta = ctaVista();
   const T = resumenTotalesDelMes(currentDate, cta);
   const totalIngresos = T.ingresos;
   const totalGastos = T.gastos + T.cuotasGasto;   // mismo criterio que el mini-stat "Gastos" del Resumen
-  const totalMetas = T.aportesMetas;
   const saldoAnterior = T.saldoAnterior;
   const disponible = T.dispLibre;   // ya reincorpora cuotas pendientes si el mes no está cerrado
 
@@ -10958,6 +10942,28 @@ function generarResumenImagen(){
   }
   const mesLabel = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
   const ctaLabel = cta === 'total' ? '' : ('Cuenta: ' + cuentaNombre(cta));
+
+  return { totalIngresos, totalGastos, saldoAnterior, disponible, cats, hayCats, totalCat, grouped, mesLabel, ctaLabel };
+}
+
+function generarResumenImagen(){
+  if(resumenImgBusy) return;
+  resumenImgBusy = true;
+  const W = 1080, pad = 64, colW = W - pad*2;
+  const cv = name => (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim() || '#888888';
+  const COL = {
+    bg: cv('--bg'), surface: cv('--surface-2'), border: cv('--border'),
+    text: cv('--cream'), dim: cv('--cream-dim'),
+    gold: cv('--gold'), goldDim: cv('--gold-dim'),
+    pos: cv('--success'), neg: cv('--danger')
+  };
+  const CATC = ['--gold','--burgundy-light','--success','--gold-dim','--danger','--cream-dim','--burgundy'].map(cv);
+  const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
+  const SERIF = "Georgia, 'Times New Roman', serif";
+
+  const cta = ctaVista();
+  const { totalIngresos, totalGastos, saldoAnterior, disponible, cats, hayCats, totalCat, grouped, mesLabel, ctaLabel } =
+    prepararDatosResumenImagen(currentDate, cta);
 
   // --- Altura total ---
   let H = pad;
