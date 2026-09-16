@@ -7527,7 +7527,10 @@ function patronGastoSemana(refDate, cuentaId){
    — GRUPO 2 ("Más insights") sigue sin descarte individual. Cada tarjeta descartable
    lleva una "x" (insight-x). Al tocarla, se oculta por lo que queda del día y
    reaparece a la MEDIANOCHE LOCAL (no 24 h después) si su condición sigue vigente —
-   no es un descarte permanente.
+   no es un descarte permanente. El enlace "Mostrar N insight(s) oculto(s)" (ver
+   restaurarInsightsDescartadosHoy más abajo) solo restaura los ids del mes que se
+   está viendo — el mismo criterio que ocultosHoy usa para contarlos — así que un
+   descarte hecho en otro mes navegado el mismo día queda intacto en el bucket.
 
    Dónde se guarda: state.config.insightsDescartados, junto al resto de preferencias
    de UI. Estructura: { fecha: "YYYY-MM-DD", ids: ["frase-mes-<mk>", ...] }. Es un
@@ -7564,13 +7567,36 @@ function descartarInsight(id){
   saveState();
   renderInsights();
 }
-// Tanda día 14 · pto 2: restaura TODOS los insights del núcleo descartados hoy. El
-// bucket insightsDescartados es de un solo día y solo el núcleo fijo escribe en él
-// (GRUPO 2 no tiene descarte), así que limpiarlo entero nunca revive un descarte de
-// un día anterior ni afecta "Más insights".
+// Tanda día 14 · fix: clasifica un id de insightsDescartadosHoy según si pertenece al
+// mes que se está viendo en Resumen (refDate = currentDate al momento de restaurar).
+// Usa el mismo esquema de prefijos documentado arriba: frase-mes-/cuotas-por-confirmar-/
+// categoria-bajo-control- llevan el monthKey de currentDate embebido justo después del
+// prefijo, así que "pertenecer" es comparar ese mk contra monthKey(refDate). cuota-libre-
+// y meta-cumplida- están anclados a mesActualReal()/HOY, no a currentDate — por eso solo
+// cuentan como "del mes que se está viendo" cuando ese mes ES el mes real actual, nunca
+// en un mes navegado (pasado o futuro) distinto.
+const INSIGHT_PREFIJOS_MES_NAVEGADO = ['frase-mes-', 'cuotas-por-confirmar-', 'categoria-bajo-control-'];
+const INSIGHT_PREFIJOS_MES_REAL = ['cuota-libre-', 'meta-cumplida-'];
+function insightIdDelMesVisto(id, refDate){
+  const prefNavegado = INSIGHT_PREFIJOS_MES_NAVEGADO.find(p=> id.startsWith(p));
+  if(prefNavegado){
+    const mk = parseInt(id.slice(prefNavegado.length).split('-')[0], 10);
+    return mk === monthKey(refDate);
+  }
+  if(INSIGHT_PREFIJOS_MES_REAL.some(p=> id.startsWith(p))) return monthKey(refDate) === monthKey(mesActualReal());
+  return false;   // esquema de id desconocido: no se restaura por seguridad
+}
+// Tanda día 14 · fix: restaura solo los insights descartados hoy que pertenecen al mes
+// que se está viendo (mismo criterio de insightIdDelMesVisto que ya usa ocultosHoy para
+// contar) — deja intactos en el bucket los ids de otros meses navegados hoy mismo. Si
+// tras filtrar no queda ningún id, se elimina el bucket completo (mismo resultado final
+// que antes, pero solo cuando corresponde).
 function restaurarInsightsDescartadosHoy(){
-  if(!state.config) return;
-  delete state.config.insightsDescartados;
+  const b = state.config && state.config.insightsDescartados;
+  if(!b || typeof b !== 'object' || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)) return;
+  const idsRestantes = b.ids.filter(id=> !insightIdDelMesVisto(id, currentDate));
+  if(idsRestantes.length) state.config.insightsDescartados = { fecha: b.fecha, ids: idsRestantes };
+  else delete state.config.insightsDescartados;
   saveState();
   renderInsights();
 }
