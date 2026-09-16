@@ -10930,29 +10930,24 @@ function generarResumenImagen(){
   const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
   const SERIF = "Georgia, 'Times New Roman', serif";
 
-  // --- Datos del mes (mismo cálculo que renderResumen) ---
-  // Tanda C3: la imagen refleja la cuenta activa del selector, igual que la pantalla.
+  // --- Datos del mes: MISMA fuente que renderResumen(), no recálculo propio ---
+  // Fix (Día 14): esta función tenía su propia fórmula, congelada desde antes de la
+  // unificación "Gasto = Contado + Cuotas" (a2e9182, Día 11) — el resultado no coincidía
+  // ni con el Resumen real ni, dentro de la misma imagen, el encabezado con su desglose
+  // por categoría. Ahora lee resumenTotalesDelMes() y donaResumenData(), los mismos
+  // valores ya calculados que usa renderResumen() para Ingresos/Gastos/Disponible y su
+  // desglose — así quedan atados a una sola fuente y no pueden volver a divergir.
   const cta = ctaVista();
-  const monthExpenses = getExpensesForMonth(currentDate, cta);
-  const monthIncomes = getIncomesForMonth(currentDate, cta);
-  const normalExpenses = monthExpenses.filter(e=> !e.debtId);
-  const totalIngresos = monthIncomes.reduce((s,i)=> s + i.amount, 0);
-  const totalGastos = normalExpenses.reduce((s,e)=> s + e.amount, 0);
-  let totalCuotas = 0; const cuotasPorCat = {};
-  state.debts.forEach(d=>{   // Tanda L2: cuotas propias de la vista + compartidas
-    if(!itemEnVista(d, cta)) return;
-    const info = cuotaInfoForMonth(d, currentDate);
-    if(info){ totalCuotas += info.monto; cuotasPorCat[d.category] = (cuotasPorCat[d.category]||0) + info.monto; }
-  });
-  const totalMetas = totalAportesMetasDelMes(currentDate, cta);
-  const saldoAnterior = saldoAcumuladoHasta(currentDate, cta);
-  const disponible = saldoAnterior + totalIngresos - totalGastos - totalCuotas - totalMetas;
+  const T = resumenTotalesDelMes(currentDate, cta);
+  const totalIngresos = T.ingresos;
+  const totalGastos = T.gastos + T.cuotasGasto;   // mismo criterio que el mini-stat "Gastos" del Resumen
+  const totalMetas = T.aportesMetas;
+  const saldoAnterior = T.saldoAnterior;
+  const disponible = T.dispLibre;   // ya reincorpora cuotas pendientes si el mes no está cerrado
 
-  const catTotals = {};
-  normalExpenses.forEach(e=> catTotals[e.category] = (catTotals[e.category]||0) + e.amount);
-  Object.keys(cuotasPorCat).forEach(c=> catTotals[c] = (catTotals[c]||0) + cuotasPorCat[c]);
-  const cats = Object.entries(catTotals).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]).map(([label,value])=> ({label, value}));
-  const totalCat = cats.reduce((s,c)=> s + c.value, 0) || 1;
+  const dona = donaResumenData(currentDate, cta);
+  const cats = dona.segs.map(s=> ({ label: s.label, value: s.value }));
+  const totalCat = totalGastos || 1;
   const hayCats = cats.length > 0;
 
   // Torta / leyenda: si hay más de 6 categorías, las menores se agrupan en "Otros".

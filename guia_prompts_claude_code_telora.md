@@ -127,6 +127,13 @@ cambio es "solo de navegación" o "solo visual", pensar si toca:
 - Si la tanda toca algo que ya causó bugs reales en el proyecto (motor de
   cálculo, migraciones, datos de usuario), pedir la verificación con un
   caso concreto y no solo con el reporte de éxito de Claude Code.
+- Antes de verificar visualmente cualquier cambio contra el servidor de
+  pruebas local: confirmar el estado de `localStorage` al inicio de la
+  sesión (o reiniciarlo a un estado conocido) en vez de asumir que quedó
+  como la sesión anterior lo dejó. Motivo: dos incidentes confirmados el
+  15-09-2026 (categoría "Salud" residual, método "Débito" desincronizado)
+  por reutilizar estado de sesiones de prueba previas sin verificarlo
+  primero.
 
 ---
 
