@@ -1198,12 +1198,13 @@ button{font-family:inherit;}
 .cfg-group-body{padding:2px 0 16px;}
 .cfg-group-body .config-list{margin-bottom:10px;}
 
-/* ==================== Tanda I · Configuración agrupada (accordion anidado) ====================
-   "Categorías y cuentas", "Apariencia" y "Funcionamiento" son un <details class="cfg-group">
+/* ==================== Tanda I / día 14 · Configuración agrupada (accordion anidado) ====================
+   "Tus datos", "Apariencia" y "Datos y seguridad" son un <details class="cfg-group">
    que envuelve otros <details class="cfg-group"> (mismo patrón, un nivel más adentro).
    El segundo nivel se indenta con una guía vertical a la izquierda y un summary algo más
-   chico para que en 375px se lea la jerarquía sin cortar texto. "Respaldo de datos" NO
-   entra en ningún grupo: sigue como fila de primer nivel. */
+   chico para que en 375px se lea la jerarquía sin cortar texto. "Onboarding" NO entra en
+   ningún grupo (no es un dato ni una preferencia de seguridad): sigue como fila de primer
+   nivel, igual que antes vivía "Respaldo de datos" (ahora dentro de "Datos y seguridad"). */
 .cfg-group-body > .cfg-group{
   border-left:2px solid var(--border);
   padding-left:12px;
@@ -1221,18 +1222,37 @@ button{font-family:inherit;}
 .config-item > span{flex:1; min-width:0; overflow-wrap:anywhere;}
 .config-item button{background:none; border:none; color:var(--danger); font-size:17px; cursor:pointer;}
 .cfg-item-actions{display:flex; align-items:center; gap:6px; flex-shrink:0;}
-.config-item .cfg-icon-btn{
-  color:var(--gold); padding:6px; display:flex; align-items:center; justify-content:center;
-  min-width:34px; min-height:34px; border-radius:8px;
-  background:var(--surface-2); border:1px solid var(--border);
+/* Día 14 · fila de categoría rediseñada: avatar circular (ícono sobre el color de la
+   categoría, abre el sheet de color), nombre, botón de opciones (ícono/eliminar — a
+   propósito lejos del avatar para no prestarse a toque accidental), y debajo el tope
+   mensual como chip colapsado que se expande a input inline. */
+.config-item.is-cat{flex-direction:column; align-items:stretch;}
+.cfg-cat-main{display:flex; align-items:center; gap:10px;}
+/* Nota de especificidad: ".config-item button{color:var(--danger)}" de arriba (elemento +
+   clase) le gana a una sola clase como ".cfg-cat-avatar{color:...}" — por eso estas reglas
+   de color van prefijadas con ".config-item " (mismo patrón que ".config-item .cfg-rename-btn"
+   más abajo), para no heredar el rojo de "eliminar" en botones que no eliminan nada. */
+.config-item .cfg-cat-avatar{
+  width:40px; height:40px; border-radius:50%; flex-shrink:0; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; color:#FBEFE9; font-size:18px;
+  border:1.5px solid rgba(0,0,0,0.15); padding:0; transition:transform .12s ease;
 }
-.cfg-icon-btn:active{transform:scale(0.85);}
-.cfg-icon-btn .icon{width:18px; height:18px;}
-.cfg-icon-btn .cat-emoji{font-size:17px;}
-/* Tope de gasto mensual por categoría: segunda línea de la fila de Configuración. */
-.config-item.is-cat{flex-wrap:wrap;}
-.cfg-cat-tope{flex-basis:100%; display:flex; align-items:center; gap:8px; margin-top:8px;}
-.cfg-cat-tope label{font-size:12px; color:var(--cream-dim); flex-shrink:0;}
+.cfg-cat-avatar:active{transform:scale(0.88);}
+.cfg-cat-avatar .icon{width:19px; height:19px;}
+.cfg-cat-avatar .cat-emoji{font-size:18px;}
+.cfg-cat-name{flex:1; min-width:0; overflow-wrap:anywhere; font-size:15px; color:var(--cream);}
+.config-item .cfg-cat-opts{
+  color:var(--cream-dim); padding:6px; display:flex; align-items:center; justify-content:center;
+  min-width:34px; min-height:34px; border-radius:8px;
+  background:var(--surface-2); border:1px solid var(--border); cursor:pointer;
+}
+.cfg-cat-opts:active{transform:scale(0.9);}
+.cfg-cat-opts .icon{width:18px; height:18px;}
+/* Tope de gasto mensual por categoría: chip colapsado bajo la fila principal. */
+.cfg-cat-tope{margin-top:8px;}
+.config-item .cfg-cat-tope-chip{color:var(--cream); padding:6px 12px; font-size:12.5px;}
+.cfg-cat-tope-chip .icon{width:14px; height:14px; color:var(--gold-dim);}
+.cfg-cat-tope-chip.has-tope{border-color:var(--gold-dim); color:var(--gold-dim);}
 .cfg-cat-tope-in{
   display:flex; align-items:center; gap:4px; flex:1; max-width:190px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:0 10px;
@@ -1277,6 +1297,20 @@ button{font-family:inherit;}
 .icon-grid button:active{transform:scale(0.87);}
 .icon-grid button.active{border-color:var(--gold); background:var(--surface-3);}
 .icon-grid button .icon{width:21px; height:21px;}
+
+/* grid del selector de color de categoría (día 14 · sub-tarea 4) */
+.color-grid{display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin:14px 0;}
+.color-grid button{
+  position:relative; aspect-ratio:1; border-radius:50%; padding:0;
+  border:2px solid transparent; cursor:pointer; transition:transform .12s ease, border-color .15s ease;
+}
+.color-grid button:active{transform:scale(0.87);}
+.color-grid button.active{border-color:var(--cream);}
+.color-grid button .icon{
+  display:none; width:18px; height:18px; color:#FBEFE9;
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+}
+.color-grid button.active .icon{display:block;}
 
 .export-opt{
   display:flex; align-items:center; gap:10px; padding:13px 14px; background:var(--surface-2);
@@ -1434,8 +1468,8 @@ button:active{ transform:scale(0.93); }
 :root.hc .cat-row, :root.hc .list-item, :root.hc .debt-card, :root.hc .segmented,
 :root.hc .chip, :root.hc .toggle-opt, :root.hc .field input, :root.hc .field select,
 :root.hc .field textarea, :root.hc .palette-opt, :root.hc .export-opt,
-:root.hc .add-inline input, :root.hc .config-item .cfg-icon-btn, :root.hc .btn-ghost,
-:root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button,
+:root.hc .add-inline input, :root.hc .config-item .cfg-cat-opts, :root.hc .btn-ghost,
+:root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button, :root.hc .color-grid button,
 :root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
 :root.hc .hist-cat-chip, :root.hc .hist-check input, :root.hc .racha-badge{ border-width:2px; }
 :root.hc .li-muted{ font-style:normal; color:var(--cream); }
@@ -2302,10 +2336,13 @@ button:active{ transform:scale(0.93); }
     <div class="sheet-handle"></div>
     <h2>Configuración</h2>
 
-    <!-- Tanda I: grupo colapsable de primer nivel. Cada ítem interno conserva su id
-         y su comportamiento; solo hay que abrir primero este grupo. -->
+    <!-- Tanda I / día 14: 3 bloques colapsables de primer nivel (Tus datos, Apariencia,
+         Datos y seguridad). Cada ítem interno conserva su id y su comportamiento; solo
+         hay que abrir primero el bloque que lo contiene. "Onboarding" no calza en
+         ninguno de los 3 (no es un dato ni una preferencia de seguridad) y queda suelto,
+         como un ítem de tipo tutorial, igual que antes vivía "Respaldo de datos". -->
     <details class="cfg-group">
-      <summary>Categorías y cuentas <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <summary>Tus datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
 
         <details class="cfg-group">
@@ -2340,6 +2377,19 @@ button:active{ transform:scale(0.93); }
             </p>
             <div class="config-list" id="cfgCuentas"></div>
             <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
+          </div>
+        </details>
+
+        <details class="cfg-group">
+          <summary>Mes de inicio de registro <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <div class="cfg-group-body">
+            <p class="sheet-note" style="margin:0 0 12px;">
+              Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.
+            </p>
+            <div class="field" style="margin-bottom:0;">
+              <label for="cfgInicioRegistro">Mes de inicio</label>
+              <select id="cfgInicioRegistro"></select>
+            </div>
           </div>
         </details>
 
@@ -2382,21 +2432,8 @@ button:active{ transform:scale(0.93); }
     </details>
 
     <details class="cfg-group">
-      <summary>Funcionamiento <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <summary>Datos y seguridad <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
-
-        <details class="cfg-group">
-          <summary>Mes de inicio de registro <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <p class="sheet-note" style="margin:0 0 12px;">
-              Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.
-            </p>
-            <div class="field" style="margin-bottom:0;">
-              <label for="cfgInicioRegistro">Mes de inicio</label>
-              <select id="cfgInicioRegistro"></select>
-            </div>
-          </div>
-        </details>
 
         <details class="cfg-group">
           <summary>Modo solo lectura <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
@@ -2409,29 +2446,41 @@ button:active{ transform:scale(0.93); }
         </details>
 
         <details class="cfg-group">
-          <summary>Onboarding <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
           <div class="cfg-group-body">
             <p class="sheet-note" style="margin:0 0 12px;">
-              Vuelve a recorrer los 6 pasos de bienvenida (fuentes, ingreso, categorías, gastos fijos, cuotas y una meta). Tus categorías y fuentes actuales no se borran ni se reinician: aparecen ya marcadas.
+              Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
             </p>
-            <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el onboarding</button>
+            <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
+            <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
+            <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+            <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
+          </div>
+        </details>
+
+        <details class="cfg-group">
+          <summary>Notificaciones <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <div class="cfg-group-body">
+            <p class="sheet-note" style="margin:0 0 12px;">
+              Aviso local cuando una cuota está próxima a vencer, mientras la app está abierta o vuelve a primer plano. No es un aviso push con la app cerrada.
+            </p>
+            <p class="sheet-note" id="cfgNotifStatus" style="margin:0 0 10px; font-size:12.5px;"></p>
+            <button class="btn-ghost" id="btnActivarNotif" style="margin-top:0;">Activar avisos de cuotas</button>
           </div>
         </details>
 
       </div>
     </details>
 
-    <!-- Tanda I: "Respaldo de datos" queda SUELTO como fila de primer nivel, sin agrupar. -->
+    <!-- Onboarding: fuera de los 3 bloques (decisión del usuario, día 14 — es un tutorial,
+         no un dato ni una preferencia de seguridad). Fila de primer nivel, sin agrupar. -->
     <details class="cfg-group">
-      <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <summary>Onboarding <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
         <p class="sheet-note" style="margin:0 0 12px;">
-          Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
+          Vuelve a recorrer los 6 pasos de bienvenida (fuentes, ingreso, categorías, gastos fijos, cuotas y una meta). Tus categorías y fuentes actuales no se borran ni se reinician: aparecen ya marcadas.
         </p>
-        <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
-        <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
-        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
-        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
+        <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el onboarding</button>
       </div>
     </details>
 
@@ -2504,6 +2553,28 @@ button:active{ transform:scale(0.93); }
       <button class="btn-primary" id="btnSaveCatEmoji">Guardar emoji</button>
     </div>
     <button class="btn-ghost" id="btnCatIconDefault">Usar ícono por defecto</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: elegir color de una categoría (día 14 · sub-tarea 4) -->
+<div class="sheet-overlay" id="sheetCatColor">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="catColorTitle">Color de la categoría</h2>
+    <div class="color-grid" id="catColorGrid"></div>
+    <button class="btn-ghost" id="btnCatColorDefault">Usar color automático</button>
+    <button class="btn-ghost" data-close>Cancelar</button>
+  </div>
+</div>
+
+<!-- SHEET: acciones de una categoría — cambiar ícono / eliminar (día 14 · sub-tarea 3) -->
+<div class="sheet-overlay" id="sheetCatAcciones">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="catAccionesTitle">Categoría</h2>
+    <button class="btn-ghost" id="btnCatAccIcono" style="margin-top:0;">Cambiar ícono</button>
+    <button class="btn-danger" id="btnCatAccEliminar">Eliminar categoría</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
 </div>
@@ -2718,6 +2789,7 @@ const DEFAULTS = {
   fuentes: ["Sueldo","Trabajos extra","Ventas","Bono","Mesada","Interés","Otros"],
   categoriaIconos: {},  // { "Nombre categoría": {tipo:'emoji'|'icono', valor:'...'} }
   categoriaTopes: {},   // { "Nombre categoría": monto CLP entero > 0 } — clave ausente = sin tope
+  categoriaColores: {}, // { "Nombre categoría": "#RRGGBB" } — clave ausente = color automático (paleta fija, ver colorDeCategoria)
   onboardingVisto: false,   // Onboarding interactivo de primer uso: true = ya se completó o se saltó
   notifCuotasConcedido: null   // Notificación de cuota próxima a vencer: null = nunca se preguntó, true/false = respuesta del navegador
 };
@@ -2786,6 +2858,13 @@ function catIcon(cat, extraClass){
 function catTope(cat){
   const v = (state.config.categoriaTopes || {})[cat];
   return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.round(v) : null;
+}
+
+// Color personalizado de una categoría, si se definió uno: hex válido de 6 dígitos, o
+// null si no hay override — en ese caso colorDeCategoria() cae al cálculo de paleta fija.
+function catColorPersonalizado(cat){
+  const v = (state.config.categoriaColores || {})[cat];
+  return (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) ? v : null;
 }
 
 /* ==================== TANDA C1 · MODELO DE DATOS MULTI-CUENTA ====================
@@ -2928,6 +3007,19 @@ function loadState(){
         Object.keys(t).forEach(k=>{
           if(typeof t[k] === 'number' && isFinite(t[k]) && t[k] > 0) t[k] = Math.round(t[k]);
           else delete t[k];
+        });
+      }
+    }
+    // Color personalizado por categoría (mapa aparte, como categoriaIconos/categoriaTopes):
+    // clave ausente = color automático (colorDeCategoria cae a la paleta fija). Se descarta
+    // cualquier valor que no sea un hex de 6 dígitos.
+    if(parsed.config){
+      const cc = parsed.config.categoriaColores;
+      if(!cc || typeof cc !== 'object' || Array.isArray(cc)){
+        parsed.config.categoriaColores = {};
+      } else {
+        Object.keys(cc).forEach(k=>{
+          if(!(typeof cc[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(cc[k]))) delete cc[k];
         });
       }
     }
@@ -9122,6 +9214,7 @@ function renderConfig(){
   renderAltoContrasteRow();
   renderReadOnlyRow();
   renderStorageInfoRow();
+  renderNotifRow();
 }
 /* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
    Línea informativa dentro de Configuración → Respaldo de datos. Se alimenta de lo
@@ -9214,6 +9307,11 @@ const escHtml = s => String(s == null ? '' : s)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+// Etiqueta del chip de tope colapsado: monto formateado, o "Sin tope".
+function topeChipLabel(item){
+  const v = catTope(item);
+  return v != null ? '$' + formatMiles(String(v)) : 'Sin tope';
+}
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
   const isCat = key === 'categorias';
@@ -9228,57 +9326,38 @@ function renderConfigList(key, boxId){
       <small class="cfg-item-lock">Activa las compras a cuotas — no se puede eliminar.</small>
     </div>`;
     }
-    // Categorías: segunda línea con el tope de gasto mensual (opcional, vacío = sin tope).
-    const topeRow = isCat ? `
-      <div class="cfg-cat-tope">
-        <label for="cfgTope-${idx}">Tope mensual</label>
-        <div class="cfg-cat-tope-in">
-          <span aria-hidden="true">$</span>
-          <input type="text" inputmode="numeric" id="cfgTope-${idx}" data-cattope="${idx}"
-                 value="${catTope(item) != null ? formatMiles(String(catTope(item))) : ''}"
-                 placeholder="Sin tope" autocomplete="off"
-                 aria-label="Tope de gasto mensual de ${escAttr(item)}">
-        </div>
-      </div>` : '';
+    // Día 14 · rediseño de la fila de categoría: avatar circular (ícono sobre el color de
+    // la categoría, toca para cambiar el color), nombre, botón de opciones (ícono/eliminar
+    // — separado del avatar para no prestarse a toque accidental), y el tope mensual
+    // colapsado a un chip que se expande a input inline al tocarlo.
+    if(isCat){
+      return `
+    <div class="config-item is-cat" data-cfgitem="${key}:${idx}">
+      <div class="cfg-cat-main">
+        <button type="button" class="cfg-cat-avatar" data-catcolor="${idx}" style="background:${colorDeCategoria(item)};" aria-label="Color de ${escAttr(item)}. Tocar para cambiar.">${catIcon(item)}</button>
+        <span class="cfg-cat-name">${escHtml(item)}</span>
+        <button type="button" class="cfg-cat-opts" data-catopts="${idx}" aria-label="Opciones de ${escAttr(item)}">${icon('settings')}</button>
+      </div>
+      <div class="cfg-cat-tope" data-topewrap="${idx}">
+        <button type="button" class="chip cfg-cat-tope-chip${catTope(item) != null ? ' has-tope' : ''}" data-topechip="${idx}" aria-label="Tope mensual de ${escAttr(item)}: ${escAttr(topeChipLabel(item))}. Tocar para editar.">${icon('target')}<span>${escHtml(topeChipLabel(item))}</span></button>
+      </div>
+    </div>`;
+    }
     return `
-    <div class="config-item${isCat ? ' is-cat' : ''}" data-cfgitem="${key}:${idx}">
+    <div class="config-item" data-cfgitem="${key}:${idx}">
       <span>${escHtml(item)}</span>
       <div class="cfg-item-actions">
-        ${isCat ? `<button class="cfg-icon-btn" data-caticon="${idx}" aria-label="Cambiar ícono">${catIcon(item)}</button>` : ''}
         ${renombrable ? `<button class="cfg-rename-btn" data-rename="${key}:${idx}" aria-label="Renombrar ${escAttr(item)}">${icon('edit')}</button>` : ''}
         <button data-remove="${key}:${idx}" aria-label="Eliminar ${escAttr(item)}">${icon('x')}</button>
-      </div>${topeRow}
+      </div>
     </div>`;
   }).join('');
 
-  // --- Eliminar (Tanda W · 1A + migración en bloque) ---
+  // --- Eliminar (Tanda W · 1A + migración en bloque; día 14: mismo mecanismo en categorías) ---
   box.querySelectorAll('[data-remove]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      if(isReadOnly()){ blockReadOnly(); return; }
       const [k,idxStr] = btn.dataset.remove.split(':');
-      const idx = parseInt(idxStr, 10);
-      const item = state.config[k][idx];
-
-      // Categorías conservan el borrado directo de siempre (fuera de alcance de esta tanda).
-      if(k === 'categorias'){
-        state.config[k].splice(idx, 1);
-        if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
-        if(state.config.categoriaTopes) delete state.config.categoriaTopes[item];
-        haptic(HAPTIC_DELETE); saveState(); renderConfig();
-        return;
-      }
-
-      const n = contarUso(k, item);
-      if(n === 0){
-        state.config[k].splice(idx, 1);
-        haptic(HAPTIC_DELETE); saveState(); renderConfig();
-        return;
-      }
-      if(state.config[k].length === 1){
-        showToast(`«${item}» es la única opción de la lista. Agrega otra antes de eliminarla.`, 'error');
-        return;
-      }
-      abrirMigracionConfig(k, idx, item, n);
+      intentarEliminarConfigItem(k, parseInt(idxStr, 10));
     });
   });
 
@@ -9291,48 +9370,75 @@ function renderConfigList(key, boxId){
     });
   });
 
-  box.querySelectorAll('[data-caticon]').forEach(btn=>{
-    btn.addEventListener('click', ()=> openCatIcon(state.config.categorias[parseInt(btn.dataset.caticon, 10)]));
+  if(!isCat) return;
+
+  // --- Avatar de categoría: tocarlo abre el sheet de color (día 14 · sub-tarea 4) ---
+  box.querySelectorAll('[data-catcolor]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openCatColor(state.config.categorias[parseInt(btn.dataset.catcolor, 10)]));
   });
 
-  // --- Tope de gasto mensual por categoría (mapa aparte state.config.categoriaTopes) ---
-  // Formateo de miles en vivo; se guarda al salir del campo o con Enter. Vacío / 0 borra
-  // el tope. NO se re-renderiza la lista al guardar: así el foco y el cursor no saltan.
-  box.querySelectorAll('[data-cattope]').forEach(inp=>{
-    const catActual = ()=> state.config.categorias[parseInt(inp.dataset.cattope, 10)];
-    inp.addEventListener('input', ()=>{
-      if(inp !== document.activeElement) return;
-      const f = formatMiles(inp.value);
-      if(f !== inp.value) inp.value = f;
-    });
-    const guardar = ()=>{
-      const cat = catActual();
-      if(!cat) return;
-      if(isReadOnly()){
-        blockReadOnly();
-        inp.value = catTope(cat) != null ? formatMiles(String(catTope(cat))) : '';
-        return;
-      }
-      if(!state.config.categoriaTopes) state.config.categoriaTopes = {};
-      const n = parseInt(soloDigitos(inp.value), 10);
-      if(n > 0){
-        state.config.categoriaTopes[cat] = n;
-        inp.value = formatMiles(String(n));
-      } else {
-        delete state.config.categoriaTopes[cat];
-        inp.value = '';
-      }
-      saveState();
-      // Corrección Tanda AA · Cambio D: saveState() solo persiste en localStorage, no
-      // repinta nada — por eso la barra de "Gasto por categoría" del Resumen quedaba con
-      // el tope viejo hasta el próximo render (cambiar de mes, reabrir la app, etc.). NO
-      // se llama a renderConfig() (eso sí perdería foco/cursor del input, ver comentario
-      // arriba); renderResumen() es una pantalla distinta del DOM y no le afecta.
-      renderResumen();
-    };
-    inp.addEventListener('change', guardar);
-    inp.addEventListener('blur', guardar);
-    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); } });
+  // --- Botón de opciones: abre el sheet con "Cambiar ícono" / "Eliminar categoría" ---
+  box.querySelectorAll('[data-catopts]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openCatAcciones(parseInt(btn.dataset.catopts, 10)));
+  });
+
+  // --- Tope de gasto mensual por categoría: chip colapsado <-> input inline ---
+  box.querySelectorAll('[data-topechip]').forEach(btn=>{
+    const idx = parseInt(btn.dataset.topechip, 10);
+    btn.addEventListener('click', ()=> expandirTopeCat(btn.closest('[data-topewrap]'), idx));
+  });
+}
+// Expande el chip de tope mensual a un input editable inline. Al guardar (blur/Enter) o
+// cancelar (Escape) vuelve a colapsarse al chip, sin re-renderizar toda la lista — así el
+// resto de las filas no pierde foco/scroll, y se puede repetir expandir/colapsar sin
+// perder el valor guardado.
+function renderTopeChipInto(wrap, idx){
+  const item = state.config.categorias[idx];
+  wrap.innerHTML = `<button type="button" class="chip cfg-cat-tope-chip${catTope(item) != null ? ' has-tope' : ''}" data-topechip="${idx}" aria-label="Tope mensual de ${escAttr(item)}: ${escAttr(topeChipLabel(item))}. Tocar para editar.">${icon('target')}<span>${escHtml(topeChipLabel(item))}</span></button>`;
+  wrap.querySelector('[data-topechip]').addEventListener('click', ()=> expandirTopeCat(wrap, idx));
+}
+function expandirTopeCat(wrap, idx){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!wrap || wrap.querySelector('.cfg-cat-tope-in')) return;
+  const catActual = ()=> state.config.categorias[idx];
+  const val = catTope(catActual());
+  wrap.innerHTML = `
+    <div class="cfg-cat-tope-in">
+      <span aria-hidden="true">$</span>
+      <input type="text" inputmode="numeric" data-cattope="${idx}"
+             value="${val != null ? formatMiles(String(val)) : ''}"
+             placeholder="Sin tope" autocomplete="off"
+             aria-label="Tope de gasto mensual de ${escAttr(catActual())}">
+    </div>`;
+  const inp = wrap.querySelector('input');
+  inp.focus();
+  inp.addEventListener('input', ()=>{
+    const f = formatMiles(inp.value);
+    if(f !== inp.value) inp.value = f;
+  });
+  let resuelto = false;
+  const guardar = ()=>{
+    if(resuelto) return;
+    resuelto = true;
+    const cat = catActual();
+    if(!cat){ renderTopeChipInto(wrap, idx); return; }
+    if(isReadOnly()){ blockReadOnly(); renderTopeChipInto(wrap, idx); return; }
+    if(!state.config.categoriaTopes) state.config.categoriaTopes = {};
+    const n = parseInt(soloDigitos(inp.value), 10);
+    if(n > 0) state.config.categoriaTopes[cat] = n;
+    else delete state.config.categoriaTopes[cat];
+    saveState();
+    renderTopeChipInto(wrap, idx);
+    // Corrección Tanda AA · Cambio D: saveState() solo persiste en localStorage, no
+    // repinta nada — por eso la barra de "Gasto por categoría" del Resumen quedaba con
+    // el tope viejo hasta el próximo render. renderResumen() es una pantalla distinta
+    // del DOM y no afecta el foco de este sheet.
+    renderResumen();
+  };
+  inp.addEventListener('blur', guardar);
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    if(e.key === 'Escape'){ e.stopPropagation(); resuelto = true; renderTopeChipInto(wrap, idx); }
   });
 }
 
@@ -9372,16 +9478,48 @@ function iniciarRenombreConfig(key, idx, box){
   });
 }
 
-/* ---- Migración en bloque antes de eliminar un método/fuente en uso ---- */
+/* ---- Eliminar un ítem de Configuración (Tanda W; día 14: extendido a categorías) ----
+   Único punto de entrada para borrar de metodos/fuentes/categorias: sin uso -> borra
+   directo; con uso -> exige elegir destino primero (abrirMigracionConfig). Antes,
+   categorías tenía un atajo aparte que borraba sin avisar aunque tuviera gastos
+   asociados (bug de borrado silencioso) — ahora pasa por el mismo camino. */
+function intentarEliminarConfigItem(key, idx){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const item = state.config[key][idx];
+  const n = contarUso(key, item);
+  if(n === 0){
+    state.config[key].splice(idx, 1);
+    if(key === 'categorias'){
+      if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
+      if(state.config.categoriaTopes) delete state.config.categoriaTopes[item];
+      if(state.config.categoriaColores) delete state.config.categoriaColores[item];
+    }
+    haptic(HAPTIC_DELETE); saveState(); renderConfig();
+    return;
+  }
+  if(state.config[key].length === 1){
+    showToast(`«${item}» es la única opción de la lista. Agrega otra antes de eliminarla.`, 'error');
+    return;
+  }
+  abrirMigracionConfig(key, idx, item, n);
+}
+
+/* ---- Migración en bloque antes de eliminar un método/fuente/categoría en uso ---- */
+const MIGRACION_TEXTOS = {
+  metodos:    { registro: 'gasto',   destino: 'forma de pago' },
+  fuentes:    { registro: 'ingreso', destino: 'fuente' },
+  categorias: { registro: 'gasto',   destino: 'categoría' }
+};
 let migracionConfigCtx = null;   // { key, idx, item, n }
 function abrirMigracionConfig(key, idx, item, n){
   migracionConfigCtx = { key, idx, item, n };
   const esMet = key === 'metodos';
+  const t = MIGRACION_TEXTOS[key];
   const destinos = state.config[key].filter((_,i)=> i !== idx);
   document.getElementById('cfgMigrarTitle').textContent = `Eliminar «${item}»`;
   document.getElementById('cfgMigrarBody').textContent =
-    `${n} ${esMet ? (n===1?'gasto usa':'gastos usan') : (n===1?'ingreso usa':'ingresos usan')} «${item}». ` +
-    `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${esMet?'forma de pago':'fuente'}.`;
+    `${n} ${n===1 ? t.registro+' usa' : t.registro+'s usan'} «${item}». ` +
+    `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${t.destino}.`;
   const sel = document.getElementById('cfgMigrarDestino');
   sel.innerHTML = destinos.map(d=>`<option value="${escAttr(d)}">${d}</option>`).join('');
   const notaCuotas = document.getElementById('cfgMigrarNotaCuotas');
@@ -9393,7 +9531,7 @@ function abrirMigracionConfig(key, idx, item, n){
     notaCuotas.hidden = true;
   }
   document.getElementById('cfgMigrarConfirm').textContent =
-    `Mover ${n} ${esMet ? (n===1?'gasto':'gastos') : (n===1?'ingreso':'ingresos')} y eliminar`;
+    `Mover ${n} ${n===1 ? t.registro : t.registro+'s'} y eliminar`;
   openSheet('sheetCfgMigrar', 'cfgMigrarDestino');
 }
 document.getElementById('cfgMigrarConfirm').onclick = ()=>{
@@ -9404,14 +9542,22 @@ document.getElementById('cfgMigrarConfirm').onclick = ()=>{
   if(realIdx === -1){ closeSheet('sheetCfgMigrar'); migracionConfigCtx = null; renderConfig(); return; }
   const dest = document.getElementById('cfgMigrarDestino').value;
   if(!dest || !state.config[key].includes(dest)){ showToast('Elige una opción de destino.', 'error'); return; }
-  const campo = key === 'metodos' ? 'method' : 'source';
-  const arr   = key === 'metodos' ? state.expenses : state.incomes;
+  const campo = key === 'metodos' ? 'method' : key === 'fuentes' ? 'source' : 'category';
+  const arr   = key === 'fuentes' ? state.incomes : state.expenses;
   let c = 0;
   arr.forEach(r=>{ if(r[campo] === item){ r[campo] = dest; c++; } });
   state.config[key].splice(realIdx, 1);
+  // Referencias por-categoría del ítem eliminado (ícono/tope/color) no se migran al
+  // destino — se descartan junto con la categoría, igual que hacía el borrado directo.
+  if(key === 'categorias'){
+    if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
+    if(state.config.categoriaTopes) delete state.config.categoriaTopes[item];
+    if(state.config.categoriaColores) delete state.config.categoriaColores[item];
+  }
   migracionConfigCtx = null;
+  const t = MIGRACION_TEXTOS[key];
   haptic(HAPTIC_DELETE); saveState(); renderConfig(); closeSheet('sheetCfgMigrar');
-  showToast(`${c} ${key==='metodos' ? (c===1?'gasto movido':'gastos movidos') : (c===1?'ingreso movido':'ingresos movidos')} a «${dest}». «${item}» eliminada.`, 'success');
+  showToast(`${c} ${c===1 ? t.registro+' movido' : t.registro+'s movidos'} a «${dest}». «${item}» eliminada.`, 'success');
 };
 
 document.querySelectorAll('[data-addlist]').forEach(btn=>{
@@ -9786,6 +9932,79 @@ document.getElementById('btnCatIconDefault').onclick = ()=>{
   renderAll();
 };
 
+/* ==================== Día 14 · sub-tarea 3: acciones secundarias de una categoría ====================
+   El botón de eliminar ya no vive pegado al avatar en la fila principal (evita el toque
+   accidental) — ahora "opciones" abre este sheet chico con "Cambiar ícono" (reabre el
+   selector de siempre) y "Eliminar categoría" (mismo mecanismo de intentarEliminarConfigItem,
+   con migración si hay gastos asociados). */
+let catAccionesTarget = null;   // { idx, item }
+function openCatAcciones(idx){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const item = state.config.categorias[idx];
+  if(!item) return;
+  catAccionesTarget = { idx, item };
+  document.getElementById('catAccionesTitle').textContent = item;
+  openSheet('sheetCatAcciones');
+}
+document.getElementById('btnCatAccIcono').onclick = ()=>{
+  if(!catAccionesTarget) return;
+  const item = catAccionesTarget.item;
+  closeSheet('sheetCatAcciones');
+  openCatIcon(item);
+};
+document.getElementById('btnCatAccEliminar').onclick = ()=>{
+  if(!catAccionesTarget) return;
+  const { idx } = catAccionesTarget;
+  closeSheet('sheetCatAcciones');
+  intentarEliminarConfigItem('categorias', idx);
+};
+
+/* ==================== Día 14 · sub-tarea 4: color personalizado por categoría ====================
+   Mismo patrón visual/de interacción que sheetCatIcon: grilla de swatches, uno activo si
+   coincide con el color guardado, y "Usar color automático" para volver al cálculo de
+   paleta fija de colorDeCategoria(). Paleta fija de 16 tonos, independiente de la paleta
+   de tema activa (Apariencia) para que se puedan distinguir categorías sin depender de
+   cuál esté elegida. */
+const CAT_COLOR_SET = [
+  '#C9A66B','#8B3A3A','#4C7A5E','#3B6B8F','#8A5FB0','#C77B45',
+  '#B0555A','#5B8C6E','#4A6FA5','#A0567A','#6B7A99','#9C8A4E',
+  '#7A4A6B','#4F8A8B','#B08642','#5C6B73'
+];
+let catColorTarget = null;   // nombre de categoría
+function openCatColor(catName){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!catName) return;
+  catColorTarget = catName;
+  document.getElementById('catColorTitle').textContent = 'Color de "' + catName + '"';
+  const cur = catColorPersonalizado(catName);
+  const grid = document.getElementById('catColorGrid');
+  grid.innerHTML = CAT_COLOR_SET.map(hex=>
+    `<button type="button" data-pickcolor="${hex}" class="${cur === hex ? 'active' : ''}" style="background:${hex};" aria-label="Color ${hex}">${icon('check')}</button>`
+  ).join('');
+  grid.querySelectorAll('[data-pickcolor]').forEach(b=>{
+    b.addEventListener('click', ()=> setCatColor(catColorTarget, b.dataset.pickcolor));
+  });
+  openSheet('sheetCatColor');
+}
+function setCatColor(catName, hex){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!state.config.categoriaColores) state.config.categoriaColores = {};
+  state.config.categoriaColores[catName] = hex;
+  saveState();
+  closeSheet('sheetCatColor');
+  renderConfig();
+  renderAll();
+}
+document.getElementById('btnCatColorDefault').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  // Borra la entrada -> colorDeCategoria() cae al cálculo de paleta fija de siempre.
+  if(catColorTarget && state.config.categoriaColores) delete state.config.categoriaColores[catColorTarget];
+  saveState();
+  closeSheet('sheetCatColor');
+  renderConfig();
+  renderAll();
+};
+
 /* ==================== PIN DE BLOQUEO LOCAL: eliminado (Tanda K) ====================
    El bloqueo con PIN (Tanda H) se retira por completo: tenia un bug no resuelto de
    toque desplazado con toques rapidos. No se reemplaza por ahora. Al cargar se borra
@@ -10046,7 +10265,8 @@ function validConfigShape(c){
   if(c === null || typeof c !== 'object' || Array.isArray(c)) return false;
   const optStrArr = a => a === undefined || (Array.isArray(a) && a.every(isStr));
   return optStrArr(c.categorias) && optStrArr(c.metodos) && optStrArr(c.fuentes)
-    && optPlainObj(c.categoriaIconos) && optPlainObj(c.categoriaTopes) && optStr(c.mesInicioRegistro);
+    && optPlainObj(c.categoriaIconos) && optPlainObj(c.categoriaTopes) && optPlainObj(c.categoriaColores)
+    && optStr(c.mesInicioRegistro);
 }
 // Devuelve null si el respaldo es aceptable (aunque le falten campos/secciones), o un
 // mensaje de error si está genuinamente corrupto.
@@ -10091,6 +10311,15 @@ function migrateBackup(parsed){
     Object.keys(c.categoriaTopes).forEach(k=>{
       const v = c.categoriaTopes[k];
       if(typeof v === 'number' && isFinite(v) && v > 0) config.categoriaTopes[k] = Math.round(v);
+    });
+  }
+  // Color personalizado por categoría: solo pares con hex válido de 6 dígitos; el resto
+  // se descarta (un respaldo viejo sin el campo cae directo a {} = todo color automático).
+  config.categoriaColores = {};
+  if(c.categoriaColores && typeof c.categoriaColores === 'object' && !Array.isArray(c.categoriaColores)){
+    Object.keys(c.categoriaColores).forEach(k=>{
+      const v = c.categoriaColores[k];
+      if(typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) config.categoriaColores[k] = v;
     });
   }
   if(config.paleta === undefined) config.paleta = 'cafe';
@@ -11227,7 +11456,11 @@ function colorDeFuente(nombre){
 // ranking de gasto del mes — así la misma categoría no cambia de color entre meses ni
 // al reordenar el gráfico de torta. Una categoría heredada que ya no está en la lista
 // (ej. una eliminada) cae al mismo fallback por hash del nombre que usa colorDeFuente.
+// Tanda día 14: si la categoría tiene un color personalizado (categoriaColores), ese
+// manda sobre todo lo demás — el cálculo de paleta fija de abajo queda como fallback.
 function colorDeCategoria(nombre){
+  const custom = catColorPersonalizado(nombre);
+  if(custom) return custom;
   const arr = (state.config && state.config.categorias) || [];
   const idx = arr.indexOf(nombre);
   if(idx >= 0) return sliceColor(idx);
@@ -11688,6 +11921,44 @@ function dispararNotificacionesCuotas(proximas){
 notificarCuotasProximas();
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible') notificarCuotasProximas();
+});
+
+/* ==================== Día 14 · sección "Notificaciones" en Configuración ====================
+   notificarCuotasProximas() (arriba) ya pide el permiso automáticamente cuando hay una
+   cuota real por vencer, sin ningún control visible. Esta sección solo agrega la
+   superficie de UI que faltaba dentro de "Datos y seguridad": mostrar el estado actual y
+   dejar pedir el permiso de forma proactiva, sin esperar a que haya una cuota próxima.
+   Reutiliza el mismo state.config.notifCuotasConcedido — no es un mecanismo nuevo. */
+function renderNotifRow(){
+  const status = document.getElementById('cfgNotifStatus');
+  const btn = document.getElementById('btnActivarNotif');
+  if(!status || !btn) return;
+  if(!('Notification' in window) || !('serviceWorker' in navigator)){
+    status.textContent = 'Este navegador no soporta notificaciones.';
+    btn.style.display = 'none';
+    return;
+  }
+  const perm = Notification.permission;
+  if(perm === 'granted'){
+    status.textContent = 'Avisos de cuotas: activados.';
+    btn.style.display = 'none';
+  } else if(perm === 'denied'){
+    status.textContent = 'Avisos de cuotas: bloqueados en el navegador. Para volver a activarlos, habilítalos desde la configuración de notificaciones del sitio.';
+    btn.style.display = 'none';
+  } else {
+    status.textContent = 'Avisos de cuotas: aún no activados.';
+    btn.style.display = '';
+  }
+}
+document.getElementById('btnActivarNotif').addEventListener('click', ()=>{
+  if(!('Notification' in window)) return;
+  Notification.requestPermission().then(permiso=>{
+    if(!state.config) state.config = {};
+    state.config.notifCuotasConcedido = (permiso === 'granted');
+    saveState();
+    renderNotifRow();
+    showToast(permiso === 'granted' ? 'Notificaciones activadas.' : 'No se concedió el permiso.', permiso === 'granted' ? 'success' : 'error');
+  }).catch(()=>{});
 });
 
 /* ---- ptos 3 y 4: banners discretos (recordatorio de respaldo + instalar app) ---- */
