@@ -1669,15 +1669,19 @@ button:active{ transform:scale(0.93); }
 /* ---------- RESUMEN: racha de registro diario (Tanda F-C5) ---------- */
 /* Tanda día 14 · pto 1: la fila combina la insignia de racha (izquierda) con el
    selector segmentado de vista (derecha); si no hay nada que mostrar en ninguno de
-   los dos, la fila colapsa sola porque ambos hijos quedan vacíos. */
-.resumen-toprow{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 8px;}
+   los dos, la fila colapsa sola porque ambos hijos quedan vacíos.
+   Tanda día 14 · toggle: flex-wrap:wrap para que, al expandirse la insignia a texto
+   completo, los botones de vista bajen a una segunda línea en vez de desbordar (ambos
+   hijos son de ancho fijo — no-shrink — así que el wrap es automático). */
+.resumen-toprow{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 8px; margin:0 0 8px;}
 .racha-registro-wrap{flex:0 1 auto; min-width:0;}
 .racha-badge{
   display:inline-flex; align-items:center; gap:4px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
   padding:5px 10px; font-size:12.5px; font-weight:700; color:var(--gold); line-height:1.2;
-  white-space:nowrap;
+  white-space:nowrap; font-family:inherit; cursor:pointer;
 }
+.racha-badge:active{ transform:scale(0.97); }
 :root.hc .racha-badge{color:var(--cream);}
 #rRachaRegistroRota:empty{display:none;}
 .racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:0 0 18px;}
@@ -5707,11 +5711,21 @@ function rachaRegistro(expenses, incomes){
   const streak = Math.round((hoy - inicioRachaActual) / 86400000) + 1;
   return { streak: Math.max(0, streak), rota };
 }
+// Tanda día 14 · toggle insignia de racha: estado puramente transitorio (no se guarda
+// en state/localStorage) — cada carga de la app arranca compacta, sin importar cómo
+// quedó la última vez.
+let rachaBadgeExpandida = false;
 function rachaRegistroHtml(){
   const r = rachaRegistro(state.expenses, state.incomes);
   if(r.streak === 0 && !r.rota) return { badge: '', rota: '' };
   const plural = r.streak === 1 ? 'día' : 'días';
-  const badge = `<span class="racha-badge" title="Racha de registro: ${r.streak} ${plural}" aria-label="Racha de registro: ${r.streak} ${plural}">${r.streak === 0 ? '0' : '🔥 ' + r.streak}</span>`;
+  const textoCompacto = r.streak === 0 ? '0' : '🔥 ' + r.streak;
+  const textoExpandido = `Racha de ${r.streak} ${plural} de registro`;
+  const resumen = `Racha de registro: ${r.streak} ${plural}`;
+  const badge = `<button type="button" class="racha-badge" id="rachaBadgeBtn"`
+    + ` aria-expanded="${rachaBadgeExpandida ? 'true' : 'false'}"`
+    + ` aria-label="${resumen}. ${rachaBadgeExpandida ? 'Toca para compactar.' : 'Toca para ver el detalle.'}"`
+    + ` title="${resumen}">${rachaBadgeExpandida ? textoExpandido : textoCompacto}</button>`;
   const rota = r.rota
     ? `<p class="racha-registro-rota">La racha se cortó el ${fmtDiaMes(r.rota.fecha)}: pasaron 5 días sin registrar ningún gasto ni ingreso.</p>`
     : '';
@@ -5724,6 +5738,11 @@ function renderRachaRegistro(){
   const { badge, rota } = rachaRegistroHtml();
   box.innerHTML = badge;
   rotaBox.innerHTML = rota;
+  const btn = box.querySelector('#rachaBadgeBtn');
+  if(btn) btn.addEventListener('click', ()=>{
+    rachaBadgeExpandida = !rachaBadgeExpandida;
+    renderRachaRegistro();
+  });
 }
 
 /* ==================== RENDER: METAS ==================== */
