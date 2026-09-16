@@ -134,6 +134,13 @@ cambio es "solo de navegación" o "solo visual", pensar si toca:
   15-09-2026 (categoría "Salud" residual, método "Débito" desincronizado)
   por reutilizar estado de sesiones de prueba previas sin verificarlo
   primero.
+- Antes de ejecutar cualquier automatización de navegador (clicks, forms,
+  scripts contra una pestaña abierta), confirmar el origen/URL de la
+  pestaña activa. No ejecutar nunca una automatización pensada para el
+  entorno local contra producción (telora.cl), salvo que esa sea la
+  intención declarada explícitamente de antemano. Motivo: incidente
+  confirmado el 13-09-2026, una automatización local se ejecutó por error
+  contra telora.cl con una escritura incondicional de categorías.
 
 ---
 
