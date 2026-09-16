@@ -1202,9 +1202,9 @@ button{font-family:inherit;}
    "Tus datos", "Apariencia" y "Datos y seguridad" son un <details class="cfg-group">
    que envuelve otros <details class="cfg-group"> (mismo patrón, un nivel más adentro).
    El segundo nivel se indenta con una guía vertical a la izquierda y un summary algo más
-   chico para que en 375px se lea la jerarquía sin cortar texto. "Onboarding" NO entra en
-   ningún grupo (no es un dato ni una preferencia de seguridad): sigue como fila de primer
-   nivel, igual que antes vivía "Respaldo de datos" (ahora dentro de "Datos y seguridad"). */
+   chico para que en 375px se lea la jerarquía sin cortar texto. "Respaldo de datos" y
+   "Tutorial" NO entran en ningún grupo (ni son un dato ni una preferencia de seguridad):
+   quedan como filas de primer nivel, sin agrupar. */
 .cfg-group-body > .cfg-group{
   border-left:2px solid var(--border);
   padding-left:12px;
@@ -2337,10 +2337,9 @@ button:active{ transform:scale(0.93); }
     <h2>Configuración</h2>
 
     <!-- Tanda I / día 14: 3 bloques colapsables de primer nivel (Tus datos, Apariencia,
-         Datos y seguridad). Cada ítem interno conserva su id y su comportamiento; solo
-         hay que abrir primero el bloque que lo contiene. "Onboarding" no calza en
-         ninguno de los 3 (no es un dato ni una preferencia de seguridad) y queda suelto,
-         como un ítem de tipo tutorial, igual que antes vivía "Respaldo de datos". -->
+         Datos y seguridad), más "Respaldo de datos" y "Tutorial" como bloques de
+         primer nivel propios (no anidados). Cada ítem interno conserva su id y su
+         comportamiento; solo hay que abrir primero el bloque que lo contiene. -->
     <details class="cfg-group">
       <summary>Tus datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
@@ -2446,19 +2445,6 @@ button:active{ transform:scale(0.93); }
         </details>
 
         <details class="cfg-group">
-          <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <p class="sheet-note" style="margin:0 0 12px;">
-              Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
-            </p>
-            <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
-            <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
-            <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
-            <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
-          </div>
-        </details>
-
-        <details class="cfg-group">
           <summary>Notificaciones <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
           <div class="cfg-group-body">
             <p class="sheet-note" style="margin:0 0 12px;">
@@ -2472,15 +2458,31 @@ button:active{ transform:scale(0.93); }
       </div>
     </details>
 
-    <!-- Onboarding: fuera de los 3 bloques (decisión del usuario, día 14 — es un tutorial,
+    <!-- Respaldo de datos: bloque de primer nivel propio (antes anidado en "Datos y
+         seguridad"). Es la funcionalidad más importante para evitar pérdida de datos,
+         así que queda visible con un toque menos. -->
+    <details class="cfg-group">
+      <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <p class="sheet-note" style="margin:0 0 12px;">
+          Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
+        </p>
+        <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
+        <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
+        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
+      </div>
+    </details>
+
+    <!-- Tutorial: fuera de los 3 bloques (decisión del usuario, día 14 — es un tutorial,
          no un dato ni una preferencia de seguridad). Fila de primer nivel, sin agrupar. -->
     <details class="cfg-group">
-      <summary>Onboarding <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <summary>Tutorial <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
       <div class="cfg-group-body">
         <p class="sheet-note" style="margin:0 0 12px;">
           Vuelve a recorrer los 6 pasos de bienvenida (fuentes, ingreso, categorías, gastos fijos, cuotas y una meta). Tus categorías y fuentes actuales no se borran ni se reinician: aparecen ya marcadas.
         </p>
-        <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el onboarding</button>
+        <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el tutorial</button>
       </div>
     </details>
 
