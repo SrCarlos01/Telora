@@ -3004,6 +3004,27 @@ function migrarEstadoCuentas(st){
 
   return st;
 }
+// Tanda 15 (reabierta): reconciliación no destructiva de config.fuentes contra los
+// ingresos reales. Cada ingreso guarda su fuente como texto libre en `source` (no
+// una referencia a config.fuentes), así que es seguro reconstruir la lista a partir
+// de los datos: se agrega cualquier fuente que los ingresos sigan usando pero que
+// ya no esté en config.fuentes (p. ej. tras el bug de Día 14, donde relanzar el
+// onboarding sobrescribía config.fuentes en vez de fusionar) — mismo espíritu que
+// la reconciliación de métodos/fuentes de la Tanda W (migrateBackup), adaptada a
+// loadState(). Nunca elimina nada; una fuente perdida sin ningún ingreso que la
+// referencie no se puede reconstruir (no hay traza en los datos) y queda fuera,
+// a propósito. Corre siempre, incondicionalmente, igual que el resto de las
+// migraciones de loadState().
+function reconciliarFuentesConDatos(st){
+  if(!st || typeof st !== 'object' || Array.isArray(st)) return st;
+  if(!st.config || typeof st.config !== 'object' || Array.isArray(st.config)) st.config = {};
+  if(!Array.isArray(st.config.fuentes)) st.config.fuentes = [];
+  if(Array.isArray(st.incomes)){
+    new Set(st.incomes.map(i => (i && typeof i.source === 'string') ? i.source : null).filter(s => s))
+      .forEach(s => { if(!st.config.fuentes.includes(s)) st.config.fuentes.push(s); });
+  }
+  return st;
+}
 // Tanda L1: ¿el cuentaId de una deuda/meta apunta a algo real? (cuenta existente —
 // viva o archivada — o el centinela 'compartida'). Lo usan el aviso de migración y,
 // desde L2, el predicado match() del motor.
@@ -3158,6 +3179,7 @@ function loadState(){
     if(parsed.config.notifCuotasConcedido !== true && parsed.config.notifCuotasConcedido !== false){
       parsed.config.notifCuotasConcedido = null;
     }
+    reconciliarFuentesConDatos(parsed);   // Tanda 15 (reabierta): repone en config.fuentes lo que los ingresos reales siguen usando
     const migrado = migrarEstadoCuentas(parsed);   // Tanda C1: accounts/transfers/cuentaActiva + guardarraíl de cuentaId
     migrado.schemaVersion = CURRENT_SCHEMA_VERSION;   // Tanda T11: el estado que sale de acá siempre queda al día
     return migrado;

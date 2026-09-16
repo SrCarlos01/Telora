@@ -997,6 +997,81 @@ function runTests(){
       `Obtenido: total="${datosTotal.ctaLabel}", acc2="${datosCuenta.ctaLabel}"`);
   }
 
+  // ==================== TANDA 15 (reabierta) — reconciliarFuentesConDatos() ====================
+  // Reconciliación automática de config.fuentes contra los ingresos reales, agregada
+  // en index.html junto a migrarEstadoCuentas() y llamada desde loadState(). Es una
+  // función pura sobre el objeto que recibe (no toca `state` ni requiere resetCaches),
+  // así que se llama directo con fixtures propios y aislados, sin pasar por setState().
+
+  // ---- (a) caso real del incidente: 'Otros' es la única fuente en config, pero los
+  // ingresos reales siguen referenciando 'Iustax', 'Agrupación' y 'Sesiones Online'
+  // (perdidas por el bug de Día 14) -> las 4 deben quedar en config.fuentes, las nuevas
+  // al final y en el orden en que aparecen recorriendo los ingresos.
+  {
+    const st = { config: { fuentes: ['Otros'] }, incomes: [
+      { id:'i1', source:'Iustax' },
+      { id:'i2', source:'Agrupación' },
+      { id:'i3', source:'Sesiones Online' }
+    ] };
+    const out = win.reconciliarFuentesConDatos(st);
+    assert(
+      JSON.stringify(out.config.fuentes) === JSON.stringify(['Otros','Iustax','Agrupación','Sesiones Online']),
+      `reconciliarFuentesConDatos: repone 'Iustax'/'Agrupación'/'Sesiones Online' perdidas, sin borrar 'Otros', al final y en orden de aparición`,
+      `Obtenido: ${JSON.stringify(out.config.fuentes)}`
+    );
+  }
+
+  // ---- (b) nada que reconciliar: config.fuentes ya cubre todas las fuentes usadas ->
+  // ninguna mutación (mismo contenido, mismo orden).
+  {
+    const fuentesOriginal = ['Sueldo','Trabajos extra','Ventas'];
+    const st = { config: { fuentes: fuentesOriginal.slice() }, incomes: [
+      { id:'i1', source:'Sueldo' }, { id:'i2', source:'Ventas' }
+    ] };
+    const out = win.reconciliarFuentesConDatos(st);
+    assert(
+      JSON.stringify(out.config.fuentes) === JSON.stringify(fuentesOriginal),
+      `reconciliarFuentesConDatos: nada que reconciliar -> config.fuentes queda intacto`,
+      `Obtenido: ${JSON.stringify(out.config.fuentes)}`
+    );
+  }
+
+  // ---- (c) fuente borrada intencionalmente (Tanda W, borrado con reasignación completa):
+  // simula el mecanismo REAL de cfgMigrarConfirm (index.html ~9594-9598): reasigna
+  // primero cada ingreso que usaba 'Otros' a otra fuente y RECIÉN DESPUÉS lo saca de
+  // config.fuentes -- no un fixture que nunca tuvo 'Otros' referenciado (eso pasaría
+  // con cualquier implementación, incluso una rota, y no probaría nada sobre el riesgo
+  // real: que la reconciliación reviva algo que el usuario borró a propósito).
+  {
+    const item = 'Otros', dest = 'Sueldo';
+    const st = { config: { fuentes: ['Sueldo','Ventas','Otros'] }, incomes: [
+      { id:'i1', source:'Otros' }, { id:'i2', source:'Ventas' }, { id:'i3', source:'Otros' }
+    ] };
+    st.incomes.forEach(r=>{ if(r.source === item) r.source = dest; });   // paso 1 del flujo real: reasignar
+    st.config.fuentes.splice(st.config.fuentes.indexOf(item), 1);        // paso 2 del flujo real: recién ahí, splice
+    const out = win.reconciliarFuentesConDatos(st);
+    assert(
+      !out.config.fuentes.includes('Otros') && out.config.fuentes.length === 2
+        && out.incomes.every(r=> r.source !== 'Otros'),
+      `reconciliarFuentesConDatos: tras reasignación real (Tanda W) ningún ingreso referencia 'Otros' -> la reconciliación no la revive`,
+      `Obtenido: fuentes=${JSON.stringify(out.config.fuentes)}, incomes.source=${JSON.stringify(out.incomes.map(r=>r.source))}`
+    );
+  }
+
+  // ---- (d) no falla con incomes vacío o ausente (estado nuevo, sin datos) ----
+  {
+    const st1 = { config: { fuentes: ['Sueldo'] }, incomes: [] };
+    const st2 = { config: { fuentes: ['Sueldo'] } };
+    const out1 = win.reconciliarFuentesConDatos(st1);
+    const out2 = win.reconciliarFuentesConDatos(st2);
+    assert(
+      JSON.stringify(out1.config.fuentes) === JSON.stringify(['Sueldo']) &&
+      JSON.stringify(out2.config.fuentes) === JSON.stringify(['Sueldo']),
+      `reconciliarFuentesConDatos: no falla ni muta de más con incomes vacío o ausente`,
+      `Obtenido: st1=${JSON.stringify(out1.config.fuentes)}, st2=${JSON.stringify(out2.config.fuentes)}`
+    );
+  }
+
   renderResultados();
   checkLocalStorage();
 }
