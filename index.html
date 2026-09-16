@@ -7147,17 +7147,17 @@ function variacionCategorias(curr, prev){
 //  c1 = creció más de 25% respecto a sí misma el mes anterior (necesita mes previo con datos)
 //  c2 = representa más de 35% del gasto total del mes actual
 // Si cumple ambas, se marca `doble` para distinguirla visualmente.
+// Tanda día 14 (unificación): consume variacionCategorias() en vez de recalcular sus
+// propios deltas — misma fuente que categoriasBajoControl() y la "Categoría con mayor
+// variación" de renderInsights, para que las tres lean exactamente el mismo cálculo.
 function categoriasEnAlerta(data, prevData, prevTiene){
   const res = [];
-  Object.entries(data.catTotals).forEach(([cat, val])=>{
-    if(val <= 0) return;
+  variacionCategorias(data.catTotals, prevData.catTotals).forEach(v=>{
+    if(v.curr <= 0) return;
     let c1 = false, c2 = false;
-    if(prevTiene){
-      const pv = prevData.catTotals[cat] || 0;
-      if(pv > 0 && (val - pv) / pv > 0.25) c1 = true;
-    }
-    if(data.gastoTotal > 0 && val / data.gastoTotal > 0.35) c2 = true;
-    if(c1 || c2) res.push({ cat, val, c1, c2 });
+    if(prevTiene && v.prev > 0 && v.pct > 25) c1 = true;
+    if(data.gastoTotal > 0 && v.curr / data.gastoTotal > 0.35) c2 = true;
+    if(c1 || c2) res.push({ cat: v.cat, val: v.curr, c1, c2 });
   });
   return res.sort((a,b)=> b.val - a.val);
 }
@@ -7168,13 +7168,15 @@ function categoriasEnAlerta(data, prevData, prevTiene){
 // comparable (prevTiene), igual que c1: sin "antes" no hay variación que calcular.
 // Solo considera categorías que SÍ tuvieron gasto el mes anterior (pv > 0) — igual que
 // c1 (pv > 0 evita división por cero y "categoría nueva" no cuenta como una que bajó).
+// Tanda día 14 (unificación): misma fuente de deltas que categoriasEnAlerta(), vía
+// variacionCategorias() — ver comentario ahí.
 function categoriasBajoControl(data, prevData, prevTiene){
   if(!prevTiene) return [];
   const res = [];
-  Object.entries(prevData.catTotals).forEach(([cat, pv])=>{
-    if(pv <= 0) return;
-    const val = data.catTotals[cat] || 0;
-    if((pv - val) / pv > 0.25) res.push({ cat, val, pv, ahorro: pv - val });
+  variacionCategorias(data.catTotals, prevData.catTotals).forEach(v=>{
+    if(v.prev <= 0) return;
+    const ahorro = v.prev - v.curr;
+    if(ahorro / v.prev > 0.25) res.push({ cat: v.cat, val: v.curr, pv: v.prev, ahorro });
   });
   return res.sort((a,b)=> b.ahorro - a.ahorro);   // mejora más grande (en $) primero
 }
@@ -7576,7 +7578,8 @@ function renderInsights(){
   // data/prevData): así descartar "comida" en septiembre no oculta "comida" en
   // octubre. metasRecienCumplidas() en cambio está anclado a HOY (no a currentDate,
   // ver su comentario), así que el id de meta no necesita mk propio.
-  const bajoControlCards = categoriasBajoControl(data, prevData, prevTiene).slice(0, 2).map(b=>{
+  const bajoControlList = categoriasBajoControl(data, prevData, prevTiene);
+  const bajoControlCards = bajoControlList.slice(0, 2).map(b=>{
     const id = 'categoria-bajo-control-' + mkActual + '-' + b.cat;
     return { id, html: `<div class="insight-cuota-libre insight-dismiss" data-insight-id="${escAttr(id)}">${xIns}Gastaste ${money(b.ahorro)} menos en ${escHtml(b.cat)} que el mes pasado.</div>` };
   });
@@ -7634,17 +7637,28 @@ function renderInsights(){
   const cmpHtml = `<div class="insight-block"><p class="insight-block-title">Comparación con el mes anterior</p>${cmpEstadosHtml}${cmpBody}</div>`;
 
   // ---- d) Categoría con mayor variación ----
+  // Tanda día 14 (unificación): excluye categorías que ya aparecen arriba en el mismo
+  // render — como tarjeta de "bajo control" (núcleo fijo, las 2 que realmente se
+  // muestran, no todas las calculadas) o como "categoría en alerta" (dentro de este
+  // mismo bloque "Más insights", en Proyección de fin de mes) — para no repetir el
+  // mismo hecho dos veces en la pantalla. Si tras excluirlas no queda ninguna variación
+  // que destacar, se muestra un fallback explícito en vez de dejar el bloque vacío.
   let varBody;
   if(!prevTiene){
     varBody = `<p class="insight-nodata">Aún no hay datos del mes anterior para comparar.</p>`;
   } else {
-    const inc = varCats.filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
-    const dec = varCats.filter(v=> v.delta < 0).sort((a,b)=> a.delta - b.delta)[0];
+    const catsYaMostradas = new Set([
+      ...alertas.map(a=> a.cat),
+      ...bajoControlList.slice(0, 2).map(b=> b.cat)
+    ]);
+    const varCatsRestantes = varCats.filter(v=> !catsYaMostradas.has(v.cat));
+    const inc = varCatsRestantes.filter(v=> v.delta > 0).sort((a,b)=> b.delta - a.delta)[0];
+    const dec = varCatsRestantes.filter(v=> v.delta < 0).sort((a,b)=> a.delta - b.delta)[0];
     const pctTxt = v => v.pct === null ? 'nueva' : (v.pct >= 0 ? '+' : '') + Math.round(v.pct) + '%';
     const parts = [];
     if(inc) parts.push(`<div class="insight-var-row up"><span>▲ ${escHtml(inc.cat)}</span><span>+${money(inc.delta)} · ${pctTxt(inc)}</span></div>`);
     if(dec) parts.push(`<div class="insight-var-row down"><span>▼ ${escHtml(dec.cat)}</span><span>−${money(Math.abs(dec.delta))} · ${Math.round(dec.pct)}%</span></div>`);
-    varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin cambios de categoría respecto al mes anterior.</p>`;
+    varBody = parts.length ? parts.join('') : `<p class="insight-nodata">Sin variaciones adicionales que destacar este mes.</p>`;
   }
   const varHtml = `<div class="insight-block"><p class="insight-block-title">Categoría con mayor variación</p>${varBody}</div>`;
 
