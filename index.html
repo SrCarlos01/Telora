@@ -12409,6 +12409,20 @@ function onboardingContinuarFijos(){
 document.getElementById('obBtnVolver').addEventListener('click', ()=>{
   if(onboardingPaso >= 2 && onboardingPaso <= 6) onboardingAvanzarA(onboardingPaso - 1);
 });
+
+/* Tanda día 14: fusión no destructiva para fuentes/categorías al relanzar el
+   onboarding (mismo criterio que la reconciliación de migrateBackup() para
+   ítems huérfanos). Los Pasos 1 y 3 solo muestran checkboxes para los nombres
+   de `listaEncuesta` — cualquier fuente/categoría personalizada que el usuario
+   ya tuviera y no esté en esa lista fija nunca aparece como opción, así que se
+   conserva automáticamente en vez de perderse al sobrescribir con lo marcado. */
+function fusionarListaOnboarding(marcadas, listaEncuesta, actual){
+  const resultado = marcadas.slice();
+  (actual || []).forEach(item=>{
+    if(!listaEncuesta.includes(item) && !resultado.includes(item)) resultado.push(item);
+  });
+  return resultado;
+}
 document.getElementById('obBody').addEventListener('click', e=>{
   const el = e.target.closest('[data-ob]');
   if(!el) return;
@@ -12417,8 +12431,10 @@ document.getElementById('obBody').addEventListener('click', e=>{
   else if(accion === 'saltar-todo') onboardingFinalizar(true);
   else if(accion === 'continuar-fuentes'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
-    onboardingFuentesSesion = marcadas;
-    if(marcadas.length){ state.config.fuentes = marcadas; saveState(); }
+    onboardingFuentesSesion = onboardingEsRelanzamiento
+      ? fusionarListaOnboarding(marcadas, ENCUESTA_FUENTES, state.config.fuentes)
+      : marcadas;
+    if(onboardingFuentesSesion.length){ state.config.fuentes = onboardingFuentesSesion; saveState(); }
     onboardingAvanzarA(2);
   }
   else if(accion === 'saltar-fuentes') onboardingAvanzarA(2);
@@ -12430,7 +12446,10 @@ document.getElementById('obBody').addEventListener('click', e=>{
   else if(accion === 'saltar-ingreso') onboardingAvanzarA(3);
   else if(accion === 'continuar-categorias'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
-    onboardingCategoriasSesion = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
+    const base = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
+    onboardingCategoriasSesion = onboardingEsRelanzamiento
+      ? fusionarListaOnboarding(base, ENCUESTA_CATEGORIAS, state.config.categorias)
+      : base;
     state.config.categorias = onboardingCategoriasSesion;
     saveState();
     onboardingAvanzarA(4);
