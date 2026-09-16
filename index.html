@@ -1208,12 +1208,16 @@ button{font-family:inherit;}
 .cfg-group-body .config-list{margin-bottom:10px;}
 
 /* ==================== Tanda I / día 14 · Configuración agrupada (accordion anidado) ====================
-   "Tus datos", "Apariencia" y "Datos y seguridad" son un <details class="cfg-group">
-   que envuelve otros <details class="cfg-group"> (mismo patrón, un nivel más adentro).
-   El segundo nivel se indenta con una guía vertical a la izquierda y un summary algo más
-   chico para que en 375px se lea la jerarquía sin cortar texto. "Respaldo de datos" y
+   "Apariencia" y "Datos y seguridad" son un <details class="cfg-group"> que envuelve
+   otros <details class="cfg-group"> (mismo patrón, un nivel más adentro). El segundo
+   nivel se indenta con una guía vertical a la izquierda y un summary algo más chico
+   para que en 375px se lea la jerarquía sin cortar texto. "Respaldo de datos" y
    "Tutorial" NO entran en ningún grupo (ni son un dato ni una preferencia de seguridad):
-   quedan como filas de primer nivel, sin agrupar. */
+   quedan como filas de primer nivel, sin agrupar.
+   Día 15: "Tus datos" (que agrupaba Categorías/Métodos/Fuentes/Cuentas/Mes de inicio)
+   se aplanó — esos 5 pasaron a ser bloques de primer nivel propios, por lo que ya no
+   matchean esta regla `.cfg-group-body > .cfg-group` y heredan el estilo plano de
+   `.cfg-group > summary` de más arriba, igual que Apariencia/Datos y seguridad. */
 .cfg-group-body > .cfg-group{
   border-left:2px solid var(--border);
   padding-left:12px;
@@ -2353,14 +2357,13 @@ button:active{ transform:scale(0.93); }
     <div class="sheet-handle"></div>
     <h2>Configuración</h2>
 
-    <!-- Tanda I / día 14: 3 bloques colapsables de primer nivel (Tus datos, Apariencia,
-         Datos y seguridad), más "Respaldo de datos" y "Tutorial" como bloques de
-         primer nivel propios (no anidados). Cada ítem interno conserva su id y su
-         comportamiento; solo hay que abrir primero el bloque que lo contiene. -->
-    <details class="cfg-group">
-      <summary>Tus datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-
+    <!-- Tanda I / día 14: bloques colapsables de primer nivel (Apariencia, Datos y
+         seguridad), más "Respaldo de datos" y "Tutorial" como bloques de primer nivel
+         propios (no anidados). Cada ítem interno conserva su id y su comportamiento;
+         solo hay que abrir primero el bloque que lo contiene.
+         Día 15: el envoltorio "Tus datos" que agrupaba los siguientes 5 acordeones se
+         eliminó (Opción A, Hallazgo 5) — ahora son bloques de primer nivel propios,
+         igual que Apariencia/Datos y seguridad, en el mismo orden interno de antes. -->
         <details class="cfg-group">
           <summary>Categorías de gastos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
           <div class="cfg-group-body">
@@ -2409,11 +2412,8 @@ button:active{ transform:scale(0.93); }
           </div>
         </details>
 
-      </div>
-    </details>
-
     <!-- Respaldo de datos: bloque de primer nivel propio, en segunda posición (justo
-         después de "Tus datos") y con más peso visual (negrita + acento --gold en vez
+         después de "Mes de inicio de registro") y con más peso visual (negrita + acento --gold en vez
          de --gold-dim) — es la funcionalidad más importante para evitar pérdida de
          datos, así que no debe leerse como un bloque más entre los demás. -->
     <details class="cfg-group cfg-group-destacado">
