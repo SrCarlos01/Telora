@@ -1199,6 +1199,12 @@ button{font-family:inherit;}
 .cfg-group > summary .icon{width:16px; height:16px; transition:transform .2s ease; flex-shrink:0;}
 .cfg-group[open] > summary .icon{transform:rotate(180deg);}
 .cfg-group-body{padding:2px 0 16px;}
+/* Día 14 · "Respaldo de datos" en 2ª posición: más peso visual que los demás bloques
+   de primer nivel (negrita + --gold en vez de --gold-dim, ambos ya de la paleta) para
+   que no se lea como un bloque más — es la función más importante contra pérdida de
+   datos. */
+.cfg-group-destacado > summary{color:var(--gold); font-weight:700;}
+.cfg-group-destacado > summary .icon{color:var(--gold);}
 .cfg-group-body .config-list{margin-bottom:10px;}
 
 /* ==================== Tanda I / día 14 · Configuración agrupada (accordion anidado) ====================
@@ -2356,7 +2362,7 @@ button:active{ transform:scale(0.93); }
       <div class="cfg-group-body">
 
         <details class="cfg-group">
-          <summary>Categoría de gastos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+          <summary>Categorías de gastos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
           <div class="cfg-group-body">
             <div class="config-list" id="cfgCategorias"></div>
             <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
@@ -2403,6 +2409,23 @@ button:active{ transform:scale(0.93); }
           </div>
         </details>
 
+      </div>
+    </details>
+
+    <!-- Respaldo de datos: bloque de primer nivel propio, en segunda posición (justo
+         después de "Tus datos") y con más peso visual (negrita + acento --gold en vez
+         de --gold-dim) — es la funcionalidad más importante para evitar pérdida de
+         datos, así que no debe leerse como un bloque más entre los demás. -->
+    <details class="cfg-group cfg-group-destacado">
+      <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <p class="sheet-note" style="margin:0 0 12px;">
+          Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
+        </p>
+        <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
+        <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
+        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
       </div>
     </details>
 
@@ -2466,22 +2489,6 @@ button:active{ transform:scale(0.93); }
           </div>
         </details>
 
-      </div>
-    </details>
-
-    <!-- Respaldo de datos: bloque de primer nivel propio (antes anidado en "Datos y
-         seguridad"). Es la funcionalidad más importante para evitar pérdida de datos,
-         así que queda visible con un toque menos. -->
-    <details class="cfg-group">
-      <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-        <p class="sheet-note" style="margin:0 0 12px;">
-          Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
-        </p>
-        <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
-        <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
-        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
-        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
       </div>
     </details>
 
@@ -7577,6 +7584,15 @@ function fechaHoyLocalISO(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+// Día 14 · filas de Historial (gasto/ingreso) del día de hoy: mismo mecanismo genérico
+// --li-accent que ya pinta la barra izquierda por categoría/fuente (ver .list-item::before),
+// solo que para "hoy" el valor pasa a ser var(--gold) — el mismo color que ya usa
+// .hist-day-sep-hoy en el encabezado — en vez de crear una barra o propiedad aparte.
+// Como es el mismo --li-accent, no hay choque visual posible: gana uno u otro, nunca los
+// dos a la vez. Fuente única de "hoy": fechaHoyLocalISO() (no currentDate).
+function liAccentDia(fecha, colorBase){
+  return fecha === fechaHoyLocalISO() ? 'var(--gold)' : colorBase;
+}
 function insightsDescartadosHoy(){
   const b = state.config && state.config.insightsDescartados;
   if(!b || typeof b !== 'object' || b.fecha !== fechaHoyLocalISO() || !Array.isArray(b.ids)) return new Set();
@@ -8781,7 +8797,7 @@ function renderHistorial(){
       // aparece al expandir el Detalle, dentro de .li-sub.
       const nom = e.nombre || e.description || '';
       return `
-      <div class="list-item${expCls}" data-editexpense="${e.id}" style="--li-accent:${colorDeCategoria(e.category)};">
+      <div class="list-item${expCls}" data-editexpense="${e.id}" style="--li-accent:${liAccentDia(e.date, colorDeCategoria(e.category))};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
@@ -8814,7 +8830,7 @@ function renderHistorial(){
       const rb = rangoFijoRowBits(i, 'ingreso');
       const fuente = (i.source && String(i.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${i.id}" style="--li-accent:${colorDeFuente(fuente)};">
+      <div class="list-item income${expCls}" data-editincome="${i.id}" style="--li-accent:${liAccentDia(i.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
@@ -8927,7 +8943,7 @@ function renderHistorialTodo(box){
       const rb = rangoFijoRowBits(it, 'ingreso');
       const fuente = (it.source && String(it.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${it.id}" style="--li-accent:${colorDeFuente(fuente)};">
+      <div class="list-item income${expCls}" data-editincome="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
@@ -9003,7 +9019,7 @@ function renderHistorialTodo(box){
       }
     }
     return `
-      <div class="list-item${expCls}" data-editexpense="${it.id}" style="--li-accent:${colorDeCategoria(it.category)};">
+      <div class="list-item${expCls}" data-editexpense="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeCategoria(it.category))};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
@@ -9457,16 +9473,46 @@ function iniciarRenombreConfig(key, idx, box){
   });
 }
 
-/* ---- Eliminar un ítem de Configuración (Tanda W; día 14: extendido a categorías) ----
+/* ---- Eliminar un ítem de Configuración (Tanda W; día 14: extendido a categorías;
+   día 14 · tanda de hoy: toast+Deshacer en el caso sin uso) ----
    Único punto de entrada para borrar de metodos/fuentes/categorias: sin uso -> borra
-   directo; con uso -> exige elegir destino primero (abrirMigracionConfig). Antes,
-   categorías tenía un atajo aparte que borraba sin avisar aunque tuviera gastos
-   asociados (bug de borrado silencioso) — ahora pasa por el mismo camino. */
+   directo con toast+Deshacer de 10s (mismo mecanismo de snapshot que usa el resto de
+   la app para gastos/ingresos/transferencias — ver restoreDeleteSnapshot); con uso ->
+   exige elegir destino primero (abrirMigracionConfig). Antes, categorías tenía un
+   atajo aparte que borraba sin avisar aunque tuviera gastos asociados (bug de borrado
+   silencioso) — ahora pasa por el mismo camino. */
+const CONFIG_ITEM_ETIQUETA = {
+  categorias: { nombre: 'Categoría', eliminado: 'eliminada' },
+  metodos:    { nombre: 'Método',    eliminado: 'eliminado' },
+  fuentes:    { nombre: 'Fuente',    eliminado: 'eliminada' }
+};
+// Restaura un ítem de categorías/métodos/fuentes borrado sin uso: lo reinserta en su
+// posición original y, si era categoría, repone ícono/color/tope exactamente como
+// estaban (mismo principio de "snapshot, no reconstrucción" que restoreDeleteSnapshot).
+function restoreConfigItemSnapshot(snap){
+  if(!snap) return;
+  const arr = state.config[snap.key];
+  if(arr && !arr.includes(snap.item)) arr.splice(Math.min(snap.idx, arr.length), 0, snap.item);
+  if(snap.key === 'categorias'){
+    if(snap.icono !== undefined){ if(!state.config.categoriaIconos) state.config.categoriaIconos = {}; state.config.categoriaIconos[snap.item] = snap.icono; }
+    if(snap.tope  !== undefined){ if(!state.config.categoriaTopes)  state.config.categoriaTopes  = {}; state.config.categoriaTopes[snap.item]  = snap.tope; }
+    if(snap.color !== undefined){ if(!state.config.categoriaColores) state.config.categoriaColores = {}; state.config.categoriaColores[snap.item] = snap.color; }
+  }
+  saveState();
+  renderConfig();
+  renderAll();
+}
 function intentarEliminarConfigItem(key, idx){
   if(isReadOnly()){ blockReadOnly(); return; }
   const item = state.config[key][idx];
   const n = contarUso(key, item);
   if(n === 0){
+    const snap = { key, idx, item };
+    if(key === 'categorias'){
+      if(state.config.categoriaIconos && item in state.config.categoriaIconos) snap.icono = state.config.categoriaIconos[item];
+      if(state.config.categoriaTopes  && item in state.config.categoriaTopes)  snap.tope  = state.config.categoriaTopes[item];
+      if(state.config.categoriaColores && item in state.config.categoriaColores) snap.color = state.config.categoriaColores[item];
+    }
     state.config[key].splice(idx, 1);
     if(key === 'categorias'){
       if(state.config.categoriaIconos) delete state.config.categoriaIconos[item];
@@ -9474,6 +9520,8 @@ function intentarEliminarConfigItem(key, idx){
       if(state.config.categoriaColores) delete state.config.categoriaColores[item];
     }
     haptic(HAPTIC_DELETE); saveState(); renderConfig();
+    const et = CONFIG_ITEM_ETIQUETA[key] || { nombre: 'Ítem', eliminado: 'eliminado' };
+    showToast(`${et.nombre} «${item}» ${et.eliminado}.`, null, 10000, { label:'Deshacer', onClick:()=> restoreConfigItemSnapshot(snap) });
     return;
   }
   if(state.config[key].length === 1){
