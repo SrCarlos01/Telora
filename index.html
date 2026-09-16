@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>MisFinanzas</title>
+<title>Telora</title>
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MisFinanzas">
-<meta name="application-name" content="MisFinanzas">
+<meta name="apple-mobile-web-app-title" content="Telora">
+<meta name="application-name" content="Telora">
 <meta name="theme-color" content="#1B1210">
 
 <link rel="manifest" href="manifest.json">
@@ -1731,7 +1731,7 @@ button:active{ transform:scale(0.93); }
   <div class="topbar">
     <div class="brand">
       <div class="mark">$</div>
-      <span class="name">MisFinanzas</span>
+      <span class="name">Telora</span>
     </div>
     <div class="top-actions">
       <button class="icon-btn" id="btnResumenImg" aria-label="Guardar resumen como imagen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
@@ -1760,7 +1760,7 @@ button:active{ transform:scale(0.93); }
   <!-- Tanda Q · pto 3: invitación a instalar (solo si la app corre en el navegador) -->
   <div class="notice-bar" id="installBanner" hidden>
     <div class="notice-bar-txt">
-      <strong>Instala MisFinanzas</strong>
+      <strong>Instala Telora</strong>
       <span id="installBannerHint"></span>
     </div>
     <div class="notice-bar-actions">
@@ -2505,7 +2505,7 @@ button:active{ transform:scale(0.93); }
     </details>
 
     <p class="sheet-note" id="cfgBuildInfo" style="margin:18px 0 0; text-align:center; font-size:11px; opacity:.55;">
-      MisFinanzas · versión <span id="cfgBuildTag">—</span>
+      Telora · versión <span id="cfgBuildTag">—</span>
     </p>
     <button class="btn-ghost" data-close style="margin-top:10px;">Cerrar</button>
   </div>
@@ -2638,7 +2638,7 @@ button:active{ transform:scale(0.93); }
     <div class="sheet-handle"></div>
     <div class="brand" style="justify-content:center; margin-bottom:16px;">
       <div class="mark">$</div>
-      <span class="name">MisFinanzas</span>
+      <span class="name">Telora</span>
     </div>
     <h2 style="text-align:center;">Tu respaldo está listo</h2>
     <p class="sheet-note" id="backupSummaryText" style="text-align:center; margin:-4px 0 4px;"></p>
@@ -10138,7 +10138,7 @@ document.getElementById('cfgReadOnly').addEventListener('change', e=>{
 function buildBackupFile(){
   const payload = JSON.stringify(state, null, 2);
   const fecha = new Date().toISOString().slice(0,10);
-  const filename = `MisFinanzas_respaldo_${fecha}.json`;
+  const filename = `Telora_respaldo_${fecha}.json`;
   const blob = new Blob([payload], {type:'application/json'});
   let file = null;
   try{ file = new File([blob], filename, {type:'application/json'}); }catch(_){ /* File API no disponible: solo queda la descarga */ }
@@ -10204,7 +10204,7 @@ function showSaveErrorDialog(kind, attemptedJSON){
       const url  = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `MisFinanzas_respaldo_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `Telora_respaldo_${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -10234,7 +10234,7 @@ document.getElementById('btnBackupData').onclick = ()=>{
 document.getElementById('btnBackupShare').onclick = async ()=>{
   if(!pendingBackup || !pendingBackup.file) return;
   try{
-    await navigator.share({ files:[pendingBackup.file], title:'Respaldo de MisFinanzas' });
+    await navigator.share({ files:[pendingBackup.file], title:'Respaldo de Telora' });
     markBackupDone();   // Tanda Q · pto 4: compartir también cuenta como respaldo hecho
   }catch(err){
     if(err && err.name === 'AbortError') return;   // el usuario cerró el share sheet: no es un error
@@ -10335,7 +10335,7 @@ function validConfigShape(c){
 // mensaje de error si está genuinamente corrupto.
 function validateBackupShape(parsed){
   if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-    return 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.';
+    return 'Este archivo no tiene el formato esperado de un respaldo de Telora.';
   if(!validConfigShape(parsed.config))
     return 'La configuración del respaldo tiene un formato inválido.';
   const checkArr = (v, every, msg) => {
@@ -10351,7 +10351,7 @@ function validateBackupShape(parsed){
       || checkArr(parsed.transfers, validTransferShape, 'La lista de transferencias del respaldo tiene un formato inválido.')  // Tanda C1/C4 — ausente = OK
       || ((parsed.config === undefined && parsed.expenses === undefined && parsed.incomes === undefined
            && parsed.debts === undefined && parsed.goals === undefined)
-            ? 'Este archivo no tiene el formato esperado de un respaldo de MisFinanzas.' : null);
+            ? 'Este archivo no tiene el formato esperado de un respaldo de Telora.' : null);
 }
 
 /* ---- Migración: completa con defaults lo que falte, conserva lo que el archivo trae ---- */
@@ -10732,7 +10732,7 @@ document.getElementById('btnShareExport').onclick = async ()=>{
     closeSheet('sheetExportar');
     return;
   }
-  await shareFile(file, 'Exportación de MisFinanzas', 'No se pudo compartir. Prueba "Generar Excel".');
+  await shareFile(file, 'Exportación de Telora', 'No se pudo compartir. Prueba "Generar Excel".');
   closeSheet('sheetExportar');
 };
 
@@ -10798,7 +10798,7 @@ function buildExportWorkbook(fromDate, toDate){
   appendSheet(wb, "Ingresos", incomeRows);
   appendSheet(wb, "Deudas (Cuotas)", debtRows);   // Tanda L3: filtrada a propias + compartidas
   const sufijoCuenta = ctaExp === 'total' ? '' : '_' + cuentaNombre(ctaExp).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
-  const filename = `MisFinanzas${sufijoCuenta}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `Telora${sufijoCuenta}_${new Date().toISOString().slice(0,10)}.xlsx`;
   return { wb, filename };
 }
 
@@ -11001,7 +11001,7 @@ function generarResumenImagen(){
   ctx.font = '700 30px ' + SANS;
   spacing('3px');
   ctx.textAlign = 'left';
-  ctx.fillText('MISFINANZAS', pad, y);
+  ctx.fillText('TELORA', pad, y);
   spacing('0px');
 
   // Mes destacado
@@ -11136,7 +11136,7 @@ function generarResumenImagen(){
   ctx.textAlign = 'left';
   ctx.fillText('Generado el ' + fechaGen, pad, y + 24);
   ctx.textAlign = 'right';
-  ctx.fillText('MisFinanzas App', W - pad, y + 24);
+  ctx.fillText('Telora App', W - pad, y + 24);
   ctx.textAlign = 'left';
 
   // --- Exportar ---
@@ -11171,7 +11171,7 @@ function generarResumenImagen(){
 
 document.getElementById('btnResumenImgShare').onclick = async ()=>{
   if(!resumenImgBlob) return;
-  const filename = `MisFinanzas_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
+  const filename = `Telora_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
   let file = null;
   try{ file = new File([resumenImgBlob], filename, { type:'image/png' }); }catch(_){}
   await shareFile(file, 'Resumen ' + MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear(),
@@ -11186,7 +11186,7 @@ document.getElementById('btnResumenImgDownload').onclick = ()=>{
   if(!resumenImgURL) return;
   const a = document.createElement('a');
   a.href = resumenImgURL;
-  a.download = `MisFinanzas_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
+  a.download = `Telora_${MESES[currentDate.getMonth()]}_${currentDate.getFullYear()}.png`;
   document.body.appendChild(a); a.click(); a.remove();
   haptic(HAPTIC_OK);
 };
