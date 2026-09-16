@@ -228,15 +228,18 @@ button{font-family:inherit;}
   border-radius:6px; padding:1px 6px; flex-shrink:0;
 }
 
-/* Lista de cuentas dentro de Configuración: mismo patrón visual que categorías/métodos. */
-.acc-cfg-item .cfg-acc-actions{display:flex; align-items:center; gap:4px; flex-shrink:0;}
-.acc-cfg-item .cfg-acc-actions button{
+/* Lista de cuentas dentro de Configuración: mismo patrón visual que categorías/métodos.
+   Día 14 · unificación: reordenar (▲▼) queda a la izquierda de la fila, separado del
+   grupo "✎"/"✕" de la derecha — que reusa ".cfg-item-actions" (mismas clases/colores
+   que categorías, métodos y fuentes) en vez de tener su propio estilo aparte. */
+.acc-cfg-item .cfg-acc-move{display:flex; align-items:center; gap:2px; flex-shrink:0;}
+.acc-cfg-item .cfg-acc-move button{
   background:none; border:none; color:var(--gold); padding:4px; display:flex;
   align-items:center; cursor:pointer;
 }
-.acc-cfg-item .cfg-acc-actions button.acc-del{color:var(--danger);}
-.acc-cfg-item .cfg-acc-actions button[disabled]{opacity:.3; cursor:default;}
-.acc-cfg-item .cfg-acc-actions button .icon{width:16px; height:16px;}
+.acc-cfg-item .cfg-acc-move button[disabled]{opacity:.3; cursor:default;}
+.acc-cfg-item .cfg-acc-move .icon{width:16px; height:16px;}
+.acc-cfg-item .cfg-item-actions button[disabled]{opacity:.3; cursor:default;}
 .acc-cfg-item.is-archived > span{color:var(--cream-dim);}
 .acc-cfg-item .acc-arch-tag{
   font-size:11px; color:var(--cream-dim); border:1px solid var(--border);
@@ -1222,39 +1225,30 @@ button{font-family:inherit;}
 .config-item > span{flex:1; min-width:0; overflow-wrap:anywhere;}
 .config-item button{background:none; border:none; color:var(--danger); font-size:17px; cursor:pointer;}
 .cfg-item-actions{display:flex; align-items:center; gap:6px; flex-shrink:0;}
-/* Día 14 · fila de categoría rediseñada: avatar circular (ícono sobre el color de la
-   categoría, abre el sheet de color), nombre, botón de opciones (ícono/eliminar — a
-   propósito lejos del avatar para no prestarse a toque accidental), y debajo el tope
-   mensual como chip colapsado que se expande a input inline. */
-.config-item.is-cat{flex-direction:column; align-items:stretch;}
-.cfg-cat-main{display:flex; align-items:center; gap:10px;}
+/* Día 14 · patrón unificado de fila (avatar/nada + nombre + "✎" + "✕"): en categorías,
+   el avatar (ícono sobre el color de la categoría) queda decorativo — cambiar ícono,
+   color y tope mensual vive dentro del sheet que abre "✎" (ver openCatEditar). */
+.cfg-cat-main{display:flex; align-items:center; gap:10px; flex:1; min-width:0;}
 /* Nota de especificidad: ".config-item button{color:var(--danger)}" de arriba (elemento +
    clase) le gana a una sola clase como ".cfg-cat-avatar{color:...}" — por eso estas reglas
    de color van prefijadas con ".config-item " (mismo patrón que ".config-item .cfg-rename-btn"
    más abajo), para no heredar el rojo de "eliminar" en botones que no eliminan nada. */
 .config-item .cfg-cat-avatar{
-  width:40px; height:40px; border-radius:50%; flex-shrink:0; cursor:pointer;
+  width:40px; height:40px; border-radius:50%; flex-shrink:0;
   display:flex; align-items:center; justify-content:center; color:#FBEFE9; font-size:18px;
-  border:1.5px solid rgba(0,0,0,0.15); padding:0; transition:transform .12s ease;
+  border:1.5px solid rgba(0,0,0,0.15);
 }
-.cfg-cat-avatar:active{transform:scale(0.88);}
 .cfg-cat-avatar .icon{width:19px; height:19px;}
 .cfg-cat-avatar .cat-emoji{font-size:18px;}
 .cfg-cat-name{flex:1; min-width:0; overflow-wrap:anywhere; font-size:15px; color:var(--cream);}
-.config-item .cfg-cat-opts{
-  color:var(--cream-dim); padding:6px; display:flex; align-items:center; justify-content:center;
-  min-width:34px; min-height:34px; border-radius:8px;
-  background:var(--surface-2); border:1px solid var(--border); cursor:pointer;
-}
-.cfg-cat-opts:active{transform:scale(0.9);}
-.cfg-cat-opts .icon{width:18px; height:18px;}
-/* Tope de gasto mensual por categoría: chip colapsado bajo la fila principal. */
-.cfg-cat-tope{margin-top:8px;}
-.config-item .cfg-cat-tope-chip{color:var(--cream); padding:6px 12px; font-size:12.5px;}
-.cfg-cat-tope-chip .icon{width:14px; height:14px; color:var(--gold-dim);}
-.cfg-cat-tope-chip.has-tope{border-color:var(--gold-dim); color:var(--gold-dim);}
+/* Tope de gasto mensual por categoría: ahora vive dentro del sheet de edición
+   (sheetCatEditar), reusando el mismo input con signo "$" que antes era el chip inline.
+   Nota: NO usa la clase ".field" del sheet para no heredar ".field input[type=text]"
+   (más específica que ".cfg-cat-tope-in input" y le pisaría el borde/fondo transparente). */
+.cat-editar-tope{margin:14px 0;}
+.cat-editar-tope > label{display:block; font-size:13.5px; color:var(--gold-dim); margin-bottom:6px; font-weight:500;}
 .cfg-cat-tope-in{
-  display:flex; align-items:center; gap:4px; flex:1; max-width:190px;
+  display:flex; align-items:center; gap:4px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:0 10px;
 }
 .cfg-cat-tope-in:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
@@ -1468,7 +1462,7 @@ button:active{ transform:scale(0.93); }
 :root.hc .cat-row, :root.hc .list-item, :root.hc .debt-card, :root.hc .segmented,
 :root.hc .chip, :root.hc .toggle-opt, :root.hc .field input, :root.hc .field select,
 :root.hc .field textarea, :root.hc .palette-opt, :root.hc .export-opt,
-:root.hc .add-inline input, :root.hc .config-item .cfg-cat-opts, :root.hc .btn-ghost,
+:root.hc .add-inline input, :root.hc .btn-ghost,
 :root.hc .btn-danger, :root.hc .chart-toggle, :root.hc .icon-grid button, :root.hc .color-grid button,
 :root.hc .hist-search-input, :root.hc .hist-filter-btn, :root.hc .hist-filter-panel,
 :root.hc .hist-cat-chip, :root.hc .hist-check input, :root.hc .racha-badge{ border-width:2px; }
@@ -2231,6 +2225,23 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: eliminar una cuenta con movimientos → reasignar a otra (Tanda C3);
      con transferencias asociadas → elección explícita reapuntar/eliminar (Tanda C4 · ajuste) -->
+<!-- SHEET: editar una cuenta — renombrar y archivar/reactivar (día 14: unificación
+     del patrón editar/eliminar de las 4 listas de Configuración) -->
+<div class="sheet-overlay" id="sheetCuentaEditar">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="cuentaEditarTitle">Editar cuenta</h2>
+    <div class="field">
+      <label for="cuentaEditarNombre">Nombre</label>
+      <input type="text" id="cuentaEditarNombre" autocomplete="off">
+    </div>
+    <button class="btn-primary" id="btnCuentaEditarGuardar" type="button">Guardar nombre</button>
+    <button class="btn-ghost" id="btnCuentaEditarArchivar" type="button" style="margin-top:16px;"></button>
+    <p class="sheet-note" style="margin-top:6px;">Archivar una cuenta la saca del selector y de los formularios sin borrar sus movimientos.</p>
+    <button class="btn-ghost" data-close>Cerrar</button>
+  </div>
+</div>
+
 <div class="sheet-overlay" id="sheetCuentaBorrar">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -2570,14 +2581,23 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
-<!-- SHEET: acciones de una categoría — cambiar ícono / eliminar (día 14 · sub-tarea 3) -->
-<div class="sheet-overlay" id="sheetCatAcciones">
+<!-- SHEET: editar una categoría — ícono / color / tope mensual, agrupados en un solo
+     lugar (día 14: unificación del patrón editar/eliminar de las 4 listas). El botón
+     de eliminar ya no vive acá — quedó en la fila principal, junto a este "✎". -->
+<div class="sheet-overlay" id="sheetCatEditar">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2 id="catAccionesTitle">Categoría</h2>
-    <button class="btn-ghost" id="btnCatAccIcono" style="margin-top:0;">Cambiar ícono</button>
-    <button class="btn-danger" id="btnCatAccEliminar">Eliminar categoría</button>
-    <button class="btn-ghost" data-close>Cancelar</button>
+    <h2 id="catEditarTitle">Editar categoría</h2>
+    <button class="btn-ghost" id="btnCatEditIcono" style="margin-top:0;">Cambiar ícono</button>
+    <button class="btn-ghost" id="btnCatEditColor">Cambiar color</button>
+    <div class="cat-editar-tope">
+      <label for="catEditarTopeInput">Tope de gasto mensual</label>
+      <div class="cfg-cat-tope-in">
+        <span aria-hidden="true">$</span>
+        <input type="text" inputmode="numeric" id="catEditarTopeInput" placeholder="Sin tope" autocomplete="off">
+      </div>
+    </div>
+    <button class="btn-ghost" data-close>Cerrar</button>
   </div>
 </div>
 
@@ -9335,11 +9355,6 @@ const escHtml = s => String(s == null ? '' : s)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-// Etiqueta del chip de tope colapsado: monto formateado, o "Sin tope".
-function topeChipLabel(item){
-  const v = catTope(item);
-  return v != null ? '$' + formatMiles(String(v)) : 'Sin tope';
-}
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
   const isCat = key === 'categorias';
@@ -9354,20 +9369,20 @@ function renderConfigList(key, boxId){
       <small class="cfg-item-lock">Activa las compras a cuotas — no se puede eliminar.</small>
     </div>`;
     }
-    // Día 14 · rediseño de la fila de categoría: avatar circular (ícono sobre el color de
-    // la categoría, toca para cambiar el color), nombre, botón de opciones (ícono/eliminar
-    // — separado del avatar para no prestarse a toque accidental), y el tope mensual
-    // colapsado a un chip que se expande a input inline al tocarlo.
+    // Día 14 · patrón unificado de fila: avatar/nada + nombre + "✎" + "✕" en las 4
+    // listas. En categorías, el avatar (ícono sobre el color) queda decorativo — lo
+    // específico de esta categoría (ícono, color, tope) vive dentro del sheet que abre
+    // "✎", no como íconos sueltos adicionales en la fila.
     if(isCat){
       return `
-    <div class="config-item is-cat" data-cfgitem="${key}:${idx}">
+    <div class="config-item" data-cfgitem="${key}:${idx}">
       <div class="cfg-cat-main">
-        <button type="button" class="cfg-cat-avatar" data-catcolor="${idx}" style="background:${colorDeCategoria(item)};" aria-label="Color de ${escAttr(item)}. Tocar para cambiar.">${catIcon(item)}</button>
+        <span class="cfg-cat-avatar" style="background:${colorDeCategoria(item)};" aria-hidden="true">${catIcon(item)}</span>
         <span class="cfg-cat-name">${escHtml(item)}</span>
-        <button type="button" class="cfg-cat-opts" data-catopts="${idx}" aria-label="Opciones de ${escAttr(item)}">${icon('settings')}</button>
       </div>
-      <div class="cfg-cat-tope" data-topewrap="${idx}">
-        <button type="button" class="chip cfg-cat-tope-chip${catTope(item) != null ? ' has-tope' : ''}" data-topechip="${idx}" aria-label="Tope mensual de ${escAttr(item)}: ${escAttr(topeChipLabel(item))}. Tocar para editar.">${icon('target')}<span>${escHtml(topeChipLabel(item))}</span></button>
+      <div class="cfg-item-actions">
+        <button class="cfg-rename-btn" data-catedit="${idx}" aria-label="Editar ${escAttr(item)}">${icon('edit')}</button>
+        <button data-remove="${key}:${idx}" aria-label="Eliminar ${escAttr(item)}">${icon('x')}</button>
       </div>
     </div>`;
     }
@@ -9400,73 +9415,9 @@ function renderConfigList(key, boxId){
 
   if(!isCat) return;
 
-  // --- Avatar de categoría: tocarlo abre el sheet de color (día 14 · sub-tarea 4) ---
-  box.querySelectorAll('[data-catcolor]').forEach(btn=>{
-    btn.addEventListener('click', ()=> openCatColor(state.config.categorias[parseInt(btn.dataset.catcolor, 10)]));
-  });
-
-  // --- Botón de opciones: abre el sheet con "Cambiar ícono" / "Eliminar categoría" ---
-  box.querySelectorAll('[data-catopts]').forEach(btn=>{
-    btn.addEventListener('click', ()=> openCatAcciones(parseInt(btn.dataset.catopts, 10)));
-  });
-
-  // --- Tope de gasto mensual por categoría: chip colapsado <-> input inline ---
-  box.querySelectorAll('[data-topechip]').forEach(btn=>{
-    const idx = parseInt(btn.dataset.topechip, 10);
-    btn.addEventListener('click', ()=> expandirTopeCat(btn.closest('[data-topewrap]'), idx));
-  });
-}
-// Expande el chip de tope mensual a un input editable inline. Al guardar (blur/Enter) o
-// cancelar (Escape) vuelve a colapsarse al chip, sin re-renderizar toda la lista — así el
-// resto de las filas no pierde foco/scroll, y se puede repetir expandir/colapsar sin
-// perder el valor guardado.
-function renderTopeChipInto(wrap, idx){
-  const item = state.config.categorias[idx];
-  wrap.innerHTML = `<button type="button" class="chip cfg-cat-tope-chip${catTope(item) != null ? ' has-tope' : ''}" data-topechip="${idx}" aria-label="Tope mensual de ${escAttr(item)}: ${escAttr(topeChipLabel(item))}. Tocar para editar.">${icon('target')}<span>${escHtml(topeChipLabel(item))}</span></button>`;
-  wrap.querySelector('[data-topechip]').addEventListener('click', ()=> expandirTopeCat(wrap, idx));
-}
-function expandirTopeCat(wrap, idx){
-  if(isReadOnly()){ blockReadOnly(); return; }
-  if(!wrap || wrap.querySelector('.cfg-cat-tope-in')) return;
-  const catActual = ()=> state.config.categorias[idx];
-  const val = catTope(catActual());
-  wrap.innerHTML = `
-    <div class="cfg-cat-tope-in">
-      <span aria-hidden="true">$</span>
-      <input type="text" inputmode="numeric" data-cattope="${idx}"
-             value="${val != null ? formatMiles(String(val)) : ''}"
-             placeholder="Sin tope" autocomplete="off"
-             aria-label="Tope de gasto mensual de ${escAttr(catActual())}">
-    </div>`;
-  const inp = wrap.querySelector('input');
-  inp.focus();
-  inp.addEventListener('input', ()=>{
-    const f = formatMiles(inp.value);
-    if(f !== inp.value) inp.value = f;
-  });
-  let resuelto = false;
-  const guardar = ()=>{
-    if(resuelto) return;
-    resuelto = true;
-    const cat = catActual();
-    if(!cat){ renderTopeChipInto(wrap, idx); return; }
-    if(isReadOnly()){ blockReadOnly(); renderTopeChipInto(wrap, idx); return; }
-    if(!state.config.categoriaTopes) state.config.categoriaTopes = {};
-    const n = parseInt(soloDigitos(inp.value), 10);
-    if(n > 0) state.config.categoriaTopes[cat] = n;
-    else delete state.config.categoriaTopes[cat];
-    saveState();
-    renderTopeChipInto(wrap, idx);
-    // Corrección Tanda AA · Cambio D: saveState() solo persiste en localStorage, no
-    // repinta nada — por eso la barra de "Gasto por categoría" del Resumen quedaba con
-    // el tope viejo hasta el próximo render. renderResumen() es una pantalla distinta
-    // del DOM y no afecta el foco de este sheet.
-    renderResumen();
-  };
-  inp.addEventListener('blur', guardar);
-  inp.addEventListener('keydown', e=>{
-    if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
-    if(e.key === 'Escape'){ e.stopPropagation(); resuelto = true; renderTopeChipInto(wrap, idx); }
+  // --- "✎": abre el sheet "Editar «Nombre»" con ícono / color / tope agrupados ---
+  box.querySelectorAll('[data-catedit]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openCatEditar(parseInt(btn.dataset.catedit, 10)));
   });
 }
 
@@ -9626,12 +9577,13 @@ function renderCuentasList(){
     const bajaDisabled = idx === orden.length - 1;
     return `
     <div class="config-item acc-cfg-item${a.archivada ? ' is-archived' : ''}" data-acccfg="${escAttr(a.id)}">
-      <span>${escHtml(a.nombre)}${a.archivada ? '<span class="acc-arch-tag">Archivada</span>' : ''}</span>
-      <div class="cfg-acc-actions">
+      <div class="cfg-acc-move">
         <button data-accmove="up:${escAttr(a.id)}" aria-label="Subir ${escAttr(a.nombre)}" ${subeDisabled ? 'disabled' : ''}>${icon('chevron-up')}</button>
         <button data-accmove="down:${escAttr(a.id)}" aria-label="Bajar ${escAttr(a.nombre)}" ${bajaDisabled ? 'disabled' : ''}>${icon('chevron-down')}</button>
-        <button data-accrename="${escAttr(a.id)}" aria-label="Renombrar ${escAttr(a.nombre)}">${icon('edit')}</button>
-        <button data-accarchive="${escAttr(a.id)}" aria-label="${a.archivada ? 'Reactivar' : 'Archivar'} ${escAttr(a.nombre)}" ${esUltimaViva ? 'disabled' : ''}>${icon(a.archivada ? 'check' : 'archive')}</button>
+      </div>
+      <span>${escHtml(a.nombre)}${a.archivada ? '<span class="acc-arch-tag">Archivada</span>' : ''}</span>
+      <div class="cfg-item-actions">
+        <button class="cfg-rename-btn" data-accedit="${escAttr(a.id)}" aria-label="Editar ${escAttr(a.nombre)}">${icon('edit')}</button>
         <button class="acc-del" data-accdelete="${escAttr(a.id)}" aria-label="Eliminar ${escAttr(a.nombre)}" ${(orden.length === 1 || esUltimaViva) ? 'disabled' : ''}>${icon('x')}</button>
       </div>
     </div>`;
@@ -9651,26 +9603,11 @@ function renderCuentasList(){
     });
   });
 
-  box.querySelectorAll('[data-accrename]').forEach(btn=>{
+  // --- "✎": abre el sheet "Editar «Nombre»" con renombrar + archivar/reactivar ---
+  box.querySelectorAll('[data-accedit]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(isReadOnly()){ blockReadOnly(); return; }
-      iniciarRenombreCuenta(btn.dataset.accrename, box);
-    });
-  });
-
-  box.querySelectorAll('[data-accarchive]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      if(isReadOnly()){ blockReadOnly(); return; }
-      const a = cuentaById(btn.dataset.accarchive);
-      if(!a) return;
-      if(!a.archivada && cuentasVivas().length <= 1){
-        showToast('Debe quedar al menos una cuenta activa.', 'error'); return;
-      }
-      a.archivada = !a.archivada;
-      // Si se archivó la cuenta activa, la vista vuelve a Total.
-      if(a.archivada && state.config && state.config.cuentaActiva === a.id) state.config.cuentaActiva = 'total';
-      haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
-      showToast(a.archivada ? `«${a.nombre}» archivada.` : `«${a.nombre}» reactivada.`, 'success');
+      openCuentaEditar(btn.dataset.accedit);
     });
   });
 
@@ -9682,35 +9619,57 @@ function renderCuentasList(){
   });
 }
 
-function iniciarRenombreCuenta(id, box){
-  const row = box.querySelector(`[data-acccfg="${id}"]`);
-  const a = cuentaById(id);
-  if(!row || !a || row.querySelector('.cfg-rename-edit')) return;
-  row.innerHTML = `
-    <div class="cfg-rename-edit">
-      <input type="text" class="cfg-rename-input" value="${escAttr(a.nombre)}" autocomplete="off" aria-label="Nuevo nombre de la cuenta">
-      <button class="small-btn cfg-rename-ok" type="button">Guardar</button>
-      <button class="cfg-rename-cancel" type="button" aria-label="Cancelar">${icon('x')}</button>
-    </div>`;
-  const input = row.querySelector('.cfg-rename-input');
-  input.focus(); input.select();
-  const cancelar = ()=> renderConfig();
-  row.querySelector('.cfg-rename-cancel').addEventListener('click', cancelar);
-  input.addEventListener('keydown', e=>{
-    if(e.key === 'Escape'){ e.stopPropagation(); cancelar(); }
-    if(e.key === 'Enter'){ e.preventDefault(); row.querySelector('.cfg-rename-ok').click(); }
-  });
-  row.querySelector('.cfg-rename-ok').addEventListener('click', ()=>{
-    const val = input.value.trim().replace(/\s+/g, ' ');
-    if(!val){ fieldError(input); return; }
-    const dup = (state.accounts || []).find(x=> x.id !== id && normNombre(x.nombre) === normNombre(val));
-    if(dup){ showToast(`Ya existe una cuenta «${dup.nombre}».`, 'error'); fieldError(input); return; }
-    if(a.nombre === val){ renderConfig(); return; }
-    a.nombre = val;
-    haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
-    showToast(`Cuenta renombrada a «${val}».`, 'success');
-  });
+/* ==================== Día 14 · unificación editar/eliminar: "✎" de cuenta ====================
+   Reemplaza el renombrado inline (iniciarRenombreCuenta) y el botón de archivar suelto
+   de la fila: ahora ambos viven en este sheet, agrupados bajo "✎" (mismo patrón que
+   categorías). "✕" en la fila sigue disparando abrirBorrarCuenta() sin cambios. */
+let cuentaEditarTarget = null;   // id de la cuenta
+function syncCuentaEditarArchivarBtn(a){
+  const btn = document.getElementById('btnCuentaEditarArchivar');
+  btn.textContent = a.archivada ? 'Reactivar cuenta' : 'Archivar cuenta';
+  btn.disabled = !a.archivada && cuentasVivas().length <= 1;
 }
+function openCuentaEditar(id){
+  if(isReadOnly()){ blockReadOnly(); return; }
+  const a = cuentaById(id);
+  if(!a) return;
+  cuentaEditarTarget = id;
+  document.getElementById('cuentaEditarTitle').textContent = `Editar «${a.nombre}»`;
+  document.getElementById('cuentaEditarNombre').value = a.nombre;
+  syncCuentaEditarArchivarBtn(a);
+  openSheet('sheetCuentaEditar', 'cuentaEditarNombre');
+}
+document.getElementById('btnCuentaEditarGuardar').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!cuentaEditarTarget) return;
+  const a = cuentaById(cuentaEditarTarget);
+  if(!a) return;
+  const input = document.getElementById('cuentaEditarNombre');
+  const val = input.value.trim().replace(/\s+/g, ' ');
+  if(!val){ fieldError(input); return; }
+  const dup = (state.accounts || []).find(x=> x.id !== a.id && normNombre(x.nombre) === normNombre(val));
+  if(dup){ showToast(`Ya existe una cuenta «${dup.nombre}».`, 'error'); fieldError(input); return; }
+  if(a.nombre === val) return;
+  a.nombre = val;
+  haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+  document.getElementById('cuentaEditarTitle').textContent = `Editar «${val}»`;
+  showToast(`Cuenta renombrada a «${val}».`, 'success');
+};
+document.getElementById('btnCuentaEditarArchivar').onclick = ()=>{
+  if(isReadOnly()){ blockReadOnly(); return; }
+  if(!cuentaEditarTarget) return;
+  const a = cuentaById(cuentaEditarTarget);
+  if(!a) return;
+  if(!a.archivada && cuentasVivas().length <= 1){
+    showToast('Debe quedar al menos una cuenta activa.', 'error'); return;
+  }
+  a.archivada = !a.archivada;
+  // Si se archivó la cuenta activa, la vista vuelve a Total.
+  if(a.archivada && state.config && state.config.cuentaActiva === a.id) state.config.cuentaActiva = 'total';
+  haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+  syncCuentaEditarArchivarBtn(a);
+  showToast(a.archivada ? `«${a.nombre}» archivada.` : `«${a.nombre}» reactivada.`, 'success');
+};
 
 /* ---- Borrar una cuenta: si tiene movimientos, pide reasignarlos a otra ----
    Tanda C4 · ajuste: si además (o sólo) tiene transferencias asociadas (como origen o
@@ -9960,32 +9919,60 @@ document.getElementById('btnCatIconDefault').onclick = ()=>{
   renderAll();
 };
 
-/* ==================== Día 14 · sub-tarea 3: acciones secundarias de una categoría ====================
-   El botón de eliminar ya no vive pegado al avatar en la fila principal (evita el toque
-   accidental) — ahora "opciones" abre este sheet chico con "Cambiar ícono" (reabre el
-   selector de siempre) y "Eliminar categoría" (mismo mecanismo de intentarEliminarConfigItem,
-   con migración si hay gastos asociados). */
-let catAccionesTarget = null;   // { idx, item }
-function openCatAcciones(idx){
+/* ==================== Día 14 · unificación editar/eliminar: "✎" de categoría ====================
+   El botón de eliminar ya no vive en este sheet — quedó como "✕" en la fila principal,
+   junto al "✎" (patrón unificado con métodos/fuentes/cuentas). "✎" abre este sheet, que
+   agrupa las tres cosas editables de una categoría: ícono, color y tope mensual (antes
+   repartidos entre este sheet, otro aparte y un chip en la fila). */
+let catEditarTarget = null;   // { idx, item }
+function openCatEditar(idx){
   if(isReadOnly()){ blockReadOnly(); return; }
   const item = state.config.categorias[idx];
   if(!item) return;
-  catAccionesTarget = { idx, item };
-  document.getElementById('catAccionesTitle').textContent = item;
-  openSheet('sheetCatAcciones');
+  catEditarTarget = { idx, item };
+  document.getElementById('catEditarTitle').textContent = `Editar «${item}»`;
+  const val = catTope(item);
+  document.getElementById('catEditarTopeInput').value = val != null ? formatMiles(String(val)) : '';
+  openSheet('sheetCatEditar');
 }
-document.getElementById('btnCatAccIcono').onclick = ()=>{
-  if(!catAccionesTarget) return;
-  const item = catAccionesTarget.item;
-  closeSheet('sheetCatAcciones');
+document.getElementById('btnCatEditIcono').onclick = ()=>{
+  if(!catEditarTarget) return;
+  const item = catEditarTarget.item;
+  closeSheet('sheetCatEditar');
   openCatIcon(item);
 };
-document.getElementById('btnCatAccEliminar').onclick = ()=>{
-  if(!catAccionesTarget) return;
-  const { idx } = catAccionesTarget;
-  closeSheet('sheetCatAcciones');
-  intentarEliminarConfigItem('categorias', idx);
+document.getElementById('btnCatEditColor').onclick = ()=>{
+  if(!catEditarTarget) return;
+  const item = catEditarTarget.item;
+  closeSheet('sheetCatEditar');
+  openCatColor(item);
 };
+// Tope mensual: se guarda al perder foco (blur) o con Enter — mismo patrón que el resto
+// de los campos de esta app. Escape fuerza el blur primero (así no se pierde el valor)
+// y luego deja que el listener global de Escape cierre el sheet.
+(function initCatEditarTope(){
+  const inp = document.getElementById('catEditarTopeInput');
+  inp.addEventListener('input', ()=>{
+    const f = formatMiles(inp.value);
+    if(f !== inp.value) inp.value = f;
+  });
+  const guardarTope = ()=>{
+    if(!catEditarTarget) return;
+    const cat = state.config.categorias[catEditarTarget.idx];
+    if(!cat || isReadOnly()) return;
+    if(!state.config.categoriaTopes) state.config.categoriaTopes = {};
+    const n = parseInt(soloDigitos(inp.value), 10);
+    if(n > 0) state.config.categoriaTopes[cat] = n;
+    else delete state.config.categoriaTopes[cat];
+    saveState();
+    renderResumen();
+  };
+  inp.addEventListener('blur', guardarTope);
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    if(e.key === 'Escape'){ inp.blur(); }
+  });
+})();
 
 /* ==================== Día 14 · sub-tarea 4: color personalizado por categoría ====================
    Mismo patrón visual/de interacción que sheetCatIcon: grilla de swatches, uno activo si
