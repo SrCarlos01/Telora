@@ -25,6 +25,13 @@
      (ReDoS en el parser de formatos, afecta <0.20.2), ambas presentes en la 0.18.5. -->
 <script src="./xlsx.full.min.js"></script>
 
+<!-- Supabase autohospedada (Etapa 2 · Tanda 1): @supabase/supabase-js 2.117.1, build
+     UMD (dist/umd/supabase.js del paquete npm, verificado contra su integrity sha512).
+     Mismo criterio que XLSX: archivo local, sin CDN. Expone el global `supabase`. Solo
+     se usa para el login OPCIONAL con Google (bloque "Cuenta de usuario"); si no carga,
+     la app funciona igual — ver el <script> de Cuenta de usuario al final del body. -->
+<script src="./supabase.min.js"></script>
+
 <style>
 :root{
   --bg:#161011;
@@ -2426,6 +2433,30 @@ button:active{ transform:scale(0.93); }
         <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
         <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
         <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
+      </div>
+    </details>
+
+    <!-- Cuenta de usuario (Etapa 2 · Tanda 1): login OPCIONAL con Google vía Supabase.
+         "Cuenta de usuario" = autenticación; no confundir con "Cuentas" (las cuentas
+         financieras internas, más arriba). Va justo después de "Respaldo de datos"
+         porque su propósito futuro es el respaldo en la nube. En esta tanda NO sincroniza
+         nada: los datos siguen solo en este dispositivo. Los dos estados (sin/con sesión)
+         los alterna renderCuentaUsuario(). -->
+    <details class="cfg-group">
+      <summary>Cuenta de usuario <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
+      <div class="cfg-group-body">
+        <div id="cuentaUsuarioSinSesion">
+          <p class="sheet-note" style="margin:0 0 12px;">
+            Inicia sesión con tu cuenta de Google. Pronto podrás respaldar tus datos en la nube y usarlos en más de un dispositivo; por ahora siguen guardados solo en este dispositivo. Es opcional: la app funciona igual sin iniciar sesión.
+          </p>
+          <button class="btn-ghost" id="btnLoginGoogle" style="margin-top:0;">Continuar con Google</button>
+        </div>
+        <div id="cuentaUsuarioConSesion" style="display:none;">
+          <p class="sheet-note" style="margin:0 0 12px; overflow-wrap:anywhere;">
+            Sesión iniciada como <strong id="cuentaUsuarioEmail" style="color:var(--cream);"></strong>
+          </p>
+          <button class="btn-ghost" id="btnLogout" style="margin-top:0;">Cerrar sesión</button>
+        </div>
       </div>
     </details>
 
@@ -12591,6 +12622,92 @@ document.getElementById('btnRelanzarOnboarding').onclick = ()=>{
 if(!state.config.onboardingVisto && !(state.expenses.length || state.incomes.length || state.debts.length || (state.goals||[]).length)){
   iniciarOnboarding(false);
 }
+</script>
+
+<script>
+/* ==================== CUENTA DE USUARIO · login opcional con Google (Etapa 2 · Tanda 1) ====================
+   Solo autenticación: cero lecturas/escrituras a la base de datos, cero sincronización.
+   Va en un <script> propio, después del principal, para que cualquier falla acá (librería
+   que no cargó, sin conexión, error de Supabase) no pueda afectar loadState()/renderAll():
+   si algo falla, el bloque queda en "sin sesión" y el resto de la app sigue igual.
+   - supabase-js guarda la sesión en localStorage bajo "sb-ekavuxaznjbvrzpxtslz-auth-token"
+     (namespace propio, no choca con las claves misfinanzas_*).
+   - Flujo implícito (default de supabase-js): Google vuelve con el token en el #hash, la
+     librería lo lee y lo borra. El resto de la app no lee location.hash ni location.search.
+   - Cerrar sesión solo borra la sesión de Supabase; los datos financieros locales no se tocan. */
+const SUPABASE_URL = 'https://ekavuxaznjbvrzpxtslz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrYXZ1eGF6bmpidnJ6cHh0c2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MDIyNzMsImV4cCI6MjEwNTE3ODI3M30.pCgd7ktIb5z2CPh3evEBkVMvIJStSGiUQmT9hNo-2Cs';
+let supa = null;
+
+function renderCuentaUsuario(session){
+  const email = session && session.user && session.user.email;
+  const sin = document.getElementById('cuentaUsuarioSinSesion');
+  const con = document.getElementById('cuentaUsuarioConSesion');
+  if(!sin || !con) return;
+  document.getElementById('cuentaUsuarioEmail').textContent = email || '';
+  sin.style.display = email ? 'none' : '';
+  con.style.display = email ? '' : 'none';
+}
+
+// Tras volver de Google, la librería vacía el hash pero deja un "#" colgando; y si el
+// login falló, Google/Supabase vuelven con ?error=…&error_description=… (o en el hash).
+// Se limpia la URL solo en esos casos, sin recargar.
+function limpiarUrlAuth(){
+  try{
+    const h = location.hash, q = location.search;
+    const conError = /error_description=/.test(h) || /error_description=/.test(q);
+    if(conError || location.href.endsWith('#')){
+      history.replaceState(history.state, '', location.pathname + (conError ? '' : q));
+    }
+    return conError;
+  }catch(_){ return false; }
+}
+
+try{
+  if(typeof supabase !== 'undefined' && supabase.createClient){
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supa.auth.onAuthStateChange((event, session)=>{
+      renderCuentaUsuario(session);
+      if(event === 'SIGNED_IN') limpiarUrlAuth();
+    });
+    supa.auth.getSession().then(({ data, error })=>{
+      renderCuentaUsuario(data && data.session);
+      if(limpiarUrlAuth() || error){
+        showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
+      }
+    }).catch(()=> renderCuentaUsuario(null));
+  }
+}catch(e){
+  supa = null;
+  console.warn('Cuenta de usuario: Supabase no disponible', e);
+}
+
+document.getElementById('btnLoginGoogle').onclick = async ()=>{
+  if(!supa || !navigator.onLine){
+    showToast('Necesitas conexión a internet para iniciar sesión.', 'error', 5000);
+    return;
+  }
+  try{
+    const { error } = await supa.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + window.location.pathname }
+    });
+    if(error) throw error;
+  }catch(e){
+    console.warn('Cuenta de usuario: signInWithOAuth', e);
+    showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
+  }
+};
+
+document.getElementById('btnLogout').onclick = async ()=>{
+  if(!supa) return;
+  // scope 'local': cierra la sesión en este dispositivo aunque no haya red (el default
+  // 'global' pide al servidor revocar todas las sesiones y puede fallar sin conexión).
+  try{ await supa.auth.signOut({ scope: 'local' }); }
+  catch(e){ console.warn('Cuenta de usuario: signOut', e); }
+  renderCuentaUsuario(null);
+  showToast('Sesión cerrada. Tus datos siguen en este dispositivo.');
+};
 </script>
 </body>
 </html>
