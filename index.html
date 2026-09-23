@@ -123,6 +123,19 @@ button{font-family:inherit;}
   transition:color .15s ease, transform .15s ease;
 }
 .icon-btn:active{transform:scale(0.85); color:var(--gold);}
+/* Distintivo de cuenta (Etapa 2 · Tanda extra): avatar/iniciales en el topbar, solo
+   visible con sesión iniciada. Mismo punto único de verdad que el bloque de
+   Configuración — lo alterna renderCuentaUsuario(). Tamaño ~30px para calzar con el
+   footprint visual de los .icon-btn vecinos (22px de ícono + 4px de padding por lado). */
+.topbar-avatar{
+  display:none; width:30px; height:30px; border-radius:50%; flex-shrink:0;
+  align-items:center; justify-content:center; padding:0; border:none; cursor:pointer;
+  background-color:var(--gold); background-size:cover; background-position:center;
+  color:var(--burgundy); font-size:12.5px; font-weight:700; letter-spacing:0.02em;
+  transition:transform .15s ease;
+}
+.topbar-avatar:active{transform:scale(0.85);}
+.topbar-avatar.con-sesion{display:flex;}
 
 /* ---------- MODO SOLO LECTURA (Tanda H.3): indicador discreto ---------- */
 .readonly-banner{
@@ -1741,6 +1754,7 @@ button:active{ transform:scale(0.93); }
       <span class="name">Telora</span>
     </div>
     <div class="top-actions">
+      <button class="topbar-avatar" id="btnCuentaAvatar" type="button"></button>
       <button class="icon-btn" id="btnResumenImg" aria-label="Guardar resumen como imagen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
       <button class="icon-btn" id="btnExport" aria-label="Exportar a Excel"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>
       <button class="icon-btn" id="btnConfig" aria-label="Configuración"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -12647,7 +12661,59 @@ function renderCuentaUsuario(session){
   document.getElementById('cuentaUsuarioEmail').textContent = email || '';
   sin.style.display = email ? 'none' : '';
   con.style.display = email ? '' : 'none';
+  renderTopbarAvatar(session);
 }
+
+// Primera(s) letra(s) para el avatar sin foto: 2 si el texto trae espacio (nombre
+// completo), 1 si no (nombre de una palabra o correo).
+function inicialesDe(texto){
+  if(!texto) return '';
+  const partes = texto.trim().split(/\s+/);
+  return partes.length >= 2
+    ? (partes[0][0] + partes[1][0]).toUpperCase()
+    : partes[0][0].toUpperCase();
+}
+
+// Distintivo del topbar: mismo estado de sesión que el bloque de Configuración de
+// arriba, solo que acá se resuelve foto/nombre desde la respuesta real de Supabase.
+// user_metadata e identities[0].identity_data suelen traer los mismos campos para
+// Google; se revisan ambas rutas (y ambos nombres de campo) por robustez, sin asumir
+// cuál está presente.
+function renderTopbarAvatar(session){
+  const btn = document.getElementById('btnCuentaAvatar');
+  if(!btn) return;
+  const email = session && session.user && session.user.email;
+  if(!email){
+    btn.classList.remove('con-sesion');
+    btn.style.backgroundImage = '';
+    btn.textContent = '';
+    btn.removeAttribute('aria-label');
+    btn.removeAttribute('title');
+    return;
+  }
+  const um = session.user.user_metadata || {};
+  const idData = (session.user.identities && session.user.identities[0] && session.user.identities[0].identity_data) || {};
+  const avatarUrl = um.avatar_url || um.picture || idData.avatar_url || idData.picture || '';
+  const nombre = um.full_name || um.name || idData.full_name || idData.name || '';
+  const etiqueta = nombre || email;
+
+  btn.setAttribute('aria-label', 'Cuenta de ' + etiqueta);
+  btn.title = 'Cuenta de ' + etiqueta;
+  btn.classList.add('con-sesion');
+  btn.style.backgroundImage = '';
+  btn.textContent = inicialesDe(nombre || email);   // placeholder mientras carga o si no hay foto
+
+  if(avatarUrl){
+    const img = new Image();
+    img.onload = ()=>{ btn.style.backgroundImage = `url("${avatarUrl}")`; btn.textContent = ''; };
+    img.onerror = ()=>{ btn.style.backgroundImage = ''; btn.textContent = inicialesDe(nombre || email); };
+    img.src = avatarUrl;
+  }
+}
+
+document.getElementById('btnCuentaAvatar').onclick = ()=>{
+  document.getElementById('btnConfig').click();
+};
 
 // Tras volver de Google, la librería vacía el hash pero deja un "#" colgando; y si el
 // login falló, Google/Supabase vuelven con ?error=…&error_description=… (o en el hash).
