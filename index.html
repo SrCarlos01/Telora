@@ -12953,6 +12953,78 @@ function filasAportes(g, userId, goalId){
   }));
 }
 
+/* ==================== LECTURA DESDE LA NUBE (Etapa 2 · Tanda 3) ====================
+   Inversos exactos de las filaX de arriba: fila tal como la devuelve Supabase -> objeto
+   con la forma que usa `state`. Solo se leen las columnas que la filaX escribe (lo que
+   pone el servidor, como updated_at, se ignora). Los campos opcionales que la filaX
+   convierte de "ausente" a null vuelven a quedar ausentes, no en null. config_dispositivo
+   NO tiene inverso: cada dispositivo solo escribe su propia fila, nunca lee la de otro. */
+function localCuenta(r){
+  return { id: r.id, nombre: r.nombre, orden: r.orden, archivada: !!r.archivada };
+}
+function localTransfer(r){
+  return { id: r.id, origen: r.origen, destino: r.destino, monto: r.monto, fecha: r.fecha, nombre: r.nombre ?? '' };
+}
+function localExpense(r){
+  const e = {
+    id: r.id, date: r.date, nombre: r.nombre, amount: r.amount, category: r.category, method: r.method,
+    description: r.description, tipo: r.tipo, debtId: r.debt_id ?? null, cuentaId: r.cuenta_id
+  };
+  if(r.dia_hasta != null) e.diaHasta = r.dia_hasta;
+  if(r.fechas_confirmadas != null) e.fechasConfirmadas = r.fechas_confirmadas;
+  return e;
+}
+function localIncome(r){
+  const i = {
+    id: r.id, date: r.date, nombre: r.nombre, source: r.source, amount: r.amount,
+    description: r.description, tipo: r.tipo, cuentaId: r.cuenta_id
+  };
+  if(r.dia_hasta != null) i.diaHasta = r.dia_hasta;
+  if(r.fechas_confirmadas != null) i.fechasConfirmadas = r.fechas_confirmadas;
+  return i;
+}
+function localDebt(r){
+  const d = {
+    id: r.id, description: r.description, purchaseDate: r.purchase_date, category: r.category,
+    totalAmount: r.total_amount, numCuotas: r.num_cuotas,
+    manualPaidMonthKeys: Array.isArray(r.manual_paid_month_keys) ? r.manual_paid_month_keys : [],
+    manualUnpaidMonthKeys: Array.isArray(r.manual_unpaid_month_keys) ? r.manual_unpaid_month_keys : []
+  };
+  if(r.cuenta_id != null) d.cuentaId = r.cuenta_id;   // ausente = deuda legacy "pendiente" (Tanda L1)
+  return d;
+}
+function localAporte(r){
+  return { id: r.id, fecha: r.fecha, monto: r.monto, tipo: r.tipo };
+}
+// filasAporte: las filas de goal_aportes de ESTA meta, ya en el orden deseado.
+function localGoal(r, filasAporte){
+  const g = {
+    id: r.id, name: r.name, indefinida: !!r.indefinida, montoObjetivo: r.monto_objetivo,
+    fechaLimite: r.fecha_limite ?? '',   // la app guarda "" en metas sin fecha (ver fechaONull)
+    fechaCreacion: r.fecha_creacion, fechaCumplida: r.fecha_cumplida ?? null,
+    aportes: (filasAporte || []).map(localAporte),
+    aporteAutomatico: r.aporte_automatico
+  };
+  if(r.ultimo_done_visto === true || r.ultimo_done_visto === false) g._ultimoDoneVisto = r.ultimo_done_visto;
+  if(r.cuenta_id != null) g.cuentaId = r.cuenta_id;
+  return g;
+}
+// Devuelve solo las claves de config que viven en config_compartida. mesInicioRegistro
+// ausente = "Sin definir" (la app borra la clave, no la deja en null).
+function localConfigCompartida(r){
+  const c = {
+    categorias: Array.isArray(r.categorias) ? r.categorias : [],
+    metodos: Array.isArray(r.metodos) ? r.metodos : [],
+    fuentes: Array.isArray(r.fuentes) ? r.fuentes : [],
+    categoriaIconos: r.categoria_iconos ?? {},
+    categoriaTopes: r.categoria_topes ?? {},
+    categoriaColores: r.categoria_colores ?? {},
+    readOnly: !!r.read_only
+  };
+  if(r.mes_inicio_registro != null) c.mesInicioRegistro = r.mes_inicio_registro;
+  return c;
+}
+
 // Inserta en lotes de 200 filas (varias peticiones en vez de una gigante). Un arreglo
 // vacío no hace ninguna llamada. Lanza si algún lote falla, para que el llamador aborte
 // y limpie lo ya insertado.
@@ -13049,6 +13121,166 @@ async function registrarDispositivo(userId, deviceId){
   if(error) console.warn('Subida inicial: no se pudo registrar el dispositivo', error);
 }
 
+/* ---- Pull inicial completo (Tanda 3) ----
+   Solo para un dispositivo local VACÍO cuya cuenta ya tiene datos en la nube: es una copia
+   limpia, no una fusión (no hay nada local que perder). DESACTIVADO a propósito: la subida
+   de la Tanda 2 no manda fixedEndMonthKey (gastos/ingresos) ni goalEndMonthKey (metas), así
+   que un pull hoy haría reaparecer como activos fijos y metas eliminados. Se activa cuando
+   la nube tenga esas columnas y filaExpense/filaIncome/filaGoal las suban.
+   Segundo prerrequisito: el pull tampoco está integrado con el candado de dispositivo
+   (telora_dueno_confirmado) — no lo verifica antes de traer datos ni lo marca después.
+   Antes de activarlo debe usar el mismo mecanismo de la tanda del candado (commit d0c905f:
+   intentarSubidaInicial() + sheetConfirmarDueno), extendiéndolo y no reinventándolo:
+   pedir confirmación si el candado está vacío, respetar el conflicto si es de otra cuenta
+   (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso. */
+const PULL_INICIAL_ACTIVO = false;
+
+// "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
+// migrarEstadoCuentas() siempre crea una "Principal" en un dispositivo nuevo, así que
+// exigir 0 cuentas haría que ningún dispositivo calificara nunca.
+function localEstaVacio(){
+  const n = k => Array.isArray(state[k]) ? state[k].length : 0;
+  return n('expenses') === 0 && n('incomes') === 0 && n('debts') === 0
+      && n('goals') === 0 && n('transfers') === 0 && n('accounts') <= 1;
+}
+
+// Marca local "este dispositivo quedó registrado pero su pull no terminó" (mismo criterio
+// que telora_subida_pendiente): registrarDispositivo() va antes del pull, así que sin esta
+// marca un pull fallido nunca se reintentaría (la fila de config_dispositivo ya existe).
+const CLAVE_PULL_PENDIENTE = 'telora_pull_pendiente';
+function leerPullPendiente(){ try{ return localStorage.getItem(CLAVE_PULL_PENDIENTE); }catch(_){ return null; } }
+function marcarPullPendiente(userId){ try{ localStorage.setItem(CLAVE_PULL_PENDIENTE, userId); }catch(_){} }
+function quitarMarcaPullPendiente(){ try{ localStorage.removeItem(CLAVE_PULL_PENDIENTE); }catch(_){} }
+
+// Lee todas las filas de una tabla para este user_id, en páginas de 1000 (tope por
+// defecto de PostgREST), ordenadas por id: uid() parte con Date.now(), así que ese orden
+// sigue aproximadamente el de creación. Lanza si alguna página falla.
+async function leerTablaCompleta(tabla, userId){
+  const TAM = 1000;
+  const filas = [];
+  for(let desde = 0; ; desde += TAM){
+    const { data, error } = await supa.from(tabla).select('*')
+      .eq('user_id', userId).order('id', { ascending: true }).range(desde, desde + TAM - 1);
+    if(error) throw new Error(tabla + ': ' + (error.message || 'error desconocido'));
+    filas.push(...(data || []));
+    if(!data || data.length < TAM) return filas;
+  }
+}
+
+// Trae las 8 tablas (todas menos config_dispositivo) y arma el estado nuevo SIN tocar
+// `state`. Si cualquier lectura falla, lanza y el estado local queda intacto.
+async function leerNubeCompleta(userId){
+  const tablas = ['cuentas_financieras','transfers','expenses','incomes','debts','goals','goal_aportes'];
+  const [cuentas, transfers, expenses, incomes, debts, goals, aportes] =
+    await Promise.all(tablas.map(t => leerTablaCompleta(t, userId)));
+  const { data: cfg, error: errCfg } = await supa.from('config_compartida').select('*').eq('user_id', userId).maybeSingle();
+  if(errCfg) throw new Error('config_compartida: ' + (errCfg.message || 'error desconocido'));
+
+  const aportesPorMeta = {};
+  aportes.forEach(a => { (aportesPorMeta[a.goal_id] = aportesPorMeta[a.goal_id] || []).push(a); });
+  return {
+    accounts: cuentas.map(localCuenta),
+    transfers: transfers.map(localTransfer),
+    expenses: expenses.map(localExpense),
+    incomes: incomes.map(localIncome),
+    debts: debts.map(localDebt),
+    goals: goals.map(g => localGoal(g, aportesPorMeta[g.id])),
+    configCompartida: cfg ? localConfigCompartida(cfg) : null
+  };
+}
+
+// Reemplaza el estado local por el de la nube. Las preferencias propias del dispositivo
+// (paleta, letra, onboarding, etc.) se conservan: solo se pisan las claves compartidas.
+// Pasa por migrateBackup(), igual que restaurar un respaldo, para normalizar lo que llegue.
+async function traerDatosIniciales(userId){
+  const toastEl = mostrarToastProgreso('Trayendo tus datos desde la nube…');
+  try{
+    const nube = await leerNubeCompleta(userId);
+    const config = { ...state.config };
+    if(nube.configCompartida){
+      delete config.mesInicioRegistro;   // la nube manda: si allá no está definido, acá tampoco
+      Object.assign(config, nube.configCompartida);
+    }
+    const nuevo = {
+      ...state,
+      config,
+      accounts: nube.accounts, transfers: nube.transfers, expenses: nube.expenses,
+      incomes: nube.incomes, debts: nube.debts, goals: nube.goals
+    };
+    state = migrateBackup(nuevo);
+    sembrarUltimoDoneVistoSiFalta();
+    if(!saveState()) throw new Error('no se pudo guardar el estado local');
+    quitarMarcaPullPendiente();
+    renderAll();
+    cerrarToastProgreso(toastEl, 'Tus datos de la nube ya están en este dispositivo.', 'success');
+    return true;
+  }catch(e){
+    // La marca queda: la próxima carga con sesión lo reintenta (si el local sigue vacío).
+    console.warn('Lectura inicial desde la nube: falló', e);
+    cerrarToastProgreso(toastEl, 'No se pudieron traer tus datos desde la nube. Se reintentará la próxima vez que abras la app con sesión.', 'error', 6000);
+    return false;
+  }
+}
+
+/* ---- Suscripción Realtime (Tanda 3: solo observación) ----
+   Cada evento se registra en consola y en un buffer, pero NO se aplica a `state`: qué hacer
+   con cada cambio (y con los choques) lo decide la Tanda 4. Entre varias pestañas del mismo
+   origen, solo la que tiene el Web Lock mantiene el canal; las demás esperan en cola y
+   toman el relevo al cerrarse la líder. Sin Web Locks (navegador antiguo) cada pestaña se
+   suscribe por su cuenta — limitación conocida, no error. */
+const REALTIME_TABLAS = ['cuentas_financieras','transfers','expenses','incomes','debts','goals','goal_aportes','config_compartida','config_dispositivo'];
+const REALTIME_LOCK = 'telora-realtime-leader';
+const realtimeEventos = [];   // buffer para la Tanda 4 (tope 200, lo más nuevo al final)
+let rtUserId = null;          // cuenta para la que se pidió la suscripción (null = apagada)
+let rtCanal = null;
+let rtSoltarLock = null;      // resuelve la promesa que retiene el Web Lock
+let rtAbortEspera = null;     // cancela la espera en cola del lock
+
+function registrarEventoRealtime(p){
+  const fila = (p.eventType === 'DELETE') ? p.old : p.new;
+  realtimeEventos.push({ recibido: Date.now(), tabla: p.table, tipo: p.eventType, fila, old: p.old });
+  if(realtimeEventos.length > 200) realtimeEventos.shift();
+  console.info('[Realtime] ' + p.eventType + ' ' + p.table, (fila && (fila.id || fila.device_id || fila.user_id)) || '', p);
+}
+
+function abrirCanalRealtime(userId){
+  let canal = supa.channel('telora-sync-' + userId);
+  REALTIME_TABLAS.forEach(t => {
+    canal = canal.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'user_id=eq.' + userId }, registrarEventoRealtime);
+  });
+  canal.subscribe((estado, err) => console.info('[Realtime] canal ' + estado, err || ''));
+  rtCanal = canal;
+}
+
+function activarRealtime(userId){
+  if(!supa || !userId || rtUserId === userId) return;
+  if(rtUserId) desactivarRealtime();
+  rtUserId = userId;
+  if(typeof navigator === 'undefined' || typeof navigator.locks === 'undefined'){
+    console.info('[Realtime] Web Locks no disponible: esta pestaña se suscribe sin coordinarse con las demás.');
+    abrirCanalRealtime(userId);
+    return;
+  }
+  const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  rtAbortEspera = ctrl;
+  navigator.locks.request(REALTIME_LOCK, ctrl ? { signal: ctrl.signal } : {}, () => {
+    rtAbortEspera = null;
+    if(rtUserId !== userId) return;   // se cerró sesión mientras esperaba: suelta el lock al tiro
+    console.info('[Realtime] esta pestaña es la líder: abre el canal.');
+    abrirCanalRealtime(userId);
+    return new Promise(resolve => { rtSoltarLock = resolve; });
+  }).catch(e => {
+    if(!e || e.name !== 'AbortError') console.warn('[Realtime] no se pudo pedir el Web Lock', e);
+  });
+}
+
+function desactivarRealtime(){
+  rtUserId = null;
+  if(rtAbortEspera){ try{ rtAbortEspera.abort(); }catch(_){} rtAbortEspera = null; }
+  if(rtCanal){ try{ supa.removeChannel(rtCanal); }catch(e){ console.warn('[Realtime] removeChannel', e); } rtCanal = null; }
+  if(rtSoltarLock){ rtSoltarLock(); rtSoltarLock = null; }
+}
+
 // Subida completa: accounts -> transfers -> expenses -> incomes -> debts -> goals ->
 // goal_aportes -> config_compartida -> config_dispositivo (SIEMPRE al final, punto 4h).
 async function subirDatosIniciales(userId, deviceId){
@@ -13083,6 +13315,7 @@ async function subirDatosIniciales(userId, deviceId){
 
     quitarMarcaSubidaPendiente();
     cerrarToastProgreso(toastEl, 'Tus datos ya están respaldados en la nube.', 'success');
+    activarRealtime(userId);
   }catch(e){
     console.warn('Subida inicial a la nube: falló, revirtiendo lo insertado', e);
     // Si la limpieza no se pudo confirmar, la marca queda: el próximo intento la reintenta.
@@ -13115,6 +13348,13 @@ async function intentarSubidaInicial(session){
     // que se inserta), aunque la marca haya quedado por cerrar la pestaña justo después.
     if(dispExistente){
       if(leerSubidaPendiente() === userId) quitarMarcaSubidaPendiente();
+      // Pull de una carga anterior que no alcanzó a terminar: se reintenta solo si el
+      // local sigue vacío (si no, ya no es una copia limpia y se deja como está).
+      if(PULL_INICIAL_ACTIVO && leerPullPendiente() === userId){
+        if(localEstaVacio()) await traerDatosIniciales(userId);
+        else quitarMarcaPullPendiente();
+      }
+      activarRealtime(userId);
       return;
     }
     // Sin fila y con marca: lo que haya en la nube es de un intento de ESTE dispositivo
@@ -13135,8 +13375,18 @@ async function intentarSubidaInicial(session){
     const esPrimerDispositivo = conteos.every(r => (r.count || 0) === 0);
 
     if(!esPrimerDispositivo){
+      // Local vacío: copia limpia desde la nube. La marca va ANTES de registrar el
+      // dispositivo, para que un pull interrumpido se reintente en la próxima carga.
+      if(PULL_INICIAL_ACTIVO && localEstaVacio()){
+        marcarPullPendiente(userId);
+        await registrarDispositivo(userId, deviceId);
+        await traerDatosIniciales(userId);
+        activarRealtime(userId);
+        return;
+      }
       await registrarDispositivo(userId, deviceId);
       showToast('Ya hay datos de tu cuenta en la nube. La sincronización entre dispositivos llega en una próxima actualización — por ahora, este dispositivo sigue funcionando con sus propios datos locales.', null, 6000);
+      activarRealtime(userId);
       return;
     }
 
@@ -13191,6 +13441,7 @@ try{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
       if(session) intentarSubidaInicial(session);
+      else desactivarRealtime();   // sesión cerrada (acá, en otra pestaña o por expiración)
     });
     supa.auth.getSession().then(({ data, error })=>{
       renderCuentaUsuario(data && data.session);
@@ -13224,6 +13475,7 @@ document.getElementById('btnLoginGoogle').onclick = async ()=>{
 
 document.getElementById('btnLogout').onclick = async ()=>{
   if(!supa) return;
+  desactivarRealtime();   // antes del signOut: el canal se cierra con el token todavía válido
   // scope 'local': cierra la sesión en este dispositivo aunque no haya red (el default
   // 'global' pide al servidor revocar todas las sesiones y puede fallar sin conexión).
   try{ await supa.auth.signOut({ scope: 'local' }); }
