@@ -9464,7 +9464,8 @@ function normNombre(s){
 function contarUso(key, item){
   if(key === 'metodos') return state.expenses.filter(e=> e.method === item).length;
   if(key === 'fuentes') return state.incomes.filter(i=> i.source === item).length;
-  if(key === 'categorias') return state.expenses.filter(e=> e.category === item).length;
+  if(key === 'categorias') return state.expenses.filter(e=> e.category === item).length
+                                + state.debts.filter(d=> d.category === item).length;
   return 0;
 }
 const escAttr = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
@@ -9648,9 +9649,23 @@ function abrirMigracionConfig(key, idx, item, n){
   const t = MIGRACION_TEXTOS[key];
   const destinos = state.config[key].filter((_,i)=> i !== idx);
   document.getElementById('cfgMigrarTitle').textContent = `Eliminar «${item}»`;
-  document.getElementById('cfgMigrarBody').textContent =
-    `${n} ${n===1 ? t.registro+' usa' : t.registro+'s usan'} «${item}». ` +
-    `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${t.destino}.`;
+  // Categorías: se usan en gastos y en deudas (compras a cuotas); cada parte se
+  // cuenta por separado y se omite la que esté en 0 (mismo patrón que el rename).
+  let partes = null;
+  if(key === 'categorias'){
+    const cGastos = state.expenses.filter(e=> e.category === item).length;
+    const cDeudas = state.debts.filter(d=> d.category === item).length;
+    partes = [];
+    if(cGastos) partes.push(`${cGastos} gasto${cGastos>1?'s':''}`);
+    if(cDeudas) partes.push(`${cDeudas} deuda${cDeudas>1?'s':''}`);
+    document.getElementById('cfgMigrarBody').textContent =
+      `${partes.join(' y ')} ${n===1 ? 'usa' : 'usan'} «${item}». ` +
+      `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${t.destino}.`;
+  } else {
+    document.getElementById('cfgMigrarBody').textContent =
+      `${n} ${n===1 ? t.registro+' usa' : t.registro+'s usan'} «${item}». ` +
+      `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${t.destino}.`;
+  }
   const sel = document.getElementById('cfgMigrarDestino');
   sel.innerHTML = destinos.map(d=>`<option value="${escAttr(d)}">${d}</option>`).join('');
   const notaCuotas = document.getElementById('cfgMigrarNotaCuotas');
@@ -9661,8 +9676,9 @@ function abrirMigracionConfig(key, idx, item, n){
   } else {
     notaCuotas.hidden = true;
   }
-  document.getElementById('cfgMigrarConfirm').textContent =
-    `Mover ${n} ${n===1 ? t.registro : t.registro+'s'} y eliminar`;
+  document.getElementById('cfgMigrarConfirm').textContent = partes
+    ? `Mover ${partes.join(' y ')} y eliminar`
+    : `Mover ${n} ${n===1 ? t.registro : t.registro+'s'} y eliminar`;
   openSheet('sheetCfgMigrar', 'cfgMigrarDestino');
 }
 document.getElementById('cfgMigrarConfirm').onclick = ()=>{
@@ -9677,6 +9693,9 @@ document.getElementById('cfgMigrarConfirm').onclick = ()=>{
   const arr   = key === 'fuentes' ? state.incomes : state.expenses;
   let c = 0;
   arr.forEach(r=>{ if(r[campo] === item){ r[campo] = dest; c++; } });
+  // Categorías: las deudas (compras a cuotas) también guardan category.
+  let cDeudas = 0;
+  if(key === 'categorias') state.debts.forEach(d=>{ if(d.category === item){ d.category = dest; cDeudas++; } });
   state.config[key].splice(realIdx, 1);
   // Referencias por-categoría del ítem eliminado (ícono/tope/color) no se migran al
   // destino — se descartan junto con la categoría, igual que hacía el borrado directo.
@@ -9688,6 +9707,16 @@ document.getElementById('cfgMigrarConfirm').onclick = ()=>{
   migracionConfigCtx = null;
   const t = MIGRACION_TEXTOS[key];
   haptic(HAPTIC_DELETE); saveState(); renderConfig(); closeSheet('sheetCfgMigrar');
+  if(key === 'categorias'){
+    const partes = [];
+    if(c) partes.push(`${c} gasto${c>1?'s':''}`);
+    if(cDeudas) partes.push(`${cDeudas} deuda${cDeudas>1?'s':''}`);
+    const n = c + cDeudas;
+    const part = partes.length === 2 ? 'movidos'
+      : cDeudas ? `movida${n>1?'s':''}` : `movido${n>1?'s':''}`;
+    showToast(`${partes.length ? `${partes.join(' y ')} ${part} a «${dest}». ` : ''}«${item}» eliminada.`, 'success');
+    return;
+  }
   showToast(`${c} ${c===1 ? t.registro+' movido' : t.registro+'s movidos'} a «${dest}». «${item}» eliminada.`, 'success');
 };
 
