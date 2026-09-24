@@ -2687,6 +2687,20 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
+<!-- SHEET: confirmar dueño de los datos locales antes de la subida inicial a la nube.
+     Descartable (fondo/Escape/"Ahora no" = no sube nada; se vuelve a preguntar la próxima sesión). -->
+<div class="sheet-overlay" id="sheetConfirmarDueno">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Estos datos son tuyos?</h2>
+    <p class="sheet-note" style="margin-bottom:12px;">
+      Los datos financieros guardados en este dispositivo se van a subir a la nube bajo la cuenta <b id="confirmarDuenoCorreo"></b>. Confirma solo si son tuyos: después, este dispositivo quedará asociado a esa cuenta.
+    </p>
+    <button class="btn-primary" id="btnConfirmarDueno">Sí, son míos — subir</button>
+    <button class="btn-ghost" data-close>Ahora no</button>
+  </div>
+</div>
+
 <!-- SHEET: tarjeta previa antes de compartir/descargar el respaldo -->
 <div class="sheet-overlay" id="sheetBackupShare">
   <div class="sheet">
@@ -2714,6 +2728,19 @@ button:active{ transform:scale(0.93); }
     <p id="saveErrBody" class="blocker-body"></p>
     <button class="btn-primary" id="btnSaveErrBackup">Descargar respaldo ahora</button>
     <button class="btn-ghost" id="btnSaveErrDismiss">Entendido, cerrar</button>
+  </div>
+</div>
+
+<!-- BLOQUEANTE: los datos locales ya fueron confirmados para otra cuenta. Texto genérico:
+     NUNCA muestra el correo de la cuenta original (sería una fuga hacia quien acaba de entrar). -->
+<div class="blocker-overlay" id="dlgConflictoDueno">
+  <div class="blocker-card" role="alertdialog" aria-modal="true" aria-labelledby="conflictoDuenoTitle" aria-describedby="conflictoDuenoBody">
+    <div class="blocker-icon">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <h2 id="conflictoDuenoTitle">No se subieron tus datos locales</h2>
+    <p id="conflictoDuenoBody" class="blocker-body">Este dispositivo tiene datos financieros locales que ya fueron confirmados para otra cuenta de Telora. Por seguridad, no se subirán automáticamente a la cuenta con la que acabas de iniciar sesión. Tus datos locales no se han modificado.</p>
+    <button class="btn-primary" id="btnConflictoDuenoOk">Entendido</button>
   </div>
 </div>
 
@@ -12964,6 +12991,29 @@ function leerSubidaPendiente(){ try{ return localStorage.getItem(CLAVE_SUBIDA_PE
 function marcarSubidaPendiente(userId){ try{ localStorage.setItem(CLAVE_SUBIDA_PENDIENTE, userId); }catch(_){} }
 function quitarMarcaSubidaPendiente(){ try{ localStorage.removeItem(CLAVE_SUBIDA_PENDIENTE); }catch(_){} }
 
+// Candado de dispositivo: user_id que confirmó explícitamente que los datos locales son
+// suyos (sheetConfirmarDueno). Mientras no exista, la subida inicial siempre pregunta;
+// si existe y es de OTRA cuenta, nunca se sube nada a la cuenta activa.
+const CLAVE_DUENO_CONFIRMADO = 'telora_dueno_confirmado';
+function leerDuenoConfirmado(){ try{ return localStorage.getItem(CLAVE_DUENO_CONFIRMADO); }catch(_){ return null; } }
+function marcarDuenoConfirmado(userId){ try{ localStorage.setItem(CLAVE_DUENO_CONFIRMADO, userId); }catch(_){} }
+
+// Última cuenta a la que ya se le mostró el diálogo bloqueante de conflicto: si el mismo
+// conflicto vuelve a aparecer en otra carga, basta con un toast.
+const CLAVE_CONFLICTO_ADVERTIDO = 'telora_conflicto_advertido';
+function leerConflictoAdvertido(){ try{ return localStorage.getItem(CLAVE_CONFLICTO_ADVERTIDO); }catch(_){ return null; } }
+function marcarConflictoAdvertido(userId){ try{ localStorage.setItem(CLAVE_CONFLICTO_ADVERTIDO, userId); }catch(_){} }
+
+// La subida inicial se evalúa al detectar sesión, sin que el usuario toque nada: si en ese
+// momento hay un sheet obligatorio abierto (data-nodismiss: onboarding, cierre de mes), la
+// pregunta espera a que se cierre para no interrumpirlo. Espera acotada (~60s) y después
+// se muestra igual, para que la pregunta nunca quede sin aparecer.
+function abrirCuandoLibre(mostrar, intentos = 0){
+  const bloqueante = document.querySelector('.sheet-overlay.open[data-nodismiss]');
+  if(!bloqueante || intentos > 120){ mostrar(); return; }  // ~60s tope (500ms x120)
+  setTimeout(()=> abrirCuandoLibre(mostrar, intentos + 1), 500);
+}
+
 // Registra el dispositivo sin subir datos (cuenta con datos previos en la nube, punto 3).
 async function registrarDispositivo(userId, deviceId){
   const { error } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId));
@@ -13061,11 +13111,49 @@ async function intentarSubidaInicial(session){
       return;
     }
 
-    await subirDatosIniciales(userId, deviceId);
+    const dueno = leerDuenoConfirmado();
+    if(dueno === userId){
+      // Caso B: este dispositivo ya fue confirmado para esta cuenta — sube sin preguntar.
+      await subirDatosIniciales(userId, deviceId);
+      return;
+    }
+    if(dueno){
+      // Caso C: candado de otra cuenta. No se sube nada y NO se llama a
+      // registrarDispositivo(): esa fila haría que esta función retorne temprano en
+      // cada carga siguiente y el conflicto quedaría silenciado para siempre.
+      if(leerConflictoAdvertido() === userId){
+        showToast('Los datos locales de este dispositivo pertenecen a otra cuenta de Telora, así que no se subieron a esta.', null, 5000);
+      } else {
+        // La marca se escribe recién al mostrar el diálogo: si la carga se interrumpe
+        // mientras espera (p. ej. durante el onboarding), la próxima vuelve a mostrarlo.
+        abrirCuandoLibre(()=>{
+          marcarConflictoAdvertido(userId);
+          document.getElementById('dlgConflictoDueno').classList.add('open');
+        });
+      }
+      return;
+    }
+    // Caso A: nadie ha confirmado todavía — se pregunta siempre, aunque no haya datos locales.
+    subidaDuenoCtx = { userId, deviceId };
+    document.getElementById('confirmarDuenoCorreo').textContent = (session.user.email || 'con la que iniciaste sesión');
+    abrirCuandoLibre(()=> openSheet('sheetConfirmarDueno', 'btnConfirmarDueno'));
   }catch(e){
     console.warn('Subida inicial: error inesperado', e);
   }
 }
+
+let subidaDuenoCtx = null;   // { userId, deviceId }
+document.getElementById('btnConfirmarDueno').onclick = async ()=>{
+  if(!subidaDuenoCtx) return;
+  const { userId, deviceId } = subidaDuenoCtx;
+  closeSheet('sheetConfirmarDueno');
+  subidaDuenoCtx = null;
+  marcarDuenoConfirmado(userId);
+  await subirDatosIniciales(userId, deviceId);
+};
+document.getElementById('btnConflictoDuenoOk').onclick = ()=>{
+  document.getElementById('dlgConflictoDueno').classList.remove('open');
+};
 
 try{
   if(typeof supabase !== 'undefined' && supabase.createClient){
