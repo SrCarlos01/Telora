@@ -12729,18 +12729,306 @@ function limpiarUrlAuth(){
   }catch(_){ return false; }
 }
 
+/* ==================== SUBIDA INICIAL A LA NUBE (Etapa 2 · Tanda 2) ====================
+   Solo sube (local -> nube), una sola vez por dispositivo, y solo si este es el PRIMER
+   dispositivo de la cuenta (nube completamente vacía para ese user_id). Si la cuenta ya
+   tiene datos en la nube, no se sube nada acá — la fusión llega en una tanda futura.
+   Nunca escribe en localStorage.misfinanzas_data; solo lee el estado local y escribe en
+   Supabase. Las únicas escrituras locales nuevas son 'telora_device_id' y la marca
+   temporal 'telora_subida_pendiente' (ver más abajo). */
+
+// Identificador de este dispositivo/navegador: se genera una sola vez y persiste.
+function getDeviceId(){
+  try{
+    let id = localStorage.getItem('telora_device_id');
+    if(!id){
+      id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+      localStorage.setItem('telora_device_id', id);
+    }
+    return id;
+  }catch(_){ return null; }   // localStorage bloqueado: no hay forma confiable de recordar el dispositivo
+}
+
+// ultimoRespaldo/respaldoSnooze se guardan localmente como milisegundos (Date.now()),
+// pero en la nube son columnas timestamp: se mandan como ISO, o null si no hay valor.
+function msAIsoONull(v){ return (typeof v === 'number' && isFinite(v) && v > 0) ? new Date(v).toISOString() : null; }
+
+// Fila de config_dispositivo a partir de las preferencias locales (punto 4e). También
+// es la fila que marca "este dispositivo ya se sincronizó" (punto 2).
+function filaConfigDispositivo(userId, deviceId){
+  const c = state.config || {};
+  return {
+    user_id: userId,
+    device_id: deviceId,
+    paleta: c.paleta ?? null,
+    font_scale: c.fontScale ?? null,
+    alto_contraste: !!c.altoContraste,
+    historial_detalle: !!c.historialDetalle,
+    resumen_detalle: !!c.resumenDetalle,
+    cuenta_activa: c.cuentaActiva ?? null,
+    onboarding_visto: !!c.onboardingVisto,
+    notif_cuotas_concedido: (c.notifCuotasConcedido === true || c.notifCuotasConcedido === false) ? c.notifCuotasConcedido : null,
+    ultimo_respaldo: msAIsoONull(c.ultimoRespaldo),
+    respaldo_snooze: msAIsoONull(c.respaldoSnooze),
+    persist_concedido: (c.persistConcedido === true || c.persistConcedido === false) ? c.persistConcedido : null
+  };
+}
+
+function filaConfigCompartida(userId){
+  const c = state.config || {};
+  return {
+    user_id: userId,
+    categorias: Array.isArray(c.categorias) ? c.categorias : [],
+    metodos: Array.isArray(c.metodos) ? c.metodos : [],
+    fuentes: Array.isArray(c.fuentes) ? c.fuentes : [],
+    categoria_iconos: c.categoriaIconos ?? {},
+    categoria_topes: c.categoriaTopes ?? {},
+    categoria_colores: c.categoriaColores ?? {},
+    mes_inicio_registro: c.mesInicioRegistro ?? null,
+    read_only: !!c.readOnly
+  };
+}
+
+// Postgres rechaza "" en columnas date, y la app guarda fechaLimite: "" en metas sin
+// fecha: toda fecha vacía o ausente se manda como null.
+function fechaONull(v){ return (typeof v === 'string' && v.trim() !== '') ? v : null; }
+
+function filaCuenta(a, userId){
+  return { id: a.id || uid(), user_id: userId, nombre: a.nombre, orden: a.orden, archivada: !!a.archivada };
+}
+function filaTransfer(t, userId){
+  return { id: t.id || uid(), user_id: userId, origen: t.origen, destino: t.destino, monto: t.monto, fecha: fechaONull(t.fecha), nombre: t.nombre || '' };
+}
+function filaExpense(e, userId){
+  return {
+    id: e.id || uid(), user_id: userId,
+    date: fechaONull(e.date), amount: e.amount, category: e.category ?? null, method: e.method ?? null,
+    description: e.description ?? null, nombre: e.nombre ?? null, tipo: e.tipo ?? null,
+    debt_id: e.debtId ?? null, cuenta_id: e.cuentaId ?? null,
+    dia_hasta: e.diaHasta ?? null, fechas_confirmadas: e.fechasConfirmadas ?? null
+  };
+}
+function filaIncome(i, userId){
+  return {
+    id: i.id || uid(), user_id: userId,
+    date: fechaONull(i.date), amount: i.amount, source: i.source ?? null,
+    description: i.description ?? null, nombre: i.nombre ?? null, tipo: i.tipo ?? null,
+    cuenta_id: i.cuentaId ?? null, dia_hasta: i.diaHasta ?? null, fechas_confirmadas: i.fechasConfirmadas ?? null
+  };
+}
+function filaDebt(d, userId){
+  return {
+    id: d.id || uid(), user_id: userId,
+    purchase_date: fechaONull(d.purchaseDate), total_amount: d.totalAmount, num_cuotas: d.numCuotas,
+    description: d.description ?? null, category: d.category ?? null, cuenta_id: d.cuentaId ?? null,
+    manual_paid_month_keys: Array.isArray(d.manualPaidMonthKeys) ? d.manualPaidMonthKeys : [],
+    manual_unpaid_month_keys: Array.isArray(d.manualUnpaidMonthKeys) ? d.manualUnpaidMonthKeys : []
+  };
+}
+function filaGoal(g, userId){
+  return {
+    id: g.id || uid(), user_id: userId,
+    name: g.name ?? null, indefinida: !!g.indefinida, monto_objetivo: g.montoObjetivo ?? null,
+    fecha_limite: fechaONull(g.fechaLimite), fecha_creacion: fechaONull(g.fechaCreacion), cuenta_id: g.cuentaId ?? null,
+    aporte_automatico: g.aporteAutomatico ?? null, fecha_cumplida: fechaONull(g.fechaCumplida),
+    ultimo_done_visto: (g._ultimoDoneVisto === true || g._ultimoDoneVisto === false) ? g._ultimoDoneVisto : null
+  };
+}
+// Aplana los aportes de UNA meta a filas de goal_aportes (array vacío o ausente -> []).
+function filasAportes(g, userId, goalId){
+  const aportes = Array.isArray(g.aportes) ? g.aportes : [];
+  return aportes.map(a => ({
+    id: a.id || uid(), user_id: userId, goal_id: goalId,
+    monto: a.monto, fecha: fechaONull(a.fecha), tipo: a.tipo ?? null
+  }));
+}
+
+// Inserta en lotes de 200 filas (varias peticiones en vez de una gigante). Un arreglo
+// vacío no hace ninguna llamada. Lanza si algún lote falla, para que el llamador aborte
+// y limpie lo ya insertado.
+async function insertarPorLotes(tabla, filas){
+  if(!filas.length) return;
+  const TAM = 200;
+  for(let i = 0; i < filas.length; i += TAM){
+    const lote = filas.slice(i, i + TAM);
+    const { error } = await supa.from(tabla).insert(lote);
+    if(error) throw new Error(tabla + ': ' + (error.message || 'error desconocido'));
+  }
+}
+
+// Toast persistente (sin duración automática) para el progreso de la subida. Reusa el
+// mismo host/clase que showToast() para verse igual, pero se controla a mano: se
+// reemplaza por un toast normal de éxito/error al terminar (punto 4g).
+function mostrarToastProgreso(msg){
+  try{
+    let host = document.getElementById('toastHost');
+    if(!host){
+      host = document.createElement('div');
+      host.id = 'toastHost'; host.className = 'toast-host';
+      document.body.appendChild(host);
+    }
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.setAttribute('role', 'status');
+    const msgEl = document.createElement('span');
+    msgEl.className = 'toast-msg';
+    msgEl.textContent = msg;
+    t.appendChild(msgEl);
+    host.appendChild(t);
+    if(prefersReducedMotion()) t.classList.add('show');
+    else requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
+    return t;
+  }catch(_){ return null; }
+}
+function cerrarToastProgreso(t, msg, type, ms){
+  try{ if(t && t.parentNode) t.remove(); }catch(_){}
+  showToast(msg, type, ms);
+}
+
+// Si una subida falla a mitad de camino, borra lo que sí alcanzó a subirse en ESTE
+// intento (mismo user_id) para que la nube vuelva a quedar vacía: así el próximo intento
+// (próxima vez que haya sesión) se vuelve a evaluar honestamente como "primer dispositivo"
+// en vez de quedar en un estado a medias. Best-effort: cada delete es independiente.
+// Devuelve true solo si todos los deletes respondieron sin error.
+async function limpiarSubidaParcial(userId){
+  const tablas = ['goal_aportes','goals','debts','incomes','expenses','transfers','cuentas_financieras','config_compartida'];
+  let ok = true;
+  for(const t of tablas){
+    try{
+      const { error } = await supa.from(t).delete().eq('user_id', userId);
+      if(error){ ok = false; console.warn('Subida inicial: no se pudo limpiar', t, error); }
+    }catch(e){ ok = false; console.warn('Subida inicial: no se pudo limpiar', t, e); }
+  }
+  return ok;
+}
+
+// Marca local "hay una subida de este dispositivo sin terminar" (punto 4h), con el
+// user_id dueño. Cubre lo que el catch de subirDatosIniciales no alcanza: pestaña
+// cerrada, app matada o sin red a mitad de la subida.
+const CLAVE_SUBIDA_PENDIENTE = 'telora_subida_pendiente';
+function leerSubidaPendiente(){ try{ return localStorage.getItem(CLAVE_SUBIDA_PENDIENTE); }catch(_){ return null; } }
+function marcarSubidaPendiente(userId){ try{ localStorage.setItem(CLAVE_SUBIDA_PENDIENTE, userId); }catch(_){} }
+function quitarMarcaSubidaPendiente(){ try{ localStorage.removeItem(CLAVE_SUBIDA_PENDIENTE); }catch(_){} }
+
+// Registra el dispositivo sin subir datos (cuenta con datos previos en la nube, punto 3).
+async function registrarDispositivo(userId, deviceId){
+  const { error } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId));
+  if(error) console.warn('Subida inicial: no se pudo registrar el dispositivo', error);
+}
+
+// Subida completa: accounts -> transfers -> expenses -> incomes -> debts -> goals ->
+// goal_aportes -> config_compartida -> config_dispositivo (SIEMPRE al final, punto 4h).
+async function subirDatosIniciales(userId, deviceId){
+  const toastEl = mostrarToastProgreso('Subiendo tus datos a la nube…');
+  marcarSubidaPendiente(userId);
+  try{
+    const accounts  = Array.isArray(state.accounts)  ? state.accounts  : [];
+    const transfers = Array.isArray(state.transfers) ? state.transfers : [];
+    const expenses  = Array.isArray(state.expenses)  ? state.expenses  : [];
+    const incomes   = Array.isArray(state.incomes)   ? state.incomes   : [];
+    const debts     = Array.isArray(state.debts)     ? state.debts     : [];
+    const goals     = Array.isArray(state.goals)     ? state.goals     : [];
+
+    const filasCuentas = accounts.map(a => filaCuenta(a, userId));
+    await insertarPorLotes('cuentas_financieras', filasCuentas);
+    await insertarPorLotes('transfers', transfers.map(t => filaTransfer(t, userId)));
+    await insertarPorLotes('expenses', expenses.map(e => filaExpense(e, userId)));
+    await insertarPorLotes('incomes', incomes.map(i => filaIncome(i, userId)));
+    await insertarPorLotes('debts', debts.map(d => filaDebt(d, userId)));
+
+    // Las filas de meta se calculan primero (para conocer el id final, por si g.id
+    // faltaba y se generó uno nuevo) y ESE id es el que usan sus aportes.
+    const filasGoals = goals.map(g => filaGoal(g, userId));
+    await insertarPorLotes('goals', filasGoals);
+    const aportes = goals.flatMap((g, idx) => filasAportes(g, userId, filasGoals[idx].id));
+    await insertarPorLotes('goal_aportes', aportes);
+
+    await insertarPorLotes('config_compartida', [filaConfigCompartida(userId)]);
+
+    const { error: errDisp } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId));
+    if(errDisp) throw new Error('config_dispositivo: ' + (errDisp.message || 'error desconocido'));
+
+    quitarMarcaSubidaPendiente();
+    cerrarToastProgreso(toastEl, 'Tus datos ya están respaldados en la nube.', 'success');
+  }catch(e){
+    console.warn('Subida inicial a la nube: falló, revirtiendo lo insertado', e);
+    // Si la limpieza no se pudo confirmar, la marca queda: el próximo intento la reintenta.
+    if(await limpiarSubidaParcial(userId)) quitarMarcaSubidaPendiente();
+    cerrarToastProgreso(toastEl, 'No se pudo completar la subida de tus datos a la nube. Se reintentará la próxima vez que abras la app con sesión.', 'error', 6000);
+  }
+}
+
+// Punto de entrada: se llama con cada sesión activa confirmada (login recién hecho o
+// sesión ya existente al cargar). Un flag en memoria evita repetir la evaluación varias
+// veces en la misma carga de página (onAuthStateChange puede disparar más de un evento
+// con sesión); la fila de config_dispositivo es la que evita repetirla entre recargas.
+let __subidaInicialEvaluada = false;
+async function intentarSubidaInicial(session){
+  if(__subidaInicialEvaluada) return;
+  const userId = session && session.user && session.user.id;
+  if(!supa || !userId) return;
+  const deviceId = getDeviceId();
+  if(!deviceId) return;
+  __subidaInicialEvaluada = true;
+  try{
+    const { data: dispExistente, error: errDisp } = await supa
+      .from('config_dispositivo')
+      .select('device_id')
+      .eq('user_id', userId)
+      .eq('device_id', deviceId)
+      .maybeSingle();
+    if(errDisp){ console.warn('Subida inicial: no se pudo verificar config_dispositivo', errDisp); return; }
+    // Con fila, la subida de este dispositivo terminó (config_dispositivo es lo último
+    // que se inserta), aunque la marca haya quedado por cerrar la pestaña justo después.
+    if(dispExistente){
+      if(leerSubidaPendiente() === userId) quitarMarcaSubidaPendiente();
+      return;
+    }
+    // Sin fila y con marca: lo que haya en la nube es de un intento de ESTE dispositivo
+    // que quedó a medias. Se borra antes de contar, para no confundirlo con otro
+    // dispositivo. Si la limpieza no se confirma, no se sigue (se reintenta en la próxima carga).
+    if(leerSubidaPendiente() === userId){
+      if(!(await limpiarSubidaParcial(userId))) return;
+      quitarMarcaSubidaPendiente();
+    }
+
+    const tablasConteo = ['expenses','incomes','debts','goals','cuentas_financieras','transfers'];
+    const conteos = await Promise.all(tablasConteo.map(t =>
+      supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId)
+    ));
+    for(const r of conteos){
+      if(r.error){ console.warn('Subida inicial: no se pudo contar filas en la nube', r.error); return; }
+    }
+    const esPrimerDispositivo = conteos.every(r => (r.count || 0) === 0);
+
+    if(!esPrimerDispositivo){
+      await registrarDispositivo(userId, deviceId);
+      showToast('Ya hay datos de tu cuenta en la nube. La sincronización entre dispositivos llega en una próxima actualización — por ahora, este dispositivo sigue funcionando con sus propios datos locales.', null, 6000);
+      return;
+    }
+
+    await subirDatosIniciales(userId, deviceId);
+  }catch(e){
+    console.warn('Subida inicial: error inesperado', e);
+  }
+}
+
 try{
   if(typeof supabase !== 'undefined' && supabase.createClient){
     supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     supa.auth.onAuthStateChange((event, session)=>{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
+      if(session) intentarSubidaInicial(session);
     });
     supa.auth.getSession().then(({ data, error })=>{
       renderCuentaUsuario(data && data.session);
       if(limpiarUrlAuth() || error){
         showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
       }
+      if(data && data.session) intentarSubidaInicial(data.session);
     }).catch(()=> renderCuentaUsuario(null));
   }
 }catch(e){
