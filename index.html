@@ -1276,7 +1276,9 @@ button{font-family:inherit;}
    Nota: NO usa la clase ".field" del sheet para no heredar ".field input[type=text]"
    (más específica que ".cfg-cat-tope-in input" y le pisaría el borde/fondo transparente). */
 .cat-editar-tope{margin:14px 0;}
-.cat-editar-tope > label{display:block; font-size:13.5px; color:var(--gold-dim); margin-bottom:6px; font-weight:500;}
+.cat-editar-nombre{margin:0 0 14px;}
+.cat-editar-nombre .cfg-rename-edit{align-items:stretch;}
+.cat-editar-tope > label, .cat-editar-nombre > label{display:block; font-size:13.5px; color:var(--gold-dim); margin-bottom:6px; font-weight:500;}
 .cfg-cat-tope-in{
   display:flex; align-items:center; gap:4px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:0 10px;
@@ -1300,7 +1302,8 @@ button{font-family:inherit;}
   background:var(--surface-2); border:1px solid var(--gold-dim); border-radius:8px; color:var(--cream);
 }
 .cfg-rename-edit .cfg-rename-input:focus{outline:none; box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
-.config-item .cfg-rename-edit .cfg-rename-ok{
+.config-item .cfg-rename-edit .cfg-rename-ok,
+.cat-editar-nombre .cfg-rename-edit .cfg-rename-ok{
   flex-shrink:0; padding:0 14px; font-size:13px; font-weight:600;
   background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9; border-radius:8px;
 }
@@ -2640,6 +2643,13 @@ button:active{ transform:scale(0.93); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="catEditarTitle">Editar categoría</h2>
+    <div class="cat-editar-nombre">
+      <label for="catEditarNombreInput">Nombre</label>
+      <div class="cfg-rename-edit">
+        <input type="text" class="cfg-rename-input" id="catEditarNombreInput" autocomplete="off">
+        <button class="small-btn cfg-rename-ok" type="button" id="btnCatEditNombre">Guardar</button>
+      </div>
+    </div>
     <button class="btn-ghost" id="btnCatEditIcono" style="margin-top:0;">Cambiar ícono</button>
     <button class="btn-ghost" id="btnCatEditColor">Cambiar color</button>
     <div class="cat-editar-tope">
@@ -9441,7 +9451,7 @@ const escHtml = s => String(s == null ? '' : s)
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
   const isCat = key === 'categorias';
-  const renombrable = key === 'metodos' || key === 'fuentes';   // categorías: tanda aparte
+  const renombrable = key === 'metodos' || key === 'fuentes';   // categorías: rename agregado Día 17
   box.innerHTML = state.config[key].map((item,idx)=>{
     // 3A: "Crédito" es el disparador de las compras a cuotas; no se puede borrar ni renombrar.
     const bloqueado = key === 'metodos' && item === 'Crédito';
@@ -10046,6 +10056,7 @@ function openCatEditar(idx){
   if(!item) return;
   catEditarTarget = { idx, item };
   document.getElementById('catEditarTitle').textContent = `Editar «${item}»`;
+  document.getElementById('catEditarNombreInput').value = item;
   const val = catTope(item);
   document.getElementById('catEditarTopeInput').value = val != null ? formatMiles(String(val)) : '';
   openSheet('sheetCatEditar');
@@ -10062,6 +10073,47 @@ document.getElementById('btnCatEditColor').onclick = ()=>{
   closeSheet('sheetCatEditar');
   openCatColor(item);
 };
+// Nombre: mismo patrón que iniciarRenombreConfig (métodos/fuentes), pero dentro de este
+// sheet, que queda abierto. Re-clava ícono/tope/color y migra gastos Y deudas (compras a
+// cuotas) — a diferencia de abrirMigracionConfig, que solo mueve state.expenses.
+(function initCatEditarNombre(){
+  const inp = document.getElementById('catEditarNombreInput');
+  const btn = document.getElementById('btnCatEditNombre');
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); btn.click(); }
+    if(e.key === 'Escape'){ inp.blur(); }
+  });
+  btn.addEventListener('click', ()=>{
+    if(!catEditarTarget) return;
+    if(isReadOnly()){ blockReadOnly(); return; }
+    const val = inp.value.trim().replace(/\s+/g, ' ');
+    if(!val){ fieldError(inp); return; }
+    const old = catEditarTarget.item;
+    if(val === old) return;
+    const idx = catEditarTarget.idx;
+    const dup = state.config.categorias.find((x,i)=> i !== idx && normNombre(x) === normNombre(val));
+    if(dup){ showToast(`Ya existe «${dup}».`, 'error'); fieldError(inp); return; }
+    state.config.categorias[idx] = val;
+    ['categoriaIconos', 'categoriaTopes', 'categoriaColores'].forEach(k=>{
+      const m = state.config[k];
+      if(m && old in m){ m[val] = m[old]; delete m[old]; }
+    });
+    let cGastos = 0, cDeudas = 0;
+    state.expenses.forEach(e=>{ if(e.category === old){ e.category = val; cGastos++; } });
+    state.debts.forEach(d=>{ if(d.category === old){ d.category = val; cDeudas++; } });
+    catEditarTarget.item = val;
+    inp.value = val;
+    document.getElementById('catEditarTitle').textContent = `Editar «${val}»`;
+    haptic(HAPTIC_OK); saveState(); renderConfig(); renderAll();
+    const partes = [];
+    if(cGastos) partes.push(`${cGastos} gasto${cGastos>1?'s':''}`);
+    if(cDeudas) partes.push(`${cDeudas} deuda${cDeudas>1?'s':''}`);
+    const n = cGastos + cDeudas;
+    const part = partes.length === 2 ? 'actualizados'
+      : cDeudas ? `actualizada${n>1?'s':''}` : `actualizado${n>1?'s':''}`;
+    showToast(`«${old}» ahora se llama «${val}».${partes.length ? ` ${partes.join(' y ')} ${part}.` : ''}`, 'success');
+  });
+})();
 // Tope mensual: se guarda al perder foco (blur) o con Enter — mismo patrón que el resto
 // de los campos de esta app. Escape fuerza el blur primero (así no se pierde el valor)
 // y luego deja que el listener global de Escape cierre el sheet.
