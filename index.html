@@ -2724,6 +2724,20 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
+<!-- SHEET: guarda contra borrado masivo en la nube (Etapa 2 · Tanda 4a). data-nodismiss:
+     hay que elegir. Mientras está abierto, la escritura continua queda pausada. -->
+<div class="sheet-overlay" id="sheetSyncBorradoMasivo" data-nodismiss>
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Borrar registros de la nube?</h2>
+    <p class="sheet-note" style="margin-bottom:12px;">
+      Se van a borrar <b id="syncBorradoN"></b> de la nube (<span id="syncBorradoDetalle"></span>). Si no esperabas esto —por ejemplo, porque restauraste un respaldo antiguo—, cancela: la nube queda como está y la sincronización se pausa hasta la próxima vez que abras la app.
+    </p>
+    <button class="btn-danger" id="btnSyncBorrarSi">Sí, borrar</button>
+    <button class="btn-ghost" id="btnSyncBorrarNo">Cancelar</button>
+  </div>
+</div>
+
 <!-- SHEET: tarjeta previa antes de compartir/descargar el respaldo -->
 <div class="sheet-overlay" id="sheetBackupShare">
   <div class="sheet">
@@ -3322,6 +3336,7 @@ function saveState(){
   try{
     localStorage.setItem('misfinanzas_data', json);
     __lastGoodStateJSON = json;
+    alGuardarEstadoSync();   // Tanda 4a: escritura continua a la nube (no hace nada con la bandera apagada)
     return true;
   }catch(e){
     // Revertir la mutación en memoria: la app no debe mostrar datos que no se guardaron.
@@ -3341,6 +3356,7 @@ function saveStateQuiet(){
     const json = JSON.stringify(state);
     localStorage.setItem('misfinanzas_data', json);
     __lastGoodStateJSON = json;
+    alGuardarEstadoSync();   // Tanda 4a: ídem saveState()
     return true;
   }catch(_){ return false; }
 }
@@ -12907,8 +12923,10 @@ function msAIsoONull(v){ return (typeof v === 'number' && isFinite(v) && v > 0) 
 
 // Fila de config_dispositivo a partir de las preferencias locales (punto 4e). También
 // es la fila que marca "este dispositivo ya se sincronizó" (punto 2).
-function filaConfigDispositivo(userId, deviceId){
-  const c = state.config || {};
+// `cfg` opcional (Tanda 4a): el núcleo de sincronización pasa el config del estado que
+// está fotografiando; sin él se usa state.config, como hasta ahora.
+function filaConfigDispositivo(userId, deviceId, cfg){
+  const c = (cfg !== undefined ? cfg : state.config) || {};
   return {
     user_id: userId,
     device_id: deviceId,
@@ -12926,8 +12944,8 @@ function filaConfigDispositivo(userId, deviceId){
   };
 }
 
-function filaConfigCompartida(userId){
-  const c = state.config || {};
+function filaConfigCompartida(userId, cfg){
+  const c = (cfg !== undefined ? cfg : state.config) || {};
   return {
     user_id: userId,
     categorias: Array.isArray(c.categorias) ? c.categorias : [],
@@ -13184,9 +13202,12 @@ async function registrarDispositivo(userId, deviceId){
    intentarSubidaInicial() + sheetConfirmarDueno), extendiéndolo y no reinventándolo:
    pedir confirmación si el candado está vacío, respetar el conflicto si es de otra cuenta
    (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso.
-   (c) Hoy no existe escritura continua a la nube: saveState() solo escribe en localStorage.
-   La nube es una foto de la subida inicial, así que un pull traería datos viejos. No se
-   puede activar hasta que exista la sincronización de cambios.
+   (c) IMPLEMENTADO detrás de ESCRITURA_CONTINUA_ACTIVA (Tanda 4a, Día 18), PENDIENTE DE
+   ACTIVAR: con la bandera en true, cada saveState()/saveStateQuiet() del dispositivo dueño
+   se refleja en la nube (diff + cola persistente, ver "ESCRITURA CONTINUA A LA NUBE" más
+   abajo). Mientras siga en false, saveState() solo escribe en localStorage, la nube es una
+   foto de la subida inicial y un pull traería datos viejos. Solo cubre UN dispositivo: los
+   choques entre dispositivos son de la Tanda 4b.
    CORREGIDO (Día 18): el conteo que decide "primer dispositivo" en intentarSubidaInicial()
    no incluye config_compartida (a propósito: con un residuo la cuenta dejaría de ser
    "primer dispositivo" y nunca subiría), pero subirDatosIniciales() sí la inserta. Antes
@@ -13196,6 +13217,9 @@ async function registrarDispositivo(userId, deviceId){
    tablas del conteo) sí cuenta, así que la cuenta deja de ser "primer dispositivo" y la
    subida queda bloqueada. */
 const PULL_INICIAL_ACTIVO = false;
+// Tanda 4a: escritura continua a la nube (un dispositivo). Con false no hay ninguna
+// petición nueva a la red ni ninguna clave telora_sync_* en localStorage.
+const ESCRITURA_CONTINUA_ACTIVA = false;
 
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
 // migrarEstadoCuentas() siempre crea una "Principal" en un dispositivo nuevo, así que
@@ -13330,6 +13354,7 @@ function activarRealtime(userId){
     if(rtUserId !== userId) return;   // se cerró sesión mientras esperaba: suelta el lock al tiro
     console.info('[Realtime] esta pestaña es la líder: abre el canal.');
     abrirCanalRealtime(userId);
+    vaciarColaSync();   // Tanda 4a: el vaciado de la cola también es solo de la líder
     return new Promise(resolve => { rtSoltarLock = resolve; });
   }).catch(e => {
     if(!e || e.name !== 'AbortError') console.warn('[Realtime] no se pudo pedir el Web Lock', e);
@@ -13341,6 +13366,502 @@ function desactivarRealtime(){
   if(rtAbortEspera){ try{ rtAbortEspera.abort(); }catch(_){} rtAbortEspera = null; }
   if(rtCanal){ try{ supa.removeChannel(rtCanal); }catch(e){ console.warn('[Realtime] removeChannel', e); } rtCanal = null; }
   if(rtSoltarLock){ rtSoltarLock(); rtSoltarLock = null; }
+}
+
+/* ==================== ESCRITURA CONTINUA A LA NUBE (Etapa 2 · Tanda 4a) ====================
+   Refleja en Supabase cada cambio local del dispositivo dueño, sin tocar los 67 llamadores
+   de saveState(): después de cada guardado exitoso se programa (debounce) un diff entre la
+   última foto encolada ("base") y la foto actual, y las diferencias van a una cola
+   persistente que se vacía con reintentos. UN solo dispositivo: los choques entre
+   dispositivos son de la Tanda 4b. Todo queda detrás de ESCRITURA_CONTINUA_ACTIVA.
+   Tres capas, para poder llevar el motor a la app nativa cambiando solo las dos últimas:
+     a) núcleo puro (sin DOM, sin localStorage, sin supabase): fotos, diff, cola, orden;
+     b) almacenamiento (syncAlmacen): base, cola y fallidas por user_id;
+     c) transporte (syncTransporte): supabase-js. */
+
+/* ---- a) Núcleo puro ---- */
+
+// Orden padre -> hijo: los upserts van en este orden y los deletes en el inverso. La única
+// FK entre tablas de datos es goal_aportes (user_id, goal_id) -> goals.
+const SYNC_TABLAS = ['cuentas_financieras','transfers','expenses','incomes','debts','goals','goal_aportes','config_compartida','config_dispositivo'];
+// PK de cada tabla (verificada por SQL el Día 18); también es el onConflict del upsert.
+const SYNC_PK = {
+  cuentas_financieras: ['id','user_id'], transfers: ['id','user_id'], expenses: ['id','user_id'],
+  incomes: ['id','user_id'], debts: ['id','user_id'], goals: ['id','user_id'], goal_aportes: ['id','user_id'],
+  config_compartida: ['user_id'], config_dispositivo: ['user_id','device_id']
+};
+const SYNC_TABLAS_CON_ID = SYNC_TABLAS.filter(t => SYNC_PK[t][0] === 'id');
+const SYNC_BORRADO_MIN_FILAS = 10;       // la guarda solo mira tablas con 10 filas o más…
+const SYNC_BORRADO_MAX_FRACCION = 0.3;   // …y salta si se borra MÁS del 30%
+
+// JSON con las claves de todo objeto en orden alfabético: el mismo contenido da siempre
+// el mismo texto, sin importar el orden en que se armó el objeto. Igual que JSON.stringify,
+// omite claves undefined y convierte undefined dentro de arreglos en null.
+function jsonCanonico(v){
+  if(v === null || typeof v !== 'object') return JSON.stringify(v);
+  if(typeof v.toJSON === 'function') return jsonCanonico(v.toJSON());
+  if(Array.isArray(v)) return '[' + v.map(x => { const j = jsonCanonico(x); return j === undefined ? 'null' : j; }).join(',') + ']';
+  const partes = [];
+  Object.keys(v).sort().forEach(k => {
+    const j = jsonCanonico(v[k]);
+    if(j !== undefined) partes.push(JSON.stringify(k) + ':' + j);
+  });
+  return '{' + partes.join(',') + '}';
+}
+
+// Punto 2: las filaX usan `id || uid()`, así que un registro sin id daría un id nuevo en
+// cada foto. Asigna id (con genId) a todo registro y aporte que no lo tenga, mutando `st`.
+// Devuelve cuántos asignó; quien llama decide persistir.
+function asegurarIds(st, genId){
+  let n = 0;
+  const fijar = x => { if(x && typeof x === 'object' && !x.id){ x.id = genId(); n++; } };
+  ['accounts','transfers','expenses','incomes','debts','goals'].forEach(k => {
+    if(Array.isArray(st[k])) st[k].forEach(fijar);
+  });
+  (Array.isArray(st.goals) ? st.goals : []).forEach(g => {
+    if(g && Array.isArray(g.aportes)) g.aportes.forEach(fijar);
+  });
+  return n;
+}
+
+// Foto del estado: { tabla: { clave: filaJSONcanónica } } para las 9 tablas, con las
+// mismas filaX de la subida inicial (ninguna incluye updated_at, que pone el servidor).
+// clave = id en las 7 tablas de datos, user_id en config_compartida y device_id en
+// config_dispositivo (solo la fila de ESTE dispositivo). Exige ids: correr asegurarIds antes.
+function construirSnapshot(st, userId, deviceId){
+  const snap = {};
+  SYNC_TABLAS.forEach(t => { snap[t] = {}; });
+  const lista = k => Array.isArray(st[k]) ? st[k] : [];
+  const conId = (tabla, x) => {
+    if(!x || !x.id) throw new Error('construirSnapshot: registro sin id en ' + tabla);
+    return x.id;
+  };
+  lista('accounts').forEach(a => { snap.cuentas_financieras[conId('cuentas_financieras', a)] = jsonCanonico(filaCuenta(a, userId)); });
+  lista('transfers').forEach(t => { snap.transfers[conId('transfers', t)] = jsonCanonico(filaTransfer(t, userId)); });
+  lista('expenses').forEach(e => { snap.expenses[conId('expenses', e)] = jsonCanonico(filaExpense(e, userId)); });
+  lista('incomes').forEach(i => { snap.incomes[conId('incomes', i)] = jsonCanonico(filaIncome(i, userId)); });
+  lista('debts').forEach(d => { snap.debts[conId('debts', d)] = jsonCanonico(filaDebt(d, userId)); });
+  lista('goals').forEach(g => {
+    const goalId = conId('goals', g);
+    snap.goals[goalId] = jsonCanonico(filaGoal(g, userId));
+    (Array.isArray(g.aportes) ? g.aportes : []).forEach(a => conId('goal_aportes', a));
+    filasAportes(g, userId, goalId).forEach(f => { snap.goal_aportes[f.id] = jsonCanonico(f); });
+  });
+  snap.config_compartida[userId] = jsonCanonico(filaConfigCompartida(userId, st.config || {}));
+  snap.config_dispositivo[deviceId] = jsonCanonico(filaConfigDispositivo(userId, deviceId, st.config || {}));
+  return snap;
+}
+
+function tieneClave(o, k){ return !!o && Object.prototype.hasOwnProperty.call(o, k); }
+function pkDeFila(tabla, fila){
+  const pk = {};
+  SYNC_PK[tabla].forEach(c => { pk[c] = fila[c]; });
+  return pk;
+}
+
+// Ops para llevar la nube de `base` a `actual`: upsert (con la fila completa) si la clave es
+// nueva o su JSON cambió; delete (con solo la PK) si la clave desapareció.
+function diffSnapshots(base, actual){
+  const ops = [];
+  SYNC_TABLAS.forEach(tabla => {
+    const b = (base && base[tabla]) || {};
+    const a = (actual && actual[tabla]) || {};
+    Object.keys(a).forEach(clave => {
+      if(!tieneClave(b, clave) || b[clave] !== a[clave]) ops.push({ tabla, clave, tipo: 'upsert', fila: JSON.parse(a[clave]) });
+    });
+    Object.keys(b).forEach(clave => {
+      if(!tieneClave(a, clave)) ops.push({ tabla, clave, tipo: 'delete', fila: pkDeFila(tabla, JSON.parse(b[clave])) });
+    });
+  });
+  return ops;
+}
+
+// Resync inicial (punto 7): todo lo local como upsert + delete de lo que la nube tiene y
+// lo local no. idsNube: { tabla: [{ id, user_id }] }, solo tablas con id.
+function opsResync(actual, idsNube){
+  const ops = diffSnapshots({}, actual);
+  Object.keys(idsNube || {}).forEach(tabla => {
+    const a = (actual && actual[tabla]) || {};
+    (idsNube[tabla] || []).forEach(pk => {
+      if(!tieneClave(a, pk.id)) ops.push({ tabla, clave: pk.id, tipo: 'delete', fila: pkDeFila(tabla, pk) });
+    });
+  });
+  return ops;
+}
+
+// Por (tabla, clave) queda solo la última op: upsert+upsert = el segundo; upsert+delete =
+// delete; delete+upsert = upsert.
+function claveOpSync(op){ return op.tabla + '|' + op.clave; }
+function coalescerOps(cola, nuevas){
+  const m = new Map();
+  (cola || []).concat(nuevas || []).forEach(op => {
+    const k = claveOpSync(op);
+    m.delete(k);   // la última queda al final, como si recién se hubiera encolado
+    m.set(k, op);
+  });
+  return Array.from(m.values());
+}
+
+// Upserts padre -> hijo, después deletes hijo -> padre (goal_aportes antes que goals). El
+// orden original se conserva dentro de cada tabla (sort estable).
+function ordenarOps(ops){
+  const idx = t => SYNC_TABLAS.indexOf(t);
+  const ups = ops.filter(o => o.tipo === 'upsert').sort((x, y) => idx(x.tabla) - idx(y.tabla));
+  const dels = ops.filter(o => o.tipo === 'delete').sort((x, y) => idx(y.tabla) - idx(x.tabla));
+  return ups.concat(dels);
+}
+
+function contarFilasSnapshot(snap){
+  const c = {};
+  SYNC_TABLAS.forEach(t => { c[t] = Object.keys((snap && snap[t]) || {}).length; });
+  return c;
+}
+// Guarda del punto 8. conteos: filas de referencia por tabla (la base en un diff, la nube en
+// el resync). Devuelve las tablas con 10+ filas donde se borraría más del 30% ([] = seguro).
+function evaluarBorradoMasivo(conteos, ops){
+  const borrados = {};
+  ops.forEach(o => { if(o.tipo === 'delete') borrados[o.tabla] = (borrados[o.tabla] || 0) + 1; });
+  return Object.keys(borrados)
+    .filter(t => (conteos[t] || 0) >= SYNC_BORRADO_MIN_FILAS && borrados[t] / conteos[t] > SYNC_BORRADO_MAX_FRACCION)
+    .map(t => ({ tabla: t, borrar: borrados[t], total: conteos[t] }));
+}
+
+// Backoff: 1s, 2s, 4s… tope 60s (intentos = cuántas veces ya falló).
+function retrasoReintentoSync(intentos){ return Math.min(1000 * Math.pow(2, Math.max(0, intentos - 1)), 60000); }
+// Respuesta de supabase-js ({ error, status }) -> 'ok' | 'red' (se reintenta) | 'permanente'
+// (4xx que no se arregla solo). Sin status (fetch caído, status 0), 5xx, 401 (token por
+// refrescar), 408 y 429 cuentan como 'red'.
+function clasificarRespuestaSync(res){
+  if(res && !res.error) return 'ok';
+  const st = (res && typeof res.status === 'number') ? res.status : 0;
+  if(st >= 400 && st < 500 && st !== 401 && st !== 408 && st !== 429) return 'permanente';
+  return 'red';
+}
+
+/* ---- b) Adaptador de almacenamiento (localStorage; claves atadas al user_id) ---- */
+const syncAlmacen = {
+  _leer(prefijo, userId){
+    try{ const s = localStorage.getItem(prefijo + userId); return s ? JSON.parse(s) : null; }
+    catch(_){ return null; }
+  },
+  _escribir(prefijo, userId, valor){
+    try{ localStorage.setItem(prefijo + userId, JSON.stringify(valor)); return true; }
+    catch(e){ console.warn('[Sync] no se pudo guardar ' + prefijo + userId, e); return false; }
+  },
+  leerBase(userId){ return this._leer('telora_sync_base:', userId); },
+  guardarBase(userId, snap){ return this._escribir('telora_sync_base:', userId, snap); },
+  leerCola(userId){ return this._leer('telora_sync_cola:', userId) || []; },
+  guardarCola(userId, cola){ return this._escribir('telora_sync_cola:', userId, cola); },
+  leerFallidas(userId){ return this._leer('telora_sync_fallidas:', userId) || []; },
+  guardarFallidas(userId, lista){ return this._escribir('telora_sync_fallidas:', userId, lista); },
+  claveCola(userId){ return 'telora_sync_cola:' + userId; }
+};
+
+/* ---- c) Adaptador de transporte (supabase-js) ---- */
+const SYNC_LOTE = 200;
+const syncTransporte = {
+  async _correr(consulta){
+    try{ const { error, status } = await consulta; return { error, status }; }
+    catch(e){ return { error: e, status: 0 }; }   // fetch caído: se trata como error de red
+  },
+  // Upsert de filas de UNA tabla (el llamador arma lotes de hasta 200).
+  upsert(tabla, filas){
+    return this._correr(supa.from(tabla).upsert(filas, { onConflict: SYNC_PK[tabla].join(',') }));
+  },
+  // Delete por PK de filas de UNA tabla (pks = [{ id, user_id }] o equivalente).
+  borrar(tabla, userId, pks){
+    let q = supa.from(tabla).delete().eq('user_id', userId);
+    if(tabla === 'config_dispositivo') q = q.in('device_id', pks.map(p => p.device_id));
+    else if(tabla !== 'config_compartida') q = q.in('id', pks.map(p => p.id));
+    return this._correr(q);
+  },
+  // PK de todas las filas de una tabla con id, en páginas de 1000. Lanza si una página falla.
+  async leerIds(tabla, userId){
+    const TAM = 1000, pks = [];
+    for(let desde = 0; ; desde += TAM){
+      const { data, error } = await supa.from(tabla).select('id')
+        .eq('user_id', userId).order('id', { ascending: true }).range(desde, desde + TAM - 1);
+      if(error) throw new Error(tabla + ': ' + (error.message || 'error desconocido'));
+      (data || []).forEach(r => pks.push({ id: r.id, user_id: userId }));
+      if(!data || data.length < TAM) return pks;
+    }
+  }
+};
+
+/* ---- Motor: disparo, gating, vaciado ---- */
+const SYNC_DEBOUNCE_MS = 800;
+let syncCtx = null;               // { userId, deviceId } con la escritura continua activa (null = apagada)
+let syncPausada = false;          // true mientras espera la respuesta del sheet de borrado masivo
+let syncBorradoPendiente = null;  // { ctx, ops, actual } retenido por la guarda del punto 8
+let syncTimerDiff = null;
+let syncTimerReintento = null;
+let syncProcesando = false;
+let syncProcesarOtraVez = false;
+let syncVaciando = false;
+let syncGuardandoIds = false;
+
+// Gating (punto 6): sesión activa (syncCtx solo existe con sesión; se borra al cerrarla)
+// y candado del dispositivo confirmado para ESA cuenta. La fila de config_dispositivo se
+// garantiza porque activarEscrituraContinua() solo se llama cuando ya existe.
+function syncHabilitada(){
+  return ESCRITURA_CONTINUA_ACTIVA && !!supa && !!syncCtx && leerDuenoConfirmado() === syncCtx.userId;
+}
+
+// Enganche al final de saveState()/saveStateQuiet(). try/catch: esos guardados pueden
+// correr al cargar, antes de que las `const` de esta sección existan (TDZ); ahí no hay nada
+// que sincronizar todavía.
+function alGuardarEstadoSync(){
+  try{
+    if(!ESCRITURA_CONTINUA_ACTIVA || syncGuardandoIds || syncPausada || !syncHabilitada()) return;
+    clearTimeout(syncTimerDiff);
+    syncTimerDiff = setTimeout(procesarCambiosSync, SYNC_DEBOUNCE_MS);
+  }catch(_){}
+}
+
+// Se llama cuando esta sesión ya tiene su fila en config_dispositivo (subida inicial hecha,
+// o dispositivo ya registrado). En el caso C (candado de otra cuenta) nunca pasa el gating.
+function activarEscrituraContinua(userId, deviceId){
+  if(!ESCRITURA_CONTINUA_ACTIVA || !supa || !userId || !deviceId) return;
+  if(leerDuenoConfirmado() !== userId) return;
+  if(syncCtx && syncCtx.userId === userId) return;
+  syncCtx = { userId, deviceId };
+  syncPausada = false;
+  syncBorradoPendiente = null;
+  console.info('[Sync] escritura continua activa.');
+  adelantarReintentosSync(userId);
+  procesarCambiosSync();   // al abrir la app: lo que cambió desde la última base (o el resync) + vaciado
+}
+
+// Al cerrar sesión: se detiene todo. Base, cola y fallidas quedan guardadas bajo su user_id
+// y solo se vuelven a usar con una sesión de esa misma cuenta.
+function detenerEscrituraContinua(){
+  syncCtx = null;
+  syncPausada = false;
+  syncBorradoPendiente = null;
+  clearTimeout(syncTimerDiff); syncTimerDiff = null;
+  clearTimeout(syncTimerReintento); syncTimerReintento = null;
+  try{ closeSheet('sheetSyncBorradoMasivo'); }catch(_){}
+}
+
+// Serializado: si llega otro disparo mientras corre, se repite una vez al terminar.
+async function procesarCambiosSync(){
+  syncTimerDiff = null;
+  if(syncProcesando){ syncProcesarOtraVez = true; return; }
+  syncProcesando = true;
+  try{ await calcularYEncolarSync(); }
+  catch(e){ console.warn('[Sync] no se pudo calcular el diff', e); }
+  finally{ syncProcesando = false; }
+  if(syncProcesarOtraVez){ syncProcesarOtraVez = false; return procesarCambiosSync(); }
+  vaciarColaSync();
+}
+
+async function calcularYEncolarSync(){
+  const ctx = syncCtx;
+  if(!syncHabilitada() || syncPausada) return;
+  // Punto 2: ids estables, asignados en state una sola vez y persistidos.
+  const asignados = asegurarIds(state, uid);
+  if(asignados){
+    console.info('[Sync] ids asignados a registros que no tenían: ' + asignados);
+    syncGuardandoIds = true;
+    try{ if(!saveStateQuiet()) return; } finally { syncGuardandoIds = false; }
+  }
+  const base = syncAlmacen.leerBase(ctx.userId);
+  let ops, conteos, actual;
+  if(base){
+    actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
+    ops = diffSnapshots(base, actual);
+    conteos = contarFilasSnapshot(base);
+  } else {
+    // Resync inicial (punto 7): sin base no hay con qué comparar. Necesita red; si no hay,
+    // se reintenta al volver la conexión o en la próxima carga (la base sigue sin existir).
+    if(typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    const idsNube = {};
+    for(const t of SYNC_TABLAS_CON_ID) idsNube[t] = await syncTransporte.leerIds(t, ctx.userId);
+    if(syncCtx !== ctx) return;   // se cerró sesión mientras se leía
+    actual = construirSnapshot(state, ctx.userId, ctx.deviceId);   // después del await: la foto más reciente
+    ops = opsResync(actual, idsNube);
+    conteos = {};
+    SYNC_TABLAS_CON_ID.forEach(t => { conteos[t] = idsNube[t].length; });
+    console.info('[Sync] resync inicial: ' + ops.filter(o => o.tipo === 'upsert').length + ' upserts, '
+      + ops.filter(o => o.tipo === 'delete').length + ' deletes.');
+  }
+  if(!ops.length) return;
+  const masivo = evaluarBorradoMasivo(conteos, ops);
+  if(masivo.length){ pausarPorBorradoMasivoSync(ctx, ops, actual, masivo); return; }
+  encolarYFijarBaseSync(ctx, ops, actual);
+}
+
+// La base representa "ya encolado"; la cola es la fuente de verdad de lo pendiente. Si la
+// cola no se pudo guardar, la base NO avanza (el próximo diff vuelve a generar esas ops).
+function encolarYFijarBaseSync(ctx, ops, actual){
+  const sello = Date.now().toString(36);
+  const nuevas = ops.map((o, i) => ({ ...o, v: sello + '.' + i, intentos: 0, proximo: 0 }));
+  const cola = coalescerOps(syncAlmacen.leerCola(ctx.userId), nuevas);
+  if(!syncAlmacen.guardarCola(ctx.userId, cola)) return false;
+  syncAlmacen.guardarBase(ctx.userId, actual);
+  return true;
+}
+
+const SYNC_NOMBRE_TABLA = {
+  cuentas_financieras: 'cuentas', transfers: 'transferencias', expenses: 'gastos', incomes: 'ingresos',
+  debts: 'deudas', goals: 'metas', goal_aportes: 'aportes a metas'
+};
+function pausarPorBorradoMasivoSync(ctx, ops, actual, masivo){
+  syncPausada = true;
+  syncBorradoPendiente = { ctx, ops, actual };
+  const nDel = ops.filter(o => o.tipo === 'delete').length;
+  console.warn('[Sync] borrado masivo detenido: se iban a borrar ' + nDel + ' filas de la nube. Sincronización en pausa hasta confirmar.', masivo);
+  const porTabla = {};
+  ops.forEach(o => { if(o.tipo === 'delete') porTabla[o.tabla] = (porTabla[o.tabla] || 0) + 1; });
+  document.getElementById('syncBorradoN').textContent = nDel + (nDel === 1 ? ' registro' : ' registros');
+  document.getElementById('syncBorradoDetalle').textContent = Object.keys(porTabla)
+    .map(t => porTabla[t] + ' ' + (SYNC_NOMBRE_TABLA[t] || t)).join(', ');
+  abrirCuandoLibre(()=> openSheet('sheetSyncBorradoMasivo', 'btnSyncBorrarNo'));
+}
+document.getElementById('btnSyncBorrarSi').onclick = ()=>{
+  closeSheet('sheetSyncBorradoMasivo');
+  const p = syncBorradoPendiente;
+  syncBorradoPendiente = null;
+  syncPausada = false;
+  if(!p || p.ctx !== syncCtx || !syncHabilitada()) return;
+  console.info('[Sync] borrado masivo confirmado por el usuario.');
+  encolarYFijarBaseSync(p.ctx, p.ops, p.actual);
+  procesarCambiosSync();   // recoge lo que se haya guardado durante la pausa y vacía la cola
+};
+document.getElementById('btnSyncBorrarNo').onclick = ()=>{
+  closeSheet('sheetSyncBorradoMasivo');
+  // Sigue en pausa (syncPausada) hasta la próxima carga: la base no avanzó, así que al
+  // volver a abrir la app el mismo diff vuelve a preguntar.
+  syncBorradoPendiente = null;
+  console.info('[Sync] borrado masivo cancelado: sincronización en pausa hasta la próxima vez que se abra la app.');
+};
+
+// Líder = la pestaña que tiene el Web Lock de Realtime (sin Web Locks, cada pestaña).
+function esPestanaLiderSync(userId){
+  if(rtUserId !== userId) return false;
+  if(typeof navigator === 'undefined' || typeof navigator.locks === 'undefined') return true;
+  return !!rtSoltarLock;
+}
+
+// Primer bloque listo de la cola ya ordenada: ops consecutivas de la misma tabla y tipo,
+// hasta 200. Si la cabeza está en backoff se espera (no se salta: un aporte no puede
+// adelantarse a su meta).
+function tomarLoteSync(ordenadas, ahora){
+  const cabeza = ordenadas[0];
+  if(!cabeza || (cabeza.proximo || 0) > ahora) return [];
+  const lote = [];
+  for(const o of ordenadas){
+    if(lote.length >= SYNC_LOTE || o.tabla !== cabeza.tabla || o.tipo !== cabeza.tipo || (o.proximo || 0) > ahora) break;
+    lote.push(o);
+  }
+  return lote;
+}
+
+function enviarLoteSync(ctx, lote){
+  const { tabla, tipo } = lote[0];
+  if(tipo === 'upsert') return syncTransporte.upsert(tabla, lote.map(o => o.fila));
+  return syncTransporte.borrar(tabla, ctx.userId, lote.map(o => o.fila));
+}
+
+// Cambios a la cola releyéndola primero (otra pestaña pudo encolar mientras se enviaba):
+// solo se toca una op si sigue siendo la misma versión (v) que se envió.
+function actualizarColaSync(userId, lote, fn){
+  const enviadas = new Map(lote.map(o => [claveOpSync(o), o.v]));
+  const cola = syncAlmacen.leerCola(userId);
+  const nueva = [];
+  cola.forEach(o => {
+    if(enviadas.get(claveOpSync(o)) === o.v){ const r = fn(o); if(r) nueva.push(r); }
+    else nueva.push(o);
+  });
+  syncAlmacen.guardarCola(userId, nueva);
+}
+function quitarDeColaSync(userId, lote){ actualizarColaSync(userId, lote, () => null); }
+function reintentarLuegoSync(userId, lote){
+  const ahora = Date.now();
+  actualizarColaSync(userId, lote, o => {
+    const intentos = (o.intentos || 0) + 1;
+    return { ...o, intentos, proximo: ahora + retrasoReintentoSync(intentos) };
+  });
+}
+function moverAFallidasSync(userId, op, res){
+  const detalle = (res && res.error && (res.error.message || String(res.error))) || 'error desconocido';
+  console.warn('[Sync] op rechazada por el servidor (' + (res && res.status) + '), no se reintenta: '
+    + op.tipo + ' ' + op.tabla + ' ' + op.clave + ' — ' + detalle, res && res.error);
+  quitarDeColaSync(userId, [op]);
+  const fallidas = syncAlmacen.leerFallidas(userId);
+  fallidas.push({ op, status: (res && res.status) || 0, error: detalle, fecha: new Date().toISOString() });
+  syncAlmacen.guardarFallidas(userId, fallidas.slice(-100));   // tope: las 100 más recientes
+}
+// Al volver la conexión o al abrir la app no se espera el backoff: todo queda listo ya.
+function adelantarReintentosSync(userId){
+  const cola = syncAlmacen.leerCola(userId);
+  if(cola.some(o => (o.proximo || 0) > 0)) syncAlmacen.guardarCola(userId, cola.map(o => ({ ...o, proximo: 0 })));
+}
+function programarReintentoSync(userId){
+  clearTimeout(syncTimerReintento);
+  const cola = syncAlmacen.leerCola(userId);
+  if(!cola.length) return;
+  const cuando = Math.min(...cola.map(o => o.proximo || 0));
+  syncTimerReintento = setTimeout(vaciarColaSync, Math.max(0, cuando - Date.now()));
+}
+
+// Vaciado (punto 5): uno a la vez, solo en la pestaña líder, solo con la sesión de la cuenta
+// dueña de la cola. Error de red -> la op queda con backoff y se corta la vuelta (lo que
+// sigue también fallaría, y respetar el orden importa). 4xx -> se aísla la op culpable y va
+// a fallidas sin bloquear el resto.
+async function vaciarColaSync(){
+  const ctx = syncCtx;
+  if(syncVaciando || !syncHabilitada() || !esPestanaLiderSync(ctx.userId)) return;
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  syncVaciando = true;
+  clearTimeout(syncTimerReintento); syncTimerReintento = null;
+  try{
+    const { data } = await supa.auth.getSession();
+    if(!data || !data.session || !data.session.user || data.session.user.id !== ctx.userId) return;
+    while(syncCtx === ctx && syncHabilitada()){
+      const ordenadas = ordenarOps(syncAlmacen.leerCola(ctx.userId));
+      if(!ordenadas.length) return;
+      const lote = tomarLoteSync(ordenadas, Date.now());
+      if(!lote.length){ programarReintentoSync(ctx.userId); return; }
+      const res = await enviarLoteSync(ctx, lote);
+      if(syncCtx !== ctx) return;
+      const tipo = clasificarRespuestaSync(res);
+      if(tipo === 'ok'){ quitarDeColaSync(ctx.userId, lote); continue; }
+      if(tipo === 'red'){
+        console.info('[Sync] sin conexión o error transitorio (' + (res.status || 0) + '); se reintenta luego.', res.error);
+        reintentarLuegoSync(ctx.userId, lote);
+        programarReintentoSync(ctx.userId);
+        return;
+      }
+      // Permanente: si el lote era de una sola op, esa es la culpable; si no, de a una.
+      if(lote.length === 1){ moverAFallidasSync(ctx.userId, lote[0], res); continue; }
+      for(const op of lote){
+        const r = await enviarLoteSync(ctx, [op]);
+        if(syncCtx !== ctx) return;
+        const t = clasificarRespuestaSync(r);
+        if(t === 'ok') quitarDeColaSync(ctx.userId, [op]);
+        else if(t === 'permanente') moverAFallidasSync(ctx.userId, op, r);
+        else { reintentarLuegoSync(ctx.userId, [op]); programarReintentoSync(ctx.userId); return; }
+      }
+    }
+  }catch(e){
+    console.warn('[Sync] error inesperado al vaciar la cola', e);
+  }finally{
+    syncVaciando = false;
+  }
+}
+
+if(ESCRITURA_CONTINUA_ACTIVA){
+  // Al volver la conexión: diff pendiente (o resync que no pudo leer la nube) + vaciado.
+  window.addEventListener('online', ()=>{
+    if(!syncHabilitada()) return;
+    adelantarReintentosSync(syncCtx.userId);
+    procesarCambiosSync();
+  });
+  // Otra pestaña encoló: la líder vacía. No calcula nada: solo envía lo ya encolado.
+  window.addEventListener('storage', e=>{
+    if(syncCtx && e.key === syncAlmacen.claveCola(syncCtx.userId)) vaciarColaSync();
+  });
 }
 
 // Subida completa: accounts -> transfers -> expenses -> incomes -> debts -> goals ->
@@ -13384,6 +13905,7 @@ async function subirDatosIniciales(userId, deviceId){
     quitarMarcaSubidaPendiente();
     cerrarToastProgreso(toastEl, 'Tus datos ya están respaldados en la nube.', 'success');
     activarRealtime(userId);
+    activarEscrituraContinua(userId, deviceId);   // la fila de config_dispositivo ya existe
   }catch(e){
     console.warn('Subida inicial a la nube: falló, revirtiendo lo insertado', e);
     // Si la limpieza no se pudo confirmar, la marca queda: el próximo intento la reintenta.
@@ -13423,6 +13945,7 @@ async function intentarSubidaInicial(session){
         else quitarMarcaPullPendiente();
       }
       activarRealtime(userId);
+      activarEscrituraContinua(userId, deviceId);   // Tanda 4a: exige además candado === userId
       return;
     }
     // Sin fila y con marca: lo que haya en la nube es de un intento de ESTE dispositivo
@@ -13509,7 +14032,7 @@ try{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
       if(session) intentarSubidaInicial(session);
-      else desactivarRealtime();   // sesión cerrada (acá, en otra pestaña o por expiración)
+      else { desactivarRealtime(); detenerEscrituraContinua(); }   // sesión cerrada (acá, en otra pestaña o por expiración)
     });
     supa.auth.getSession().then(({ data, error })=>{
       renderCuentaUsuario(data && data.session);
@@ -13544,6 +14067,7 @@ document.getElementById('btnLoginGoogle').onclick = async ()=>{
 document.getElementById('btnLogout').onclick = async ()=>{
   if(!supa) return;
   desactivarRealtime();   // antes del signOut: el canal se cierra con el token todavía válido
+  detenerEscrituraContinua();   // Tanda 4a: base y cola quedan guardadas bajo su user_id
   // scope 'local': cierra la sesión en este dispositivo aunque no haya red (el default
   // 'global' pide al servidor revocar todas las sesiones y puede fallar sin conexión).
   try{ await supa.auth.signOut({ scope: 'local' }); }
