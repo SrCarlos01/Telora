@@ -12956,7 +12956,8 @@ function filaExpense(e, userId){
     date: fechaONull(e.date), amount: e.amount, category: e.category ?? null, method: e.method ?? null,
     description: e.description ?? null, nombre: e.nombre ?? null, tipo: e.tipo ?? null,
     debt_id: e.debtId ?? null, cuenta_id: e.cuentaId ?? null,
-    dia_hasta: e.diaHasta ?? null, fechas_confirmadas: e.fechasConfirmadas ?? null
+    dia_hasta: e.diaHasta ?? null, fechas_confirmadas: e.fechasConfirmadas ?? null,
+    fixed_end_month_key: e.fixedEndMonthKey ?? null
   };
 }
 function filaIncome(i, userId){
@@ -12964,7 +12965,8 @@ function filaIncome(i, userId){
     id: i.id || uid(), user_id: userId,
     date: fechaONull(i.date), amount: i.amount, source: i.source ?? null,
     description: i.description ?? null, nombre: i.nombre ?? null, tipo: i.tipo ?? null,
-    cuenta_id: i.cuentaId ?? null, dia_hasta: i.diaHasta ?? null, fechas_confirmadas: i.fechasConfirmadas ?? null
+    cuenta_id: i.cuentaId ?? null, dia_hasta: i.diaHasta ?? null, fechas_confirmadas: i.fechasConfirmadas ?? null,
+    fixed_end_month_key: i.fixedEndMonthKey ?? null
   };
 }
 function filaDebt(d, userId){
@@ -12982,7 +12984,8 @@ function filaGoal(g, userId){
     name: g.name ?? null, indefinida: !!g.indefinida, monto_objetivo: g.montoObjetivo ?? null,
     fecha_limite: fechaONull(g.fechaLimite), fecha_creacion: fechaONull(g.fechaCreacion), cuenta_id: g.cuentaId ?? null,
     aporte_automatico: g.aporteAutomatico ?? null, fecha_cumplida: fechaONull(g.fechaCumplida),
-    ultimo_done_visto: (g._ultimoDoneVisto === true || g._ultimoDoneVisto === false) ? g._ultimoDoneVisto : null
+    ultimo_done_visto: (g._ultimoDoneVisto === true || g._ultimoDoneVisto === false) ? g._ultimoDoneVisto : null,
+    goal_end_month_key: g.goalEndMonthKey ?? null
   };
 }
 // Aplana los aportes de UNA meta a filas de goal_aportes (array vacío o ausente -> []).
@@ -13013,6 +13016,7 @@ function localExpense(r){
   };
   if(r.dia_hasta != null) e.diaHasta = r.dia_hasta;
   if(r.fechas_confirmadas != null) e.fechasConfirmadas = r.fechas_confirmadas;
+  if(r.fixed_end_month_key != null) e.fixedEndMonthKey = r.fixed_end_month_key;   // ausente = fijo no dado de baja
   return e;
 }
 function localIncome(r){
@@ -13022,6 +13026,7 @@ function localIncome(r){
   };
   if(r.dia_hasta != null) i.diaHasta = r.dia_hasta;
   if(r.fechas_confirmadas != null) i.fechasConfirmadas = r.fechas_confirmadas;
+  if(r.fixed_end_month_key != null) i.fixedEndMonthKey = r.fixed_end_month_key;   // ausente = fijo no dado de baja
   return i;
 }
 function localDebt(r){
@@ -13048,6 +13053,7 @@ function localGoal(r, filasAporte){
   };
   if(r.ultimo_done_visto === true || r.ultimo_done_visto === false) g._ultimoDoneVisto = r.ultimo_done_visto;
   if(r.cuenta_id != null) g.cuentaId = r.cuenta_id;
+  if(r.goal_end_month_key != null) g.goalEndMonthKey = r.goal_end_month_key;   // ausente = meta activa
   return g;
 }
 // Devuelve solo las claves de config que viven en config_compartida. mesInicioRegistro
@@ -13164,16 +13170,26 @@ async function registrarDispositivo(userId, deviceId){
 
 /* ---- Pull inicial completo (Tanda 3) ----
    Solo para un dispositivo local VACÍO cuya cuenta ya tiene datos en la nube: es una copia
-   limpia, no una fusión (no hay nada local que perder). DESACTIVADO a propósito: la subida
-   de la Tanda 2 no manda fixedEndMonthKey (gastos/ingresos) ni goalEndMonthKey (metas), así
-   que un pull hoy haría reaparecer como activos fijos y metas eliminados. Se activa cuando
-   la nube tenga esas columnas y filaExpense/filaIncome/filaGoal las suban.
-   Segundo prerrequisito: el pull tampoco está integrado con el candado de dispositivo
+   limpia, no una fusión (no hay nada local que perder). DESACTIVADO a propósito hasta
+   cumplir los tres prerrequisitos:
+   (a) CUMPLIDO para datos nuevos (Día 18): la nube tiene fixed_end_month_key (expenses,
+   incomes) y goal_end_month_key (goals), y filaExpense/filaIncome/filaGoal las suben y
+   localExpense/localIncome/localGoal las leen. Sin ellas un pull haría reaparecer como
+   activos fijos y metas eliminados. Los datos ya subidos en la Tanda 2 (una sola cuenta)
+   NO tienen la clave: se decidió no rellenarlos porque esa foto está desactualizada en todo.
+   (b) El pull tampoco está integrado con el candado de dispositivo
    (telora_dueno_confirmado) — no lo verifica antes de traer datos ni lo marca después.
    Antes de activarlo debe usar el mismo mecanismo de la tanda del candado (commit d0c905f:
    intentarSubidaInicial() + sheetConfirmarDueno), extendiéndolo y no reinventándolo:
    pedir confirmación si el candado está vacío, respetar el conflicto si es de otra cuenta
-   (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso. */
+   (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso.
+   (c) Hoy no existe escritura continua a la nube: saveState() solo escribe en localStorage.
+   La nube es una foto de la subida inicial, así que un pull traería datos viejos. No se
+   puede activar hasta que exista la sincronización de cambios.
+   PENDIENTE (no corregido): el conteo que decide "primer dispositivo" en
+   intentarSubidaInicial() no incluye config_compartida, pero subirDatosIniciales() sí la
+   inserta. Si queda una fila residual ahí, la primera subida falla por duplicado; el
+   catch llama a limpiarSubidaParcial() (que sí la borra) y el reintento funciona. */
 const PULL_INICIAL_ACTIVO = false;
 
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
