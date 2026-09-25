@@ -13187,10 +13187,14 @@ async function registrarDispositivo(userId, deviceId){
    (c) Hoy no existe escritura continua a la nube: saveState() solo escribe en localStorage.
    La nube es una foto de la subida inicial, así que un pull traería datos viejos. No se
    puede activar hasta que exista la sincronización de cambios.
-   PENDIENTE (no corregido): el conteo que decide "primer dispositivo" en
-   intentarSubidaInicial() no incluye config_compartida, pero subirDatosIniciales() sí la
-   inserta. Si queda una fila residual ahí, la primera subida falla por duplicado; el
-   catch llama a limpiarSubidaParcial() (que sí la borra) y el reintento funciona. */
+   CORREGIDO (Día 18): el conteo que decide "primer dispositivo" en intentarSubidaInicial()
+   no incluye config_compartida (a propósito: con un residuo la cuenta dejaría de ser
+   "primer dispositivo" y nunca subiría), pero subirDatosIniciales() sí la inserta. Antes
+   una fila residual hacía fallar la primera subida por duplicado; ahora
+   subirDatosIniciales() borra esa fila huérfana antes del primer insert.
+   LIMITACIÓN CONOCIDA (Tanda 5): una fila residual en cuentas_financieras (u otra de las 6
+   tablas del conteo) sí cuenta, así que la cuenta deja de ser "primer dispositivo" y la
+   subida queda bloqueada. */
 const PULL_INICIAL_ACTIVO = false;
 
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
@@ -13345,6 +13349,12 @@ async function subirDatosIniciales(userId, deviceId){
   const toastEl = mostrarToastProgreso('Subiendo tus datos a la nube…');
   marcarSubidaPendiente(userId);
   try{
+    // Solo se llega aquí si las 6 tablas financieras estaban vacías para este user_id, así
+    // que una fila en config_compartida es huérfana por definición (residuo de un intento
+    // anterior). Se borra antes de subir para que el insert del final no choque por duplicado.
+    const { error: errResiduo } = await supa.from('config_compartida').delete().eq('user_id', userId);
+    if(errResiduo) throw new Error('config_compartida (residuo): ' + (errResiduo.message || 'error desconocido'));
+
     const accounts  = Array.isArray(state.accounts)  ? state.accounts  : [];
     const transfers = Array.isArray(state.transfers) ? state.transfers : [];
     const expenses  = Array.isArray(state.expenses)  ? state.expenses  : [];
