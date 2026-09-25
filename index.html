@@ -12496,11 +12496,12 @@ function renderObBienvenida(){
     <button class="btn-ghost" data-ob="saltar-todo">Saltar todo por ahora</button>
   `;
 }
-// Fila inferior de los Pasos 1-6: [‹ Volver] + [Siguiente]. En el Paso 1 no hay Volver.
-// `accion` es la acción data-ob que ejecuta Siguiente en ese paso.
-function obNav(accion){
-  const volver = onboardingPaso >= 2 ? `<button type="button" class="btn-ghost" data-ob="volver">‹ Volver</button>` : '';
-  return `<div class="ob-nav">${volver}<button type="button" class="btn-primary" data-ob="${accion}">Siguiente</button></div>`;
+// Fila inferior de los Pasos 1-6 y del Cierre: [‹ Volver] + [botón principal]. Volver en
+// el Paso 1 lleva a la Bienvenida. `accion` es la acción data-ob del botón principal y
+// `etiqueta` su texto ("Siguiente" salvo en el Paso 6 y el Cierre).
+function obNav(accion, etiqueta = 'Siguiente'){
+  const volver = onboardingPaso >= 1 ? `<button type="button" class="btn-ghost" data-ob="volver">‹ Volver</button>` : '';
+  return `<div class="ob-nav">${volver}<button type="button" class="btn-primary" data-ob="${accion}">${etiqueta}</button></div>`;
 }
 function obChips(lista, marcadas){
   return `<div class="ob-chips">${lista.map(v=>
@@ -12584,14 +12585,14 @@ function renderObPaso6(){
       ${filas}
       <button type="button" class="btn-ghost" data-ob="meta-otro" style="text-align:left;">Otro…</button>
     </div>
-    ${obNav('saltar-meta')}
+    ${obNav('saltar-meta', 'Finalizar')}
   `;
 }
 function renderObCierre(){
   return `
     <h2>¡Listo!</h2>
     <p class="sheet-note">Tu Resumen ya refleja lo que registraste. Puedes seguir ajustando todo cuando quieras desde Configuración o cada pantalla.</p>
-    <button class="btn-primary" data-ob="ir-resumen">Ir a mi Resumen</button>
+    ${obNav('ir-resumen', 'Ir a mi Resumen')}
   `;
 }
 
@@ -12687,8 +12688,16 @@ document.getElementById('obBody').addEventListener('click', e=>{
   const accion = el.dataset.ob;
   if(accion === 'empezar') onboardingAvanzarA(1);
   else if(accion === 'saltar-todo') onboardingFinalizar(true);
+  // Volver desde los Pasos 1 y 3 guarda en la sesión exactamente lo que queda en pantalla,
+  // incluso [] (sin tocar state.config), para que al regresar se vea tal cual. Distinto de
+  // Siguiente con 0 marcadas, que deja la sesión en null y el paso vuelve a mostrar state.config.
   else if(accion === 'volver'){
-    if(onboardingPaso >= 2 && onboardingPaso <= 6) onboardingAvanzarA(onboardingPaso - 1);
+    if(onboardingPaso === 1 || onboardingPaso === 3){
+      const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
+      if(onboardingPaso === 1) onboardingFuentesSesion = marcadas;
+      else onboardingCategoriasSesion = marcadas;
+    }
+    if(onboardingPaso >= 1 && onboardingPaso <= 7) onboardingAvanzarA(onboardingPaso - 1);
   }
   // Pasos 1 y 3 — "Siguiente" sin nada marcado equivale al antiguo "Saltar": no se toca
   // state.config (tampoco en el relanzamiento). En el primer uso se avisa con un toast
