@@ -2738,6 +2738,24 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
+<!-- SHEET: dispositivo legado (Etapa 2 · Tanda 4a.1): ya registrado en la nube pero sin
+     candado confirmado. Descartable: "Ahora no" = nada; se vuelve a ofrecer en la próxima carga. -->
+<div class="sheet-overlay" id="sheetLegadoEscritor">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Mantener tu respaldo al día desde este dispositivo?</h2>
+    <p class="sheet-note" style="margin-bottom:8px;">
+      En este dispositivo: <b id="legadoConteoLocal"></b>.<br>
+      En la nube: <b id="legadoConteoNube"></b>.
+    </p>
+    <p class="sheet-note" style="margin-bottom:12px;">
+      Si aceptas, la nube quedará igual a los datos de este dispositivo: lo que esté solo en la nube se borrará de allá. Tus datos locales no cambian.
+    </p>
+    <button class="btn-primary" id="btnLegadoSi">Sí, usar este dispositivo</button>
+    <button class="btn-ghost" data-close>Ahora no</button>
+  </div>
+</div>
+
 <!-- SHEET: tarjeta previa antes de compartir/descargar el respaldo -->
 <div class="sheet-overlay" id="sheetBackupShare">
   <div class="sheet">
@@ -13203,11 +13221,13 @@ async function registrarDispositivo(userId, deviceId){
    pedir confirmación si el candado está vacío, respetar el conflicto si es de otra cuenta
    (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso.
    (c) IMPLEMENTADO detrás de ESCRITURA_CONTINUA_ACTIVA (Tanda 4a, Día 18), PENDIENTE DE
-   ACTIVAR: con la bandera en true, cada saveState()/saveStateQuiet() del dispositivo dueño
-   se refleja en la nube (diff + cola persistente, ver "ESCRITURA CONTINUA A LA NUBE" más
-   abajo). Mientras siga en false, saveState() solo escribe en localStorage, la nube es una
-   foto de la subida inicial y un pull traería datos viejos. Solo cubre UN dispositivo: los
-   choques entre dispositivos son de la Tanda 4b.
+   ACTIVAR: con la bandera en true, cada saveState()/saveStateQuiet() del dispositivo
+   ESCRITOR se refleja en la nube (diff + cola persistente, ver "ESCRITURA CONTINUA A LA
+   NUBE" más abajo). Mientras siga en false, saveState() solo escribe en localStorage, la
+   nube es una foto de la subida inicial y un pull traería datos viejos. Solo escribe UN
+   dispositivo por cuenta (config_compartida.dispositivo_escritor, Tanda 4a.1): un pull en
+   cualquier otro dispositivo traería lo que ese escritor dejó. Los choques entre
+   dispositivos y el traspaso del rol de escritor son de la Tanda 4b.
    CORREGIDO (Día 18): el conteo que decide "primer dispositivo" en intentarSubidaInicial()
    no incluye config_compartida (a propósito: con un residuo la cuenta dejaría de ser
    "primer dispositivo" y nunca subiría), pero subirDatosIniciales() sí la inserta. Antes
@@ -13327,6 +13347,12 @@ function registrarEventoRealtime(p){
   realtimeEventos.push({ recibido: Date.now(), tabla: p.table, tipo: p.eventType, fila, old: p.old });
   if(realtimeEventos.length > 200) realtimeEventos.shift();
   console.info('[Realtime] ' + p.eventType + ' ' + p.table, (fila && (fila.id || fila.device_id || fila.user_id)) || '', p);
+  // Tanda 4a.1: si otro dispositivo pasó a ser el escritor, este deja de escribir al tiro.
+  if(p.table === 'config_compartida' && p.eventType === 'UPDATE' && syncCtx
+     && escritorCambioAOtro(p.new, syncCtx.deviceId)){
+    console.info('[Sync] el rol de escritor pasó a otro dispositivo (' + p.new.dispositivo_escritor + '): este sigue solo con sus datos locales.');
+    detenerEscrituraContinua();
+  }
 }
 
 function abrirCanalRealtime(userId){
@@ -13354,7 +13380,10 @@ function activarRealtime(userId){
     if(rtUserId !== userId) return;   // se cerró sesión mientras esperaba: suelta el lock al tiro
     console.info('[Realtime] esta pestaña es la líder: abre el canal.');
     abrirCanalRealtime(userId);
-    vaciarColaSync();   // Tanda 4a: el vaciado de la cola también es solo de la líder
+    // Tanda 4a: el vaciado de la cola también es solo de la líder. Tanda 4a.1: una pestaña
+    // que hereda el liderazgo no recibió los eventos Realtime de antes, así que vuelve a
+    // leer el escritor antes de enviar.
+    reconfirmarEscritorYVaciarSync();
     return new Promise(resolve => { rtSoltarLock = resolve; });
   }).catch(e => {
     if(!e || e.name !== 'AbortError') console.warn('[Realtime] no se pudo pedir el Web Lock', e);
@@ -13369,11 +13398,19 @@ function desactivarRealtime(){
 }
 
 /* ==================== ESCRITURA CONTINUA A LA NUBE (Etapa 2 · Tanda 4a) ====================
-   Refleja en Supabase cada cambio local del dispositivo dueño, sin tocar los 67 llamadores
+   Refleja en Supabase cada cambio local del dispositivo escritor, sin tocar los 67 llamadores
    de saveState(): después de cada guardado exitoso se programa (debounce) un diff entre la
    última foto encolada ("base") y la foto actual, y las diferencias van a una cola
-   persistente que se vacía con reintentos. UN solo dispositivo: los choques entre
-   dispositivos son de la Tanda 4b. Todo queda detrás de ESCRITURA_CONTINUA_ACTIVA.
+   persistente que se vacía con reintentos. Todo queda detrás de ESCRITURA_CONTINUA_ACTIVA.
+   ESCRITOR ÚNICO (Tanda 4a.1, provisional hasta la 4b): solo sincroniza el dispositivo cuyo
+   device_id está en config_compartida.dispositivo_escritor. El rol se reclama con un UPDATE
+   atómico (WHERE escritor null o = este device) que nunca pisa a otro escritor: al terminar
+   la subida inicial, al activar la escritura si el candado ya es de esta cuenta, o desde el
+   sheet de dispositivo LEGADO (registrado antes del candado: fila en config_dispositivo pero
+   telora_dueno_confirmado null). Los demás dispositivos siguen funcionando igual, solo con
+   sus datos locales. Si Realtime avisa que el escritor cambió, este dispositivo se detiene.
+   filaConfigCompartida no incluye dispositivo_escritor, así que el upsert nunca lo toca.
+   Traspasar el rol y los choques entre dispositivos son de la Tanda 4b.
    Tres capas, para poder llevar el motor a la app nativa cambiando solo las dos últimas:
      a) núcleo puro (sin DOM, sin localStorage, sin supabase): fotos, diff, cola, orden;
      b) almacenamiento (syncAlmacen): base, cola y fallidas por user_id;
@@ -13538,6 +13575,36 @@ function clasificarRespuestaSync(res){
   return 'red';
 }
 
+// Tanda 4a.1 — Respuesta del UPDATE ... .select() que reclama el rol de escritor ->
+// 'gano' (afectó la fila y quedó este device) | 'otro' (0 filas: el WHERE no calzó porque
+// ya hay otro escritor) | 'error' (no se sabe: no se hace nada).
+function resultadoReclamoEscritor(res, deviceId){
+  if(!res || res.error) return 'error';
+  const filas = Array.isArray(res.data) ? res.data : [];
+  if(filas.length === 1 && filas[0] && filas[0].dispositivo_escritor === deviceId) return 'gano';
+  return 'otro';
+}
+// Dispositivo LEGADO: subió o se registró antes del candado. 'ofrecer' (mostrar el sheet) |
+// 'escritor-ajeno' (otro device ya escribe: no se ofrece) | 'no-aplica'. dueno = lo que
+// devuelve leerDuenoConfirmado(): solo null cuenta como legado (si es de esta cuenta ya no
+// hay nada que confirmar; si es de otra, jamás se ofrece).
+function decidirLegado({ haySesion, tieneFila, dueno, existeConfigNube, escritor, deviceId }){
+  if(!haySesion || !tieneFila || dueno != null || !existeConfigNube || !deviceId) return 'no-aplica';
+  if(escritor != null && escritor !== deviceId) return 'escritor-ajeno';
+  return 'ofrecer';
+}
+// Fila nueva de un UPDATE de config_compartida (Realtime): true si trae la columna y el
+// escritor ya no es este device (otro, o null).
+function escritorCambioAOtro(fila, deviceId){
+  return tieneClave(fila, 'dispositivo_escritor') && fila.dispositivo_escritor !== deviceId;
+}
+// { expenses, incomes, debts, goals } -> "89 gastos, 3 ingresos, 2 deudas y 1 meta".
+function textoConteosLegado(n){
+  const f = (k, uno, varios) => { const v = (n && n[k]) || 0; return v + ' ' + (v === 1 ? uno : varios); };
+  const partes = [f('expenses','gasto','gastos'), f('incomes','ingreso','ingresos'), f('debts','deuda','deudas'), f('goals','meta','metas')];
+  return partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
+}
+
 /* ---- b) Adaptador de almacenamiento (localStorage; claves atadas al user_id) ---- */
 const syncAlmacen = {
   _leer(prefijo, userId){
@@ -13585,6 +13652,29 @@ const syncTransporte = {
       (data || []).forEach(r => pks.push({ id: r.id, user_id: userId }));
       if(!data || data.length < TAM) return pks;
     }
+  },
+  // Tanda 4a.1 -> { existe, escritor } o { error }.
+  async leerEscritor(userId){
+    try{
+      const { data, error } = await supa.from('config_compartida').select('dispositivo_escritor')
+        .eq('user_id', userId).maybeSingle();
+      if(error) return { error };
+      return { existe: !!data, escritor: data ? (data.dispositivo_escritor ?? null) : null };
+    }catch(e){ return { error: e }; }
+  },
+  // Reclamo ATÓMICO: el WHERE solo calza si nadie tiene el rol o ya es de este device, así
+  // que dos dispositivos que reclaman a la vez nunca ganan los dos. -> 'gano'|'otro'|'error'.
+  async reclamarEscritor(userId, deviceId){
+    let res;
+    try{
+      res = await supa.from('config_compartida').update({ dispositivo_escritor: deviceId })
+        .eq('user_id', userId)
+        .or('dispositivo_escritor.is.null,dispositivo_escritor.eq.' + deviceId)
+        .select('dispositivo_escritor');
+    }catch(e){ res = { error: e }; }
+    const r = resultadoReclamoEscritor(res, deviceId);
+    if(r === 'error') console.warn('[Sync] no se pudo reclamar el rol de escritor', res && res.error);
+    return r;
   }
 };
 
@@ -13599,12 +13689,43 @@ let syncProcesando = false;
 let syncProcesarOtraVez = false;
 let syncVaciando = false;
 let syncGuardandoIds = false;
+let syncGeneracion = 0;           // sube en cada detención: una activación en vuelo que la cruza se descarta
+let legadoCtx = null;             // { userId, deviceId } mientras el sheet de dispositivo legado está ofrecido
 
-// Gating (punto 6): sesión activa (syncCtx solo existe con sesión; se borra al cerrarla)
-// y candado del dispositivo confirmado para ESA cuenta. La fila de config_dispositivo se
-// garantiza porque activarEscrituraContinua() solo se llama cuando ya existe.
+// Gating (punto 6): sesión activa (syncCtx solo existe con sesión; se borra al cerrarla),
+// candado del dispositivo confirmado para ESA cuenta y (Tanda 4a.1) este device confirmado
+// como escritor en config_compartida. La fila de config_dispositivo se garantiza porque
+// activarEscrituraContinua() solo se llama cuando ya existe.
 function syncHabilitada(){
-  return ESCRITURA_CONTINUA_ACTIVA && !!supa && !!syncCtx && leerDuenoConfirmado() === syncCtx.userId;
+  return ESCRITURA_CONTINUA_ACTIVA && !!supa && !!syncCtx && syncCtx.esEscritor === true
+    && leerDuenoConfirmado() === syncCtx.userId;
+}
+
+// Tanda 4a.1: lee dispositivo_escritor; si está vacío lo reclama (atómico). true solo si
+// este device queda como escritor. Nunca pisa a otro.
+async function confirmarEscritorSync(userId, deviceId){
+  const esc = await syncTransporte.leerEscritor(userId);
+  if(esc.error){ console.warn('[Sync] no se pudo leer el dispositivo escritor', esc.error); return false; }
+  if(!esc.existe){ console.info('[Sync] la cuenta no tiene config_compartida en la nube: no hay rol de escritor que tomar.'); return false; }
+  if(esc.escritor === deviceId) return true;
+  if(esc.escritor == null && await syncTransporte.reclamarEscritor(userId, deviceId) === 'gano') return true;
+  console.info('[Sync] otro dispositivo mantiene el respaldo de esta cuenta: este sigue solo con sus datos locales.');
+  return false;
+}
+
+// Pestaña que hereda el liderazgo (Web Lock): vuelve a leer el escritor antes de vaciar.
+async function reconfirmarEscritorYVaciarSync(){
+  if(!syncHabilitada()) return;
+  const ctx = syncCtx, gen = syncGeneracion;
+  const esc = await syncTransporte.leerEscritor(ctx.userId);
+  if(gen !== syncGeneracion || syncCtx !== ctx) return;
+  if(esc.error){ console.warn('[Sync] no se pudo releer el dispositivo escritor', esc.error); return; }
+  if(esc.escritor !== ctx.deviceId){
+    console.info('[Sync] esta pestaña ya no es del dispositivo escritor: se detiene la escritura continua.');
+    detenerEscrituraContinua();
+    return;
+  }
+  vaciarColaSync();
 }
 
 // Enganche al final de saveState()/saveStateQuiet(). try/catch: esos guardados pueden
@@ -13620,11 +13741,20 @@ function alGuardarEstadoSync(){
 
 // Se llama cuando esta sesión ya tiene su fila en config_dispositivo (subida inicial hecha,
 // o dispositivo ya registrado). En el caso C (candado de otra cuenta) nunca pasa el gating.
-function activarEscrituraContinua(userId, deviceId){
+// Tanda 4a.1: además lee (y si está vacío, reclama) el rol de escritor antes de encender.
+let syncActivando = false;
+async function activarEscrituraContinua(userId, deviceId){
   if(!ESCRITURA_CONTINUA_ACTIVA || !supa || !userId || !deviceId) return;
   if(leerDuenoConfirmado() !== userId) return;
   if(syncCtx && syncCtx.userId === userId) return;
-  syncCtx = { userId, deviceId };
+  if(syncActivando) return;
+  syncActivando = true;
+  const gen = syncGeneracion;
+  let esEscritor = false;
+  try{ esEscritor = await confirmarEscritorSync(userId, deviceId); }
+  finally{ syncActivando = false; }
+  if(!esEscritor || gen !== syncGeneracion) return;   // otro escritor, error, o sesión cerrada mientras tanto
+  syncCtx = { userId, deviceId, esEscritor: true };
   syncPausada = false;
   syncBorradoPendiente = null;
   console.info('[Sync] escritura continua activa.');
@@ -13635,12 +13765,15 @@ function activarEscrituraContinua(userId, deviceId){
 // Al cerrar sesión: se detiene todo. Base, cola y fallidas quedan guardadas bajo su user_id
 // y solo se vuelven a usar con una sesión de esa misma cuenta.
 function detenerEscrituraContinua(){
+  syncGeneracion++;
   syncCtx = null;
+  legadoCtx = null;
   syncPausada = false;
   syncBorradoPendiente = null;
   clearTimeout(syncTimerDiff); syncTimerDiff = null;
   clearTimeout(syncTimerReintento); syncTimerReintento = null;
   try{ closeSheet('sheetSyncBorradoMasivo'); }catch(_){}
+  try{ if(document.getElementById('sheetLegadoEscritor').classList.contains('open')) closeSheet('sheetLegadoEscritor'); }catch(_){}
 }
 
 // Serializado: si llega otro disparo mientras corre, se repite una vez al terminar.
@@ -13898,6 +14031,12 @@ async function subirDatosIniciales(userId, deviceId){
     await insertarPorLotes('goal_aportes', aportes);
 
     await insertarPorLotes('config_compartida', [filaConfigCompartida(userId)]);
+    // Tanda 4a.1: quien sube queda como escritor único. La fila recién insertada tiene el
+    // escritor en null, así que el reclamo solo falla si no hay red (se revierte todo).
+    if(ESCRITURA_CONTINUA_ACTIVA){
+      const rol = await syncTransporte.reclamarEscritor(userId, deviceId);
+      if(rol !== 'gano') throw new Error('config_compartida: no se pudo reclamar el rol de escritor (' + rol + ')');
+    }
 
     const { error: errDisp } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId));
     if(errDisp) throw new Error('config_dispositivo: ' + (errDisp.message || 'error desconocido'));
@@ -13945,7 +14084,8 @@ async function intentarSubidaInicial(session){
         else quitarMarcaPullPendiente();
       }
       activarRealtime(userId);
-      activarEscrituraContinua(userId, deviceId);   // Tanda 4a: exige además candado === userId
+      if(leerDuenoConfirmado() === userId) activarEscrituraContinua(userId, deviceId);   // Tanda 4a (+ escritor, 4a.1)
+      else if(leerDuenoConfirmado() === null) await ofrecerDispositivoLegado(userId, deviceId);   // Tanda 4a.1
       return;
     }
     // Sin fila y con marca: lo que haya en la nube es de un intento de ESTE dispositivo
@@ -14020,6 +14160,63 @@ document.getElementById('btnConfirmarDueno').onclick = async ()=>{
   subidaDuenoCtx = null;
   marcarDuenoConfirmado(userId);
   await subirDatosIniciales(userId, deviceId);
+};
+
+/* ---- Dispositivo LEGADO (Tanda 4a.1) ----
+   Registrado en la nube (fila propia en config_dispositivo) antes de que existiera el
+   candado, así que telora_dueno_confirmado es null y la escritura continua nunca se
+   activaría. Se ofrece una vez por carga tomar el rol de escritor; el caso C (candado de
+   otra cuenta) nunca llega aquí porque leerDuenoConfirmado() no es null. */
+let __legadoEvaluado = false;
+async function ofrecerDispositivoLegado(userId, deviceId){
+  if(!ESCRITURA_CONTINUA_ACTIVA || __legadoEvaluado || !supa) return;
+  __legadoEvaluado = true;
+  const esc = await syncTransporte.leerEscritor(userId);
+  if(esc.error){ console.warn('[Sync] dispositivo legado: no se pudo leer el escritor', esc.error); return; }
+  const decision = decidirLegado({
+    haySesion: true, tieneFila: true, dueno: leerDuenoConfirmado(),
+    existeConfigNube: esc.existe, escritor: esc.escritor, deviceId
+  });
+  if(decision === 'escritor-ajeno'){
+    console.info('[Sync] dispositivo legado: otro dispositivo mantiene el respaldo; este sigue solo con sus datos locales.');
+    return;
+  }
+  if(decision !== 'ofrecer') return;
+  // Conteos de la nube (mismo tipo de consulta que el conteo de la subida inicial).
+  const tablas = ['expenses','incomes','debts','goals'];
+  const res = await Promise.all(tablas.map(t =>
+    supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId)
+  ));
+  if(res.some(r => r.error)){ console.warn('[Sync] dispositivo legado: no se pudo contar la nube', res.map(r => r.error)); return; }
+  const nube = {};
+  tablas.forEach((t, i) => { nube[t] = res[i].count || 0; });
+  legadoCtx = { userId, deviceId };
+  abrirCuandoLibre(()=>{
+    if(!legadoCtx || legadoCtx.userId !== userId) return;   // se cerró sesión mientras esperaba
+    const n = k => Array.isArray(state[k]) ? state[k].length : 0;   // local al momento de mostrar
+    document.getElementById('legadoConteoLocal').textContent =
+      textoConteosLegado({ expenses: n('expenses'), incomes: n('incomes'), debts: n('debts'), goals: n('goals') });
+    document.getElementById('legadoConteoNube').textContent = textoConteosLegado(nube);
+    openSheet('sheetLegadoEscritor', 'btnLegadoSi');
+  });
+}
+document.getElementById('btnLegadoSi').onclick = async ()=>{
+  closeSheet('sheetLegadoEscritor');
+  const ctx = legadoCtx;
+  legadoCtx = null;
+  if(!ctx || !supa) return;
+  const { data } = await supa.auth.getSession();
+  if(!data || !data.session || !data.session.user || data.session.user.id !== ctx.userId) return;
+  const rol = await syncTransporte.reclamarEscritor(ctx.userId, ctx.deviceId);
+  if(rol === 'gano'){
+    marcarDuenoConfirmado(ctx.userId);
+    showToast('Listo: este dispositivo mantendrá tu respaldo al día.', 'success');
+    activarEscrituraContinua(ctx.userId, ctx.deviceId);   // resync inicial, con la guarda del 30%
+  } else if(rol === 'otro'){
+    showToast('Otro dispositivo ya mantiene tu respaldo', null, 5000);
+  } else {
+    showToast('No se pudo conectar con la nube. Se volverá a ofrecer la próxima vez que abras la app.', 'error', 5000);
+  }
 };
 document.getElementById('btnConflictoDuenoOk').onclick = ()=>{
   document.getElementById('dlgConflictoDueno').classList.remove('open');
