@@ -1429,6 +1429,81 @@ function runTests(){
       assert(JSON.stringify(r) === JSON.stringify([1000, 2000, 4000, 8000, 60000, 60000]),
         'sync: backoff 1s, 2s, 4s, 8s… con tope 60s', JSON.stringify(r));
     }
+
+    // ---- Tanda 4a.1: escritor único y dispositivo legado ----
+    {
+      const r = win.resultadoReclamoEscritor;
+      const casos = [
+        [r({ data:[{ dispositivo_escritor: DEV }], error:null }, DEV), 'gano'],
+        [r({ data:[], error:null }, DEV), 'otro'],                                    // el WHERE no calzó: hay otro escritor
+        [r({ data:[{ dispositivo_escritor: 'otro-dev' }], error:null }, DEV), 'otro'],
+        [r({ data:null, error:{ message:'fetch failed' }, status:0 }, DEV), 'error'],
+        [r(undefined, DEV), 'error']
+      ];
+      assert(casos.every(([obt, esp]) => obt === esp),
+        'escritor: 1 fila con este device = ganó; 0 filas = lo tiene otro; error = no se sabe',
+        casos.map(([o, e]) => o + '/' + e).join(' · '));
+    }
+    {
+      // Carrera: dos dispositivos reclaman a la vez contra la MISMA fila. Se simula el WHERE
+      // atómico (null o = yo) aplicado en serie, que es lo que garantiza Postgres.
+      const fila = { dispositivo_escritor: null };
+      const reclamar = dev => {
+        if(fila.dispositivo_escritor === null || fila.dispositivo_escritor === dev){
+          fila.dispositivo_escritor = dev;
+          return { data:[{ dispositivo_escritor: dev }], error:null };
+        }
+        return { data:[], error:null };
+      };
+      const a = win.resultadoReclamoEscritor(reclamar('dev-A'), 'dev-A');
+      const b = win.resultadoReclamoEscritor(reclamar('dev-B'), 'dev-B');
+      const a2 = win.resultadoReclamoEscritor(reclamar('dev-A'), 'dev-A');
+      assert(a === 'gano' && b === 'otro' && a2 === 'gano' && fila.dispositivo_escritor === 'dev-A',
+        'escritor: dos reclamos seguidos -> un solo ganador, el perdedor nunca pisa; el ganador puede re-reclamar',
+        `A=${a} B=${b} A otra vez=${a2} fila=${fila.dispositivo_escritor}`);
+    }
+    {
+      const d = win.decidirLegado;
+      const base = { haySesion:true, tieneFila:true, dueno:null, existeConfigNube:true, escritor:null, deviceId:DEV };
+      const casos = [
+        ['legado con escritor vacío', d(base), 'ofrecer'],
+        ['legado y ya es el escritor', d({ ...base, escritor:DEV }), 'ofrecer'],
+        ['escritor ajeno', d({ ...base, escritor:'otro-dev' }), 'escritor-ajeno'],
+        ['candado de esta cuenta', d({ ...base, dueno:USER }), 'no-aplica'],
+        ['candado de OTRA cuenta (caso C)', d({ ...base, dueno:'otra-cuenta' }), 'no-aplica'],
+        ['candado de otra cuenta + escritor ajeno', d({ ...base, dueno:'otra-cuenta', escritor:'otro-dev' }), 'no-aplica'],
+        ['sin fila en config_dispositivo', d({ ...base, tieneFila:false }), 'no-aplica'],
+        ['sin sesión', d({ ...base, haySesion:false }), 'no-aplica'],
+        ['sin config_compartida en la nube', d({ ...base, existeConfigNube:false }), 'no-aplica']
+      ];
+      const malos = casos.filter(([, obt, esp]) => obt !== esp);
+      assert(malos.length === 0, 'legado: se ofrece solo con sesión + fila propia + candado null + escritor null o este device',
+        malos.map(([n, o, e]) => `${n}: ${o} (esperado ${e})`).join(' · ') || casos.length + ' casos');
+    }
+    {
+      const c = win.escritorCambioAOtro;
+      const ok = c({ user_id:USER, dispositivo_escritor:'otro-dev' }, DEV) === true
+        && c({ user_id:USER, dispositivo_escritor:null }, DEV) === true
+        && c({ user_id:USER, dispositivo_escritor:DEV }, DEV) === false
+        && c({ user_id:USER, categorias:[] }, DEV) === false   // evento sin la columna: no decide nada
+        && c(null, DEV) === false;
+      assert(ok, 'escritor: un UPDATE de config_compartida con otro escritor (u null) detiene; con este device, no');
+    }
+    {
+      const cfg = { ...fx().config, categorias:['A'], mesInicioRegistro:'2026-01' };
+      const fila = win.filaConfigCompartida(USER, cfg);
+      const leida = win.localConfigCompartida({ ...fila, dispositivo_escritor: DEV, updated_at: '2026-09-25T00:00:00Z' });
+      assert(!('dispositivo_escritor' in fila) && !('dispositivoEscritor' in leida) && !('dispositivo_escritor' in leida),
+        'escritor: filaConfigCompartida no manda dispositivo_escritor (el upsert no lo toca) y localConfigCompartida lo ignora',
+        'fila: ' + Object.keys(fila).join(',') + ' · leída: ' + Object.keys(leida).join(','));
+    }
+    {
+      const t = win.textoConteosLegado;
+      const a = t({ expenses:89, incomes:3, debts:2, goals:1 });
+      const b = t({ expenses:1, incomes:0, debts:1, goals:0 });
+      assert(a === '89 gastos, 3 ingresos, 2 deudas y 1 meta' && b === '1 gasto, 0 ingresos, 1 deuda y 0 metas',
+        'legado: texto de conteos con singular/plural', a + ' · ' + b);
+    }
   }
 
   renderResultados();
