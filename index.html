@@ -12799,7 +12799,8 @@ if(!state.config.onboardingVisto && !(state.expenses.length || state.incomes.len
      librería lo lee y lo borra. El resto de la app no lee location.hash ni location.search.
    - Cerrar sesión solo borra la sesión de Supabase; los datos financieros locales no se tocan. */
 const SUPABASE_URL = 'https://ekavuxaznjbvrzpxtslz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrYXZ1eGF6bmpidnJ6cHh0c2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MDIyNzMsImV4cCI6MjEwNTE3ODI3M30.pCgd7ktIb5z2CPh3evEBkVMvIJStSGiUQmT9hNo-2Cs';
+// Clave publishable: pública por diseño (va en el cliente). La seguridad depende de RLS.
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_g-8WqVTN3IZ8HkVj4GznXg_YaMx-Olu';
 let supa = null;
 
 function renderCuentaUsuario(session){
@@ -13493,7 +13494,7 @@ document.getElementById('btnConflictoDuenoOk').onclick = ()=>{
 
 try{
   if(typeof supabase !== 'undefined' && supabase.createClient){
-    supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supa = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     supa.auth.onAuthStateChange((event, session)=>{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
