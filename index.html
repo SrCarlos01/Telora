@@ -1197,13 +1197,37 @@ button{font-family:inherit;}
   padding:13px; font-size:15px; cursor:pointer; margin-top:8px;
 }
 
-/* Botón "Volver" del onboarding: variante compacta de btn-ghost para convivir con el
-   indicador "Paso X de 6" en una sola fila. Jerarquía menor a propósito — sigue
-   siendo la acción secundaria del paso, no debe competir con Continuar/Saltar. */
-.ob-btn-volver{
-  width:auto; margin:0; padding:7px 13px; font-size:12.5px; font-weight:600; border-radius:20px;
+/* Onboarding día 18: botonera inferior única de los Pasos 1-6 — [‹ Volver] (1/3,
+   secundario) + [Siguiente] (2/3). En el Paso 1 solo va Siguiente, a todo el ancho. */
+.ob-nav{display:flex; gap:10px; align-items:stretch;}
+.ob-nav .btn-ghost{flex:1; margin-top:6px;}
+.ob-nav .btn-primary{flex:2;}
+
+/* Pasos 1 y 3: opciones como chips en 2 columnas. El checkbox queda oculto de forma
+   accesible (no display:none) para que sigan funcionando el teclado, los lectores de
+   pantalla y la lectura '[data-ob-val]:checked'. */
+/* Scroll residual: en pantallas bajas (375×667) la lista no cabe entera junto al
+   encabezado y la botonera. Se limita contra el alto real (--app-vh, igual que .sheet)
+   menos ~290px de encabezado + nota + botonera, para que "Siguiente" quede siempre
+   a la vista y solo se desplacen los chips. */
+.ob-chips{
+  display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;
+  max-height:calc(var(--app-vh, 88vh) / var(--font-scale, 1) - 290px);
+  overflow-y:auto; overscroll-behavior:contain;
 }
-.ob-btn-volver:active{transform:scale(0.92);}
+.ob-chip{
+  position:relative; display:flex; align-items:center; justify-content:center; min-height:44px;
+  padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm);
+  font-size:14px; line-height:1.25; color:var(--cream); text-align:center; cursor:pointer;
+  overflow-wrap:anywhere; transition:background-color .15s ease, border-color .15s ease;
+}
+.ob-chip input{
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0; border:0;
+  overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
+}
+.ob-chip:has(input:checked){background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.ob-chip:has(input:focus-visible){outline:2px solid var(--gold); outline-offset:-4px;}   /* hacia adentro: .ob-chips recorta por overflow */
+.ob-chip:active{transform:scale(0.96);}
 
 .cuota-fields{
   max-height:0; overflow:hidden; transition:max-height .25s ease, opacity .2s ease; opacity:0;
@@ -2565,8 +2589,7 @@ button:active{ transform:scale(0.93); }
 <div class="sheet-overlay" id="sheetOnboarding" data-nodismiss>
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div id="obProgressRow" style="display:none; align-items:center; justify-content:space-between; gap:10px; margin:-6px 0 6px;">
-      <button type="button" class="btn-ghost ob-btn-volver" id="obBtnVolver">‹ Volver</button>
+    <div id="obProgressRow" style="display:none; align-items:center; justify-content:flex-end; gap:10px; margin:-6px 0 6px;">
       <p class="sheet-note" id="obProgress" style="margin:0; font-weight:600; letter-spacing:.02em;"></p>
     </div>
     <div class="progress-track" id="obProgressBar" style="display:none; margin:0 0 14px;">
@@ -12386,7 +12409,7 @@ let onboardingContadorCuota = 0;
 // y vuelve al Paso 4, permite reconocer qué ítems ya existen (para editarlos o
 // cortarlos in situ) en vez de solo evitar el duplicado (ver onboardingContinuarFijos).
 let onboardingFijosCreados = new Map();
-// Pasos 1 y 3: lo que el usuario dejó marcado la última vez que pasó por "Continuar"
+// Pasos 1 y 3: lo que el usuario dejó marcado la última vez que pasó por "Siguiente"
 // en esta sesión de onboarding (null = aún no pasó). Sin esto, el botón "Volver"
 // mostraría las casillas en blanco de nuevo (renderObPaso1/3 solo miran state.config
 // cuando es relanzamiento), perdiendo la selección que el usuario ya había hecho.
@@ -12440,14 +12463,12 @@ function onboardingRender(dir){
   const progRow = document.getElementById('obProgressRow');
   const progBar = document.getElementById('obProgressBar');
   const progFill = document.getElementById('obProgressFill');
-  const btnVolver = document.getElementById('obBtnVolver');
   const body = document.getElementById('obBody');
   if(onboardingPaso >= 1 && onboardingPaso <= 6){
     progRow.style.display = 'flex';
     progBar.style.display = 'block';
     prog.textContent = `Paso ${onboardingPaso} de 6`;
     progFill.style.width = (onboardingPaso / 6 * 100) + '%';
-    btnVolver.style.visibility = onboardingPaso === 1 ? 'hidden' : 'visible';
   } else {
     progRow.style.display = 'none';
     progBar.style.display = 'none';
@@ -12470,24 +12491,31 @@ function onboardingRender(dir){
 function renderObBienvenida(){
   return `
     <h2>¡Bienvenido a Telora!</h2>
-    <p class="sheet-note">Personalicemos tu Resumen con tu situación real: 6 pasos rápidos, menos de 90 segundos. No necesitas cifras exactas — con un estimado basta, y puedes ajustar todo después. Cada paso se puede saltar.</p>
+    <p class="sheet-note">Personalicemos tu Resumen con tu situación real: 6 pasos rápidos, menos de 90 segundos. No necesitas cifras exactas — con un estimado basta, y puedes ajustar todo después. Si algo no te aplica, toca Siguiente.</p>
     <button class="btn-primary" data-ob="empezar">Empezar</button>
     <button class="btn-ghost" data-ob="saltar-todo">Saltar todo por ahora</button>
   `;
+}
+// Fila inferior de los Pasos 1-6: [‹ Volver] + [Siguiente]. En el Paso 1 no hay Volver.
+// `accion` es la acción data-ob que ejecuta Siguiente en ese paso.
+function obNav(accion){
+  const volver = onboardingPaso >= 2 ? `<button type="button" class="btn-ghost" data-ob="volver">‹ Volver</button>` : '';
+  return `<div class="ob-nav">${volver}<button type="button" class="btn-primary" data-ob="${accion}">Siguiente</button></div>`;
+}
+function obChips(lista, marcadas){
+  return `<div class="ob-chips">${lista.map(v=>
+    `<label class="ob-chip"><input type="checkbox" data-ob-val="${v}" ${marcadas.includes(v)?'checked':''}><span>${v}</span></label>`
+  ).join('')}</div>`;
 }
 function renderObPaso1(){
   const marcadas = onboardingFuentesSesion !== null
     ? onboardingFuentesSesion
     : (onboardingEsRelanzamiento ? state.config.fuentes.slice() : []);
-  const filas = ENCUESTA_FUENTES.map(f=>
-    `<label class="check-row"><input type="checkbox" data-ob-val="${f}" ${marcadas.includes(f)?'checked':''}><span>${f}</span></label>`
-  ).join('');
   return `
     <h2>Tus fuentes de ingreso</h2>
     <p class="sheet-note">Marca las que apliquen. Puedes agregar más después en Configuración.</p>
-    <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
-    <button class="btn-primary" data-ob="continuar-fuentes">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-fuentes">Saltar</button>
+    ${obChips(ENCUESTA_FUENTES, marcadas)}
+    ${obNav('continuar-fuentes')}
   `;
 }
 function renderObPaso2(){
@@ -12496,23 +12524,19 @@ function renderObPaso2(){
     <h2>Tu ingreso mensual</h2>
     <p class="sheet-note">Registra tus ingresos habituales (sueldo, honorarios, etc.) — quedan como "Fijo" y se repiten solos cada mes.</p>
     ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'ingreso agregado':'ingresos agregados'}.</p>` : ''}
-    <button class="btn-primary" data-ob="agregar-ingreso">${n===0?'Agregar ingreso':'Agregar otro ingreso'}</button>
-    <button class="btn-ghost" data-ob="saltar-ingreso">${n===0?'Saltar':'Continuar'}</button>
+    <button class="btn-primary" data-ob="agregar-ingreso" style="margin-bottom:16px;">${n===0?'Agregar ingreso':'Agregar otro ingreso'}</button>
+    ${obNav('saltar-ingreso')}
   `;
 }
 function renderObPaso3(){
   const base = onboardingCategoriasSesion !== null
     ? onboardingCategoriasSesion
-    : (onboardingEsRelanzamiento ? state.config.categorias.slice() : DEFAULTS.categorias.slice());
-  const filas = ENCUESTA_CATEGORIAS.map(c=>
-    `<label class="check-row"><input type="checkbox" data-ob-val="${c}" ${base.includes(c)?'checked':''}><span>${c}</span></label>`
-  ).join('');
+    : (onboardingEsRelanzamiento ? state.config.categorias.slice() : []);
   return `
     <h2>Tus categorías de gasto</h2>
-    <p class="sheet-note">Ya vienen marcadas las básicas — suma las que te apliquen o desmarca las que no uses.</p>
-    <div style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
-    <button class="btn-primary" data-ob="continuar-categorias">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-categorias">Saltar</button>
+    <p class="sheet-note">Marca las que apliquen. Puedes agregar más después en Configuración.</p>
+    ${obChips(ENCUESTA_CATEGORIAS, base)}
+    ${obNav('continuar-categorias')}
   `;
 }
 function renderObPaso4(){
@@ -12536,8 +12560,7 @@ function renderObPaso4(){
     <h2>Gastos fijos típicos</h2>
     <p class="sheet-note">Marca los que tengas y ajusta el monto si no calza. Máximo ${ONBOARDING_LOOP_LIMITE}.</p>
     <div style="max-height:300px; overflow-y:auto; margin-bottom:16px;">${filas}</div>
-    <button class="btn-primary" data-ob="continuar-fijos">Continuar</button>
-    <button class="btn-ghost" data-ob="saltar-fijos">Saltar</button>
+    ${obNav('continuar-fijos')}
   `;
 }
 function renderObPaso5(){
@@ -12546,8 +12569,8 @@ function renderObPaso5(){
     <h2>Tus cuotas activas</h2>
     <p class="sheet-note">Si tienes compras a crédito en cuotas, regístralas aquí (el método queda en "Crédito").</p>
     ${n>0 ? `<p class="sheet-note" style="margin-top:-10px;">${n} ${n===1?'cuota agregada':'cuotas agregadas'}.</p>` : ''}
-    <button class="btn-primary" data-ob="agregar-cuota">${n===0?'Agregar cuota':'Agregar otra cuota'}</button>
-    <button class="btn-ghost" data-ob="saltar-cuota">${n===0?'Saltar':'Continuar'}</button>
+    <button class="btn-primary" data-ob="agregar-cuota" style="margin-bottom:16px;">${n===0?'Agregar cuota':'Agregar otra cuota'}</button>
+    ${obNav('saltar-cuota')}
   `;
 }
 function renderObPaso6(){
@@ -12561,7 +12584,7 @@ function renderObPaso6(){
       ${filas}
       <button type="button" class="btn-ghost" data-ob="meta-otro" style="text-align:left;">Otro…</button>
     </div>
-    <button class="btn-ghost" data-ob="saltar-meta">Saltar</button>
+    ${obNav('saltar-meta')}
   `;
 }
 function renderObCierre(){
@@ -12645,10 +12668,6 @@ function onboardingContinuarFijos(){
   onboardingCrearGastosFijosSecuencial(paraCrear, ()=> onboardingAvanzarA(5));
 }
 
-document.getElementById('obBtnVolver').addEventListener('click', ()=>{
-  if(onboardingPaso >= 2 && onboardingPaso <= 6) onboardingAvanzarA(onboardingPaso - 1);
-});
-
 /* Tanda día 14: fusión no destructiva para fuentes/categorías al relanzar el
    onboarding (mismo criterio que la reconciliación de migrateBackup() para
    ítems huérfanos). Los Pasos 1 y 3 solo muestran checkboxes para los nombres
@@ -12668,15 +12687,26 @@ document.getElementById('obBody').addEventListener('click', e=>{
   const accion = el.dataset.ob;
   if(accion === 'empezar') onboardingAvanzarA(1);
   else if(accion === 'saltar-todo') onboardingFinalizar(true);
+  else if(accion === 'volver'){
+    if(onboardingPaso >= 2 && onboardingPaso <= 6) onboardingAvanzarA(onboardingPaso - 1);
+  }
+  // Pasos 1 y 3 — "Siguiente" sin nada marcado equivale al antiguo "Saltar": no se toca
+  // state.config (tampoco en el relanzamiento). En el primer uso se avisa con un toast
+  // que quedan las básicas. La sesión vuelve a null para que "Volver" muestre lo que hay en state.config (en el relanzamiento, las actuales del usuario; en el primer uso, nada marcado).
   else if(accion === 'continuar-fuentes'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
-    onboardingFuentesSesion = onboardingEsRelanzamiento
-      ? fusionarListaOnboarding(marcadas, ENCUESTA_FUENTES, state.config.fuentes)
-      : marcadas;
-    if(onboardingFuentesSesion.length){ state.config.fuentes = onboardingFuentesSesion; saveState(); }
+    if(!marcadas.length){
+      onboardingFuentesSesion = null;
+      if(!onboardingEsRelanzamiento) showToast('Dejamos las fuentes básicas. Puedes editarlas en Configuración.');
+    } else {
+      onboardingFuentesSesion = onboardingEsRelanzamiento
+        ? fusionarListaOnboarding(marcadas, ENCUESTA_FUENTES, state.config.fuentes)
+        : marcadas;
+      state.config.fuentes = onboardingFuentesSesion;
+      saveState();
+    }
     onboardingAvanzarA(2);
   }
-  else if(accion === 'saltar-fuentes') onboardingAvanzarA(2);
   else if(accion === 'agregar-ingreso'){
     openIngresoForm(null);
     document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x=>x.classList.toggle('active', x.dataset.itipo==='Fijo'));
@@ -12685,17 +12715,19 @@ document.getElementById('obBody').addEventListener('click', e=>{
   else if(accion === 'saltar-ingreso') onboardingAvanzarA(3);
   else if(accion === 'continuar-categorias'){
     const marcadas = [...document.querySelectorAll('#obBody [data-ob-val]:checked')].map(x=>x.dataset.obVal);
-    const base = marcadas.length ? marcadas : DEFAULTS.categorias.slice();
-    onboardingCategoriasSesion = onboardingEsRelanzamiento
-      ? fusionarListaOnboarding(base, ENCUESTA_CATEGORIAS, state.config.categorias)
-      : base;
-    state.config.categorias = onboardingCategoriasSesion;
-    saveState();
+    if(!marcadas.length){
+      onboardingCategoriasSesion = null;
+      if(!onboardingEsRelanzamiento) showToast('Dejamos las categorías básicas. Puedes editarlas en Configuración.');
+    } else {
+      onboardingCategoriasSesion = onboardingEsRelanzamiento
+        ? fusionarListaOnboarding(marcadas, ENCUESTA_CATEGORIAS, state.config.categorias)
+        : marcadas;
+      state.config.categorias = onboardingCategoriasSesion;
+      saveState();
+    }
     onboardingAvanzarA(4);
   }
-  else if(accion === 'saltar-categorias') onboardingAvanzarA(4);
   else if(accion === 'continuar-fijos') onboardingContinuarFijos();
-  else if(accion === 'saltar-fijos') onboardingAvanzarA(5);
   else if(accion === 'agregar-cuota'){
     openGastoForm(null);
     fillSelect('gMetodo', state.config.metodos, 'Crédito');
