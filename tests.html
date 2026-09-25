@@ -1072,6 +1072,168 @@ function runTests(){
     );
   }
 
+  // ==================== DÍA 18 — Ida y vuelta filaX -> nube -> localX ====================
+  // Para cada par (filaCuenta/localCuenta, ..., filaConfigCompartida/localConfigCompartida)
+  // se arma un registro con la forma que tiene en `state` (la que deja migrateBackup), se
+  // pasa por filaX, se simula el viaje a PostgREST y se vuelve con localX. El resultado
+  // debe ser IGUAL al original clave por clave, incluido el tipo, y distinguiendo una clave
+  // ausente de una presente con null/undefined. Un assert por registro.
+  // Lo que NO cubre: conversiones del propio Postgres (numeric/bigint como string, formato
+  // de date, orden de claves en jsonb). Solo prueba que filaX y localX son inversos.
+  {
+    const USER = 'user-test-ida-vuelta';
+
+    // Simula el viaje a PostgREST: la fila se serializa (JSON.stringify descarta las claves
+    // con undefined), el servidor devuelve null en toda columna que no recibió valor y
+    // agrega updated_at.
+    const viajeNube = fila => {
+      const r = JSON.parse(JSON.stringify(fila));
+      Object.keys(fila).forEach(k => { if(!(k in r)) r[k] = null; });
+      r.updated_at = new Date().toISOString();
+      return r;
+    };
+
+    const tipoDe = v => v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v;
+    // Lista legible de diferencias entre original y vuelta (vacía = iguales).
+    const diferencias = (a, b, ruta) => {
+      const out = [];
+      const ta = tipoDe(a), tb = tipoDe(b);
+      if(ta !== tb){ out.push(`${ruta}: tipo ${ta} (${JSON.stringify(a)}) -> ${tb} (${JSON.stringify(b)})`); return out; }
+      if(ta === 'array'){
+        if(a.length !== b.length) out.push(`${ruta}: largo ${a.length} -> ${b.length}`);
+        for(let i = 0; i < Math.min(a.length, b.length); i++) out.push(...diferencias(a[i], b[i], `${ruta}[${i}]`));
+        return out;
+      }
+      if(ta === 'object'){
+        const claves = new Set([...Object.keys(a), ...Object.keys(b)]);
+        claves.forEach(k => {
+          const enA = Object.prototype.hasOwnProperty.call(a, k), enB = Object.prototype.hasOwnProperty.call(b, k);
+          if(enA && !enB) out.push(`${ruta}.${k}: presente (${tipoDe(a[k])} ${JSON.stringify(a[k])}) -> AUSENTE`);
+          else if(!enA && enB) out.push(`${ruta}.${k}: AUSENTE -> presente (${tipoDe(b[k])} ${JSON.stringify(b[k])})`);
+          else out.push(...diferencias(a[k], b[k], `${ruta}.${k}`));
+        });
+        return out;
+      }
+      if(!Object.is(a, b)) out.push(`${ruta}: ${JSON.stringify(a)} -> ${JSON.stringify(b)}`);
+      return out;
+    };
+
+    const assertIdaVuelta = (etiqueta, original, vuelta) => {
+      const difs = diferencias(original, vuelta, 'registro');
+      assert(difs.length === 0, `Ida y vuelta ${etiqueta}: vuelve idéntico (claves, valores y tipos)`,
+        difs.length ? 'Diferencias:\n' + difs.join('\n') : '');
+    };
+
+    const aaBase = () => ({ activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1, pausado:false, razonPausa:null });
+
+    // ---- filaCuenta / localCuenta ----
+    [
+      ['cuenta activa', { id:'acc1', nombre:'Principal', orden:0, archivada:false }],
+      ['cuenta archivada', { id:'acc2', nombre:'Ahorro viejo', orden:3, archivada:true }]
+    ].forEach(([et, a]) => {
+      assertIdaVuelta(`filaCuenta/localCuenta (${et})`, a, win.localCuenta(viajeNube(win.filaCuenta(a, USER))));
+    });
+
+    // ---- filaTransfer / localTransfer ----
+    [
+      ['transferencia con nombre', { id:'t1', origen:'acc1', destino:'acc2', monto:50000, fecha:'2026-09-10', nombre:'Traspaso ahorro' }],
+      ['transferencia con nombre vacío', { id:'t2', origen:'acc2', destino:'acc1', monto:1500, fecha:'2026-08-31', nombre:'' }]
+    ].forEach(([et, t]) => {
+      assertIdaVuelta(`filaTransfer/localTransfer (${et})`, t, win.localTransfer(viajeNube(win.filaTransfer(t, USER))));
+    });
+
+    // ---- filaExpense / localExpense ----
+    [
+      ['gasto fijo dado de baja, fixedEndMonthKey 24320',
+        { id:'e1', date:'2026-03-05', nombre:'Arriendo', amount:350000, category:'Arriendo/Vivienda', method:'Transferencia',
+          description:'', tipo:'Fijo', debtId:null, cuentaId:'acc1', fixedEndMonthKey:24320 }],
+      ['gasto fijo con diaHasta + fechasConfirmadas',
+        { id:'e2', date:'2026-06-10', nombre:'Luz', amount:28000, category:'Cuentas y Servicios', method:'Débito',
+          description:'Enel', tipo:'Fijo', debtId:null, cuentaId:'acc1', diaHasta:15,
+          fechasConfirmadas:{ '2026-07':'2026-07-12', '2026-08':'2026-08-14' } }],
+      ['gasto de crédito con debtId',
+        { id:'e3', date:'2026-02-01', nombre:'Notebook', amount:300000, category:'Varios', method:'Crédito',
+          description:'', tipo:'Casual', debtId:'d1', cuentaId:'acc1' }],
+      ['gasto casual sin claves opcionales',
+        { id:'e4', date:'2026-09-20', nombre:'Almuerzo', amount:6500, category:'Comida', method:'Efectivo',
+          description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' }]
+    ].forEach(([et, e]) => {
+      assertIdaVuelta(`filaExpense/localExpense (${et})`, e, win.localExpense(viajeNube(win.filaExpense(e, USER))));
+    });
+
+    // ---- filaIncome / localIncome ----
+    [
+      ['ingreso fijo dado de baja',
+        { id:'i1', date:'2026-01-25', nombre:'Sueldo', source:'Sueldo', amount:900000, description:'',
+          tipo:'Fijo', cuentaId:'acc1', fixedEndMonthKey:24318 }],
+      ['ingreso fijo con diaHasta + fechasConfirmadas',
+        { id:'i2', date:'2026-05-01', nombre:'Mesada', source:'Mesada', amount:40000, description:'',
+          tipo:'Fijo', cuentaId:'acc2', diaHasta:5, fechasConfirmadas:{ '2026-09':'2026-09-03' } }],
+      ['ingreso casual sin claves opcionales',
+        { id:'i3', date:'2026-09-18', nombre:'Venta bici', source:'Ventas', amount:120000, description:'Marketplace',
+          tipo:'Casual', cuentaId:'acc1' }]
+    ].forEach(([et, i]) => {
+      assertIdaVuelta(`filaIncome/localIncome (${et})`, i, win.localIncome(viajeNube(win.filaIncome(i, USER))));
+    });
+
+    // ---- filaDebt / localDebt ----
+    [
+      ['deuda con cuenta y meses manuales',
+        { id:'d1', description:'Notebook', purchaseDate:'2026-02-01', category:'Varios', totalAmount:300000, numCuotas:3,
+          manualPaidMonthKeys:[24314], manualUnpaidMonthKeys:[24315], cuentaId:'acc1' }],
+      ['deuda legacy sin cuentaId ni meses manuales',
+        { id:'d2', description:'', purchaseDate:'2025-11-15', category:'Vestimenta', totalAmount:89990, numCuotas:6,
+          manualPaidMonthKeys:[], manualUnpaidMonthKeys:[] }]
+    ].forEach(([et, d]) => {
+      assertIdaVuelta(`filaDebt/localDebt (${et})`, d, win.localDebt(viajeNube(win.filaDebt(d, USER))));
+    });
+
+    // ---- filaGoal + filasAportes / localGoal ----
+    [
+      ['meta eliminada con aporte',
+        { id:'g1', name:'Viaje', indefinida:false, montoObjetivo:500000, fechaLimite:'2026-12-31', fechaCreacion:'2026-01-10',
+          fechaCumplida:null, aportes:[{ id:'ap1', fecha:'2026-02-15', monto:20000, tipo:'manual' }],
+          aporteAutomatico:aaBase(), goalEndMonthKey:24319, cuentaId:'acc1', _ultimoDoneVisto:false }],
+      ['meta sin fecha límite ("")',
+        { id:'g2', name:'Fondo de emergencia', indefinida:true, montoObjetivo:0, fechaLimite:'', fechaCreacion:'2026-04-01',
+          fechaCumplida:null, aportes:[],
+          aporteAutomatico:{ activo:true, tipo:'porcentaje', monto:0, valor:10, diaDelMes:5, pausado:false, razonPausa:null, fechaActivacion:'2026-04-01' },
+          cuentaId:'acc2', _ultimoDoneVisto:false }],
+      ['meta cumplida con varios aportes (orden)',
+        { id:'g3', name:'Audífonos', indefinida:false, montoObjetivo:60000, fechaLimite:'2026-08-31', fechaCreacion:'2026-06-01',
+          fechaCumplida:'2026-08-20',
+          aportes:[{ id:'ap2', fecha:'2026-06-30', monto:30000, tipo:'manual' }, { id:'ap3', fecha:'2026-07-31', monto:30000, tipo:'automatico' }],
+          aporteAutomatico:aaBase(), cuentaId:'acc1', _ultimoDoneVisto:true }],
+      ['meta sin claves opcionales',
+        { id:'g4', name:'Bici', indefinida:false, montoObjetivo:250000, fechaLimite:'2027-03-01', fechaCreacion:'2026-09-01',
+          fechaCumplida:null, aportes:[], aporteAutomatico:aaBase() }]
+    ].forEach(([et, g]) => {
+      const fila = win.filaGoal(g, USER);
+      const filasAp = win.filasAportes(g, USER, fila.id).map(viajeNube);
+      assertIdaVuelta(`filaGoal+filasAportes/localGoal (${et})`, g, win.localGoal(viajeNube(fila), filasAp));
+    });
+
+    // ---- filaConfigCompartida / localConfigCompartida ----
+    // filaConfigCompartida lee state.config, así que se inyecta con setState. El original
+    // es solo el subconjunto de config que vive en config_compartida.
+    [
+      ['con mesInicioRegistro y readOnly',
+        { categorias:['Comida','Transporte'], metodos:['Efectivo','Crédito'], fuentes:['Sueldo','Otros'],
+          categoriaIconos:{ Comida:'🍔' }, categoriaTopes:{ Comida:150000 }, categoriaColores:{ Comida:'#e07a5f' },
+          readOnly:true, mesInicioRegistro:24316 }],
+      ['sin mesInicioRegistro ("Sin definir")',
+        { categorias:['Varios'], metodos:['Efectivo'], fuentes:['Otros'],
+          categoriaIconos:{}, categoriaTopes:{}, categoriaColores:{}, readOnly:false }]
+    ].forEach(([et, cfg]) => {
+      const st = fixtureBase();
+      st.config = { ...st.config, categoriaIconos:{}, categoriaTopes:{}, ...cfg };
+      if(!('mesInicioRegistro' in cfg)) delete st.config.mesInicioRegistro;
+      setState(win, st);
+      assertIdaVuelta(`filaConfigCompartida/localConfigCompartida (${et})`, cfg,
+        win.localConfigCompartida(viajeNube(win.filaConfigCompartida(USER))));
+    });
+  }
+
   renderResultados();
   checkLocalStorage();
 }
