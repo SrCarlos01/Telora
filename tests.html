@@ -1234,6 +1234,203 @@ function runTests(){
     });
   }
 
+  // ==================== Escritura continua: núcleo puro (Etapa 2 · Tanda 4a) ====================
+  // Solo funciones puras: no leen ni escriben `state` global, localStorage ni la red.
+  {
+    const USER = 'u-test', DEV = 'dev-A';
+    ['jsonCanonico','asegurarIds','construirSnapshot','diffSnapshots','opsResync','coalescerOps',
+     'ordenarOps','contarFilasSnapshot','evaluarBorradoMasivo','retrasoReintentoSync','clasificarRespuestaSync'
+    ].forEach(nombre=>{
+      assert(typeof win[nombre] === 'function', `sync: iframe.contentWindow.${nombre} existe y es function`, `typeof = ${typeof win[nombre]}`);
+    });
+    assert(win.eval('ESCRITURA_CONTINUA_ACTIVA') === false, 'sync: ESCRITURA_CONTINUA_ACTIVA está en false (así se commitea)',
+      `valor = ${win.eval('ESCRITURA_CONTINUA_ACTIVA')}`);
+
+    const aaSync = () => ({ activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1, pausado:false, razonPausa:null });
+    const fx = () => {
+      const st = fixtureBase();
+      st.config.paleta = 'cafe';
+      st.expenses.push({ id:'e1', date:'2026-09-01', nombre:'Pan', amount:2000, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+      st.incomes.push({ id:'i1', date:'2026-09-01', nombre:'Sueldo', source:'Sueldo', amount:900000, description:'', tipo:'Fijo', cuentaId:'acc1' });
+      st.goals.push({ id:'g1', name:'Viaje', indefinida:false, montoObjetivo:100000, fechaLimite:'', fechaCreacion:'2026-01-01', fechaCumplida:null,
+        aportes:[{ id:'ap1', fecha:'2026-02-01', monto:1000, tipo:'manual' }], aporteAutomatico: aaSync(), cuentaId:'acc1' });
+      return st;
+    };
+    const snap = st => win.construirSnapshot(st, USER, DEV);
+    const clon = o => JSON.parse(JSON.stringify(o));
+    const resumen = ops => ops.map(o => `${o.tipo} ${o.tabla} ${o.clave}`).join(' | ') || '(sin ops)';
+
+    // JSON canónico
+    const j1 = win.jsonCanonico({ b:1, a:{ d:2, c:[3, { f:1, e:2 }] }, z:undefined });
+    const j2 = win.jsonCanonico({ a:{ c:[3, { e:2, f:1 }], d:2 }, b:1 });
+    assert(j1 === j2 && j1 === '{"a":{"c":[3,{"e":2,"f":1}],"d":2},"b":1}',
+      'sync: jsonCanonico da el mismo texto sin importar el orden de las claves (y omite undefined)', `j1 = ${j1}\nj2 = ${j2}`);
+    {
+      // Mismo contenido, objetos armados con otro orden de claves -> misma foto.
+      const a = fx(), b = fx();
+      b.expenses[0] = { cuentaId:'acc1', debtId:null, tipo:'Casual', description:'', method:'Efectivo', category:'Comida', amount:2000, nombre:'Pan', date:'2026-09-01', id:'e1' };
+      const ops = win.diffSnapshots(snap(a), snap(b));
+      assert(ops.length === 0, 'sync: mismo registro con otro orden de claves -> 0 ops', resumen(ops));
+    }
+
+    // Sin cambios
+    {
+      const st = fx();
+      const s1 = snap(st), s2 = snap(st), s3 = snap(clon(st));
+      const ops = win.diffSnapshots(s1, s2).concat(win.diffSnapshots(s1, s3));
+      assert(ops.length === 0, 'sync: guardar dos veces el mismo estado -> 0 ops (también tras ida y vuelta por JSON)', resumen(ops));
+      const conUpdated = Object.values(s1).some(t => Object.values(t).some(j => 'updated_at' in JSON.parse(j)));
+      assert(!conUpdated, 'sync: ninguna fila de la foto incluye updated_at');
+      assert(Object.keys(s1).length === 9, 'sync: la foto trae las 9 tablas', Object.keys(s1).join(', '));
+    }
+
+    // config_dispositivo solo con ESTE device
+    {
+      const s = snap(fx());
+      const claves = Object.keys(s.config_dispositivo);
+      const fila = JSON.parse(s.config_dispositivo[DEV] || '{}');
+      assert(claves.length === 1 && claves[0] === DEV && fila.device_id === DEV && fila.user_id === USER,
+        'sync: config_dispositivo solo trae la fila de este device_id', `claves = ${claves.join(', ')}`);
+      assert(Object.keys(s.config_compartida).join() === USER, 'sync: config_compartida tiene una sola fila, con clave user_id');
+    }
+
+    // Alta / edición / baja
+    {
+      const antes = fx(), despues = fx();
+      despues.expenses.push({ id:'e2', date:'2026-09-02', nombre:'Bus', amount:800, category:'Transporte', method:'Débito', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+      const ops = win.diffSnapshots(snap(antes), snap(despues));
+      assert(ops.length === 1 && ops[0].tipo === 'upsert' && ops[0].tabla === 'expenses' && ops[0].clave === 'e2' && ops[0].fila.amount === 800 && ops[0].fila.user_id === USER,
+        'sync: alta de un gasto -> 1 upsert en expenses con la fila nueva', resumen(ops));
+    }
+    {
+      const antes = fx(), despues = fx();
+      despues.expenses[0].amount = 2500;
+      const ops = win.diffSnapshots(snap(antes), snap(despues));
+      assert(ops.length === 1 && ops[0].tipo === 'upsert' && ops[0].clave === 'e1' && ops[0].fila.amount === 2500,
+        'sync: edición de un gasto -> 1 upsert con el monto nuevo', resumen(ops) + (ops[0] ? ` · amount = ${ops[0].fila.amount}` : ''));
+    }
+    {
+      const antes = fx(), despues = fx();
+      despues.expenses = [];
+      const ops = win.diffSnapshots(snap(antes), snap(despues));
+      assert(ops.length === 1 && ops[0].tipo === 'delete' && ops[0].tabla === 'expenses' && ops[0].clave === 'e1'
+        && JSON.stringify(ops[0].fila) === JSON.stringify({ id:'e1', user_id:USER }),
+        'sync: baja de un gasto -> 1 delete con solo la PK (id, user_id)', resumen(ops) + (ops[0] ? ` · fila = ${JSON.stringify(ops[0].fila)}` : ''));
+    }
+    {
+      const antes = fx(), despues = fx();
+      despues.config.paleta = 'mar';
+      const ops = win.diffSnapshots(snap(antes), snap(despues));
+      assert(ops.length === 1 && ops[0].tabla === 'config_dispositivo' && ops[0].clave === DEV && ops[0].fila.paleta === 'mar',
+        'sync: cambio de preferencia del dispositivo -> 1 upsert en config_dispositivo', resumen(ops));
+    }
+
+    // Meta con aportes: orden padre -> hijo en upserts, inverso en deletes
+    {
+      const antes = fx(), despues = fx();
+      despues.goals.push({ id:'g2', name:'Bici', indefinida:false, montoObjetivo:50000, fechaLimite:'', fechaCreacion:'2026-09-01', fechaCumplida:null,
+        aportes:[{ id:'ap2', fecha:'2026-09-01', monto:500, tipo:'manual' }, { id:'ap3', fecha:'2026-09-02', monto:700, tipo:'manual' }], aporteAutomatico: aaSync() });
+      // Se invierte a propósito (hijos primero) para que el orden lo ponga ordenarOps.
+      const ops = win.diffSnapshots(snap(antes), snap(despues)).reverse();
+      const ord = win.ordenarOps(ops);
+      const iGoal = ord.findIndex(o => o.tabla === 'goals');
+      const iAps = ord.map((o, i) => o.tabla === 'goal_aportes' ? i : -1).filter(i => i >= 0);
+      assert(ord.length === 3 && iGoal >= 0 && iAps.length === 2 && iAps.every(i => i > iGoal) && ord[iAps[0]].fila.goal_id === 'g2',
+        'sync: meta nueva con aportes -> upsert de goals ANTES que los de goal_aportes', resumen(ord));
+
+      const ordDel = win.ordenarOps(win.diffSnapshots(snap(despues), snap(antes)));
+      const jGoal = ordDel.findIndex(o => o.tabla === 'goals');
+      const jAps = ordDel.map((o, i) => o.tabla === 'goal_aportes' ? i : -1).filter(i => i >= 0);
+      assert(ordDel.length === 3 && ordDel.every(o => o.tipo === 'delete') && jAps.length === 2 && jAps.every(i => i < jGoal),
+        'sync: meta borrada con aportes -> deletes de goal_aportes ANTES que el de goals', resumen(ordDel));
+
+      const mixto = win.ordenarOps([
+        { tabla:'goals', clave:'gX', tipo:'delete' }, { tabla:'goal_aportes', clave:'aY', tipo:'upsert' },
+        { tabla:'goal_aportes', clave:'aX', tipo:'delete' }, { tabla:'goals', clave:'gY', tipo:'upsert' }
+      ]);
+      assert(resumen(mixto) === 'upsert goals gY | upsert goal_aportes aY | delete goal_aportes aX | delete goals gX',
+        'sync: ordenarOps pone upserts padre->hijo y después deletes hijo->padre', resumen(mixto));
+    }
+
+    // Coalescencia
+    {
+      const u1 = { tabla:'expenses', clave:'e1', tipo:'upsert', fila:{ id:'e1', amount:1 } };
+      const u2 = { tabla:'expenses', clave:'e1', tipo:'upsert', fila:{ id:'e1', amount:2 } };
+      const d1 = { tabla:'expenses', clave:'e1', tipo:'delete', fila:{ id:'e1', user_id:USER } };
+      const otro = { tabla:'incomes', clave:'e1', tipo:'upsert', fila:{ id:'e1' } };
+      const c1 = win.coalescerOps([u1], [u2]);
+      assert(c1.length === 1 && c1[0].fila.amount === 2, 'sync: coalescer upsert + upsert -> 1 upsert (el último)', JSON.stringify(c1));
+      const c2 = win.coalescerOps([u1, otro], [d1]);
+      assert(c2.length === 2 && c2.some(o => o.tabla === 'expenses' && o.tipo === 'delete') && c2.some(o => o.tabla === 'incomes'),
+        'sync: coalescer upsert + delete -> delete (misma clave en otra tabla no se toca)', JSON.stringify(c2));
+      const c3 = win.coalescerOps([d1], [u2]);
+      assert(c3.length === 1 && c3[0].tipo === 'upsert', 'sync: coalescer delete + upsert -> upsert', JSON.stringify(c3));
+    }
+
+    // Guarda contra borrado masivo (más del 30% en tablas con 10+ filas)
+    {
+      const base10 = fx();
+      for(let k = 2; k <= 10; k++) base10.expenses.push({ ...base10.expenses[0], id:'e' + k });
+      const sBase = snap(base10);
+      const conteos = win.contarFilasSnapshot(sBase);
+      const borrar = n => { const st = clon(base10); st.expenses = st.expenses.slice(n); return win.diffSnapshots(sBase, snap(st)); };
+      const g4 = win.evaluarBorradoMasivo(conteos, borrar(4));
+      const g3 = win.evaluarBorradoMasivo(conteos, borrar(3));
+      assert(conteos.expenses === 10 && g4.length === 1 && g4[0].tabla === 'expenses' && g4[0].borrar === 4 && g4[0].total === 10,
+        'sync: guarda 30% — borrar 4 de 10 gastos (40%) se detiene', JSON.stringify(g4));
+      assert(g3.length === 0, 'sync: guarda 30% — borrar 3 de 10 (30% justo) pasa', JSON.stringify(g3));
+      const base9 = clon(base10); base9.expenses = base9.expenses.slice(1);
+      const sBase9 = snap(base9);
+      const todo9 = clon(base9); todo9.expenses = [];
+      const g9 = win.evaluarBorradoMasivo(win.contarFilasSnapshot(sBase9), win.diffSnapshots(sBase9, snap(todo9)));
+      assert(g9.length === 0, 'sync: guarda 30% — tabla con 9 filas no se vigila (borrar las 9 pasa)', JSON.stringify(g9));
+      const gRes = win.evaluarBorradoMasivo({ goals: 20 },
+        win.opsResync(snap(fx()), { goals: Array.from({ length: 20 }, (_, k) => ({ id:'nube' + k, user_id:USER })) }));
+      assert(gRes.length === 1 && gRes[0].tabla === 'goals' && gRes[0].borrar === 20,
+        'sync: guarda 30% en el resync — la nube tiene 20 metas que no existen localmente -> se detiene', JSON.stringify(gRes));
+    }
+
+    // Resync inicial
+    {
+      const s = snap(fx());
+      const ops = win.opsResync(s, { expenses: [{ id:'e1', user_id:USER }, { id:'huerfano', user_id:USER }], goals: [] });
+      const ups = ops.filter(o => o.tipo === 'upsert'), dels = ops.filter(o => o.tipo === 'delete');
+      const totalLocal = Object.values(win.contarFilasSnapshot(s)).reduce((a, b) => a + b, 0);
+      assert(ups.length === totalLocal && dels.length === 1 && dels[0].tabla === 'expenses' && dels[0].clave === 'huerfano',
+        'sync: resync = upsert de todo lo local + delete solo de lo que la nube tiene y lo local no', `${ups.length} upserts (local ${totalLocal}) · ${resumen(dels)}`);
+    }
+
+    // Ids estables
+    {
+      const st = fx();
+      delete st.expenses[0].id;
+      delete st.goals[0].aportes[0].id;
+      let lanzo = false;
+      try{ win.construirSnapshot(st, USER, DEV); }catch(_){ lanzo = true; }
+      assert(lanzo, 'sync: construirSnapshot se niega a fotografiar un registro sin id (no inventa ids aleatorios)');
+      let n = 0;
+      const gen = () => 'nuevo' + (++n);
+      const asignados = win.asegurarIds(st, gen);
+      const otraVez = win.asegurarIds(st, gen);
+      assert(asignados === 2 && otraVez === 0 && st.expenses[0].id === 'nuevo1' && st.goals[0].aportes[0].id === 'nuevo2',
+        'sync: asegurarIds asigna id a gastos y aportes sin id una sola vez', `asignados = ${asignados}, segunda pasada = ${otraVez}`);
+      const ops = win.diffSnapshots(snap(st), snap(st));
+      assert(ops.length === 0, 'sync: con ids asegurados, dos fotos seguidas -> 0 ops', resumen(ops));
+    }
+
+    // Clasificación de errores y backoff
+    {
+      const c = win.clasificarRespuestaSync;
+      const ok = c({ error:null, status:201 }) === 'ok' && c({ error:{}, status:0 }) === 'red' && c({ error:{}, status:503 }) === 'red'
+        && c({ error:{}, status:401 }) === 'red' && c({ error:{}, status:429 }) === 'red'
+        && c({ error:{}, status:400 }) === 'permanente' && c({ error:{}, status:403 }) === 'permanente' && c({ error:{}, status:409 }) === 'permanente';
+      assert(ok, 'sync: clasificación — sin red/5xx/401/429 se reintenta; 400/403/409 va a fallidas');
+      const r = [1, 2, 3, 4, 7, 20].map(win.retrasoReintentoSync);
+      assert(JSON.stringify(r) === JSON.stringify([1000, 2000, 4000, 8000, 60000, 60000]),
+        'sync: backoff 1s, 2s, 4s, 8s… con tope 60s', JSON.stringify(r));
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
