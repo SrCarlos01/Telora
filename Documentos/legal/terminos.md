@@ -26,7 +26,7 @@ Telora es una herramienta para registrar y organizar tus finanzas personales: ga
 - Los datos que registras son tuyos. Telora los trata según la [Política de Privacidad](privacidad.html).
 - Eres responsable de la exactitud de lo que ingresas; los cálculos de Telora dependen de ello.
 - **Sin sesión iniciada**, tus datos existen solo en tu dispositivo: si los borras o pierdes el dispositivo sin un respaldo descargado, no se pueden recuperar.
-- Con sesión iniciada, Telora mantiene un respaldo en la nube, pero te recomendamos descargar también un respaldo periódico desde Configuración → Respaldo.
+- Con sesión iniciada, Telora puede mantener un respaldo en la nube desde un solo dispositivo por cuenta, como se explica en la [Política de Privacidad](privacidad.html). Aun así, te recomendamos descargar también un respaldo periódico desde Configuración → Respaldo de datos.
 
 ## 5. Uso aceptable
 
