@@ -2483,8 +2483,9 @@ button:active{ transform:scale(0.93); }
     <!-- Cuenta de usuario (Etapa 2 · Tanda 1): login OPCIONAL con Google vía Supabase.
          "Cuenta de usuario" = autenticación; no confundir con "Cuentas" (las cuentas
          financieras internas, más arriba). Va justo después de "Respaldo de datos"
-         porque su propósito futuro es el respaldo en la nube. En esta tanda NO sincroniza
-         nada: los datos siguen solo en este dispositivo. Los dos estados (sin/con sesión)
+         porque su propósito es el respaldo en la nube. Desde 4ef6696 la escritura continua
+         está activa, pero solo en el dispositivo escritor de la cuenta; los demás siguen
+         solo con sus datos locales. Los dos estados (sin/con sesión)
          los alterna renderCuentaUsuario(). -->
     <details class="cfg-group">
       <summary>Cuenta de usuario <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
@@ -3363,7 +3364,7 @@ function saveState(){
   try{
     localStorage.setItem('misfinanzas_data', json);
     __lastGoodStateJSON = json;
-    alGuardarEstadoSync();   // Tanda 4a: escritura continua a la nube (no hace nada con la bandera apagada)
+    alGuardarEstadoSync();   // Tanda 4a: escritura continua a la nube (activa desde 4ef6696; solo actúa en el dispositivo escritor)
     return true;
   }catch(e){
     // Revertir la mutación en memoria: la app no debe mostrar datos que no se guardaron.
@@ -13229,11 +13230,10 @@ async function registrarDispositivo(userId, deviceId){
    intentarSubidaInicial() + sheetConfirmarDueno), extendiéndolo y no reinventándolo:
    pedir confirmación si el candado está vacío, respetar el conflicto si es de otra cuenta
    (caso C: no traer nada) y marcarlo con marcarDuenoConfirmado() tras un pull exitoso.
-   (c) IMPLEMENTADO detrás de ESCRITURA_CONTINUA_ACTIVA (Tanda 4a, Día 18), PENDIENTE DE
-   ACTIVAR: con la bandera en true, cada saveState()/saveStateQuiet() del dispositivo
-   ESCRITOR se refleja en la nube (diff + cola persistente, ver "ESCRITURA CONTINUA A LA
-   NUBE" más abajo). Mientras siga en false, saveState() solo escribe en localStorage, la
-   nube es una foto de la subida inicial y un pull traería datos viejos. Solo escribe UN
+   (c) CUMPLIDO: ESCRITURA_CONTINUA_ACTIVA está en true desde 4ef6696 (Tanda 4a, Día 18):
+   cada saveState()/saveStateQuiet() del dispositivo ESCRITOR se refleja en la nube (diff
+   + cola persistente, ver "ESCRITURA CONTINUA A LA NUBE" más abajo). En los demás
+   dispositivos saveState() solo escribe en localStorage. Solo escribe UN
    dispositivo por cuenta (config_compartida.dispositivo_escritor, Tanda 4a.1): un pull en
    cualquier otro dispositivo traería lo que ese escritor dejó. Los choques entre
    dispositivos y el traspaso del rol de escritor son de la Tanda 4b.
