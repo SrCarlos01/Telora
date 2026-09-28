@@ -27,13 +27,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # LISTA PERMITIDA: se publica SOLO lo que el sitio necesita, copiado a _site/.
+      # Antes se subía el árbol completo (path: .) quitando solo tests.html, y así
+      # quedaron públicos en telora.cl documentos internos (Documentos/*.docx,
+      # Bases/*.docx, guia_prompts_claude_code_telora.md) — hallazgo del 27-09-2026.
+      # Con lista permitida, cualquier archivo nuevo del repo queda privado por defecto.
+      # La lista sale de lo que referencian index.html, sw.js (ASSETS), manifest.json,
+      # tutorial.html y las páginas legales. Si se agrega un archivo que el sitio
+      # necesita, hay que sumarlo aquí. cp falla si falta alguno: el deploy se detiene.
+      # (No hay CNAME: el dominio telora.cl está configurado en los ajustes de Pages.)
+      - name: Armar _site con la lista permitida
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp index.html sw.js manifest.json icon.svg \
+             xlsx.full.min.js supabase.min.js \
+             tutorial.html privacidad.html terminos.html \
+             _site/
+          echo "Contenido de _site:"
+          ls -la _site
+
+      # Se estampa el sw.js que efectivamente se publica (el de _site/).
       - name: Estampar BUILD en sw.js
         run: |
           BUILD="${GITHUB_SHA::7}"
-          if grep -q "__BUILD__" sw.js; then
-            sed -i "s/__BUILD__/${BUILD}/g" sw.js
-            echo "sw.js estampado con BUILD=${BUILD}:"
-            grep -n "const BUILD" sw.js
+          if grep -q "__BUILD__" _site/sw.js; then
+            sed -i "s/__BUILD__/${BUILD}/g" _site/sw.js
+            echo "_site/sw.js estampado con BUILD=${BUILD}:"
+            grep -n "const BUILD" _site/sw.js
           else
             echo "::warning::sw.js no tiene el marcador __BUILD__; se despliega sin estampar."
           fi
@@ -41,21 +62,10 @@ jobs:
       - name: Configurar Pages
         uses: actions/configure-pages@v6
 
-      # tests.html es el harness de pruebas del motor financiero (T4) para uso en
-      # desarrollo local: debe seguir en el repo, pero no corresponde publicarlo en el
-      # sitio. Se borra de esta copia efímera del checkout (el runner la descarta al
-      # terminar el job) antes de armar el artefacto — el repo real no se toca.
-      - name: Excluir tests.html del artefacto público
-        run: rm -f tests.html
-
-      # Sube el árbol tal cual (sin Jekyll). actions/upload-pages-artifact@v5
-      # excluye .git, .github y archivos ocultos por defecto: se publica el
-      # mismo conjunto de archivos que el deploy por rama (el repo no tiene
-      # dotfiles que el sitio necesite servir), salvo tests.html que se quita arriba.
       - name: Subir artefacto del sitio
         uses: actions/upload-pages-artifact@v5
         with:
-          path: .
+          path: _site
 
       - name: Desplegar
         id: deployment
