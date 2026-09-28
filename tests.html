@@ -1243,7 +1243,7 @@ function runTests(){
     ].forEach(nombre=>{
       assert(typeof win[nombre] === 'function', `sync: iframe.contentWindow.${nombre} existe y es function`, `typeof = ${typeof win[nombre]}`);
     });
-    assert(win.eval('ESCRITURA_CONTINUA_ACTIVA') === false, 'sync: ESCRITURA_CONTINUA_ACTIVA está en false (así se commitea)',
+    assert(win.eval('ESCRITURA_CONTINUA_ACTIVA') === true, 'sync: ESCRITURA_CONTINUA_ACTIVA está en true (activada en producción desde 4ef6696)',
       `valor = ${win.eval('ESCRITURA_CONTINUA_ACTIVA')}`);
 
     const aaSync = () => ({ activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1, pausado:false, razonPausa:null });
