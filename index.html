@@ -13239,7 +13239,7 @@ async function registrarDispositivo(userId, deviceId){
 const PULL_INICIAL_ACTIVO = false;
 // Tanda 4a: escritura continua a la nube (un dispositivo). Con false no hay ninguna
 // petición nueva a la red ni ninguna clave telora_sync_* en localStorage.
-const ESCRITURA_CONTINUA_ACTIVA = false;
+const ESCRITURA_CONTINUA_ACTIVA = true;
 
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
 // migrarEstadoCuentas() siempre crea una "Principal" en un dispositivo nuevo, así que
