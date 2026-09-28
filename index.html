@@ -1007,6 +1007,9 @@ button{font-family:inherit;}
    unificado aquí a la escala de texto secundario del resto de la app (13px). */
 .sheet-note{font-size:13px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;}
 :root.hc .sheet-note{color:var(--cream);}
+/* Enlaces a las páginas legales (cuenta de usuario y pie de Configuración). */
+.legal-link{color:var(--gold); text-decoration:underline; text-underline-offset:2px;}
+:root.hc .legal-link{color:var(--cream);}
 
 .choice-row{display:flex; gap:12px; margin-bottom:6px;}
 .choice-card{
@@ -2488,9 +2491,12 @@ button:active{ transform:scale(0.93); }
       <div class="cfg-group-body">
         <div id="cuentaUsuarioSinSesion">
           <p class="sheet-note" style="margin:0 0 12px;">
-            Inicia sesión con tu cuenta de Google. Pronto podrás respaldar tus datos en la nube y usarlos en más de un dispositivo; por ahora siguen guardados solo en este dispositivo. Es opcional: la app funciona igual sin iniciar sesión.
+            Inicia sesión con tu cuenta de Google para respaldar tus datos en la nube. Es opcional: sin iniciar sesión, tus datos se guardan solo en este dispositivo.
           </p>
           <button class="btn-ghost" id="btnLoginGoogle" style="margin-top:0;">Continuar con Google</button>
+          <p class="sheet-note" style="margin:10px 0 0; font-size:11.5px;">
+            Al continuar aceptas los <a class="legal-link" href="terminos.html" target="_blank" rel="noopener">Términos de Uso</a> y la <a class="legal-link" href="privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.
+          </p>
         </div>
         <div id="cuentaUsuarioConSesion" style="display:none;">
           <p class="sheet-note" style="margin:0 0 12px; overflow-wrap:anywhere;">
@@ -2578,6 +2584,9 @@ button:active{ transform:scale(0.93); }
 
     <p class="sheet-note" id="cfgBuildInfo" style="margin:18px 0 0; text-align:center; font-size:11px; opacity:.55;">
       Telora · versión <span id="cfgBuildTag">—</span>
+    </p>
+    <p class="sheet-note" style="margin:4px 0 0; text-align:center; font-size:11px; opacity:.55;">
+      <a class="legal-link" href="privacidad.html" target="_blank" rel="noopener">Privacidad</a> · <a class="legal-link" href="terminos.html" target="_blank" rel="noopener">Términos</a>
     </p>
     <button class="btn-ghost" data-close style="margin-top:10px;">Cerrar</button>
   </div>
