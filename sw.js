@@ -30,6 +30,7 @@ const ASSETS = [
   './index.html',
   './manifest.json',
   './xlsx.full.min.js',
+  './supabase.min.js',
   './icon.svg'
 ];
 
