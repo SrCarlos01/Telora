@@ -83,19 +83,41 @@ self.addEventListener('fetch', event => {
   // --- HTML de navegación: NETWORK-FIRST ---
   // Siempre se intenta la copia fresca; si no hay red, se sirve el index
   // precacheado para que la app abra igual sin conexión.
+  // Regla: solo la navegación a la APP (raíz del scope o index.html, con cualquier
+  // query/hash, p. ej. el regreso del login OAuth) se guarda y se sirve como
+  // './index.html'. Otras páginas (tutorial.html, privacidad.html, terminos.html) se
+  // guardan bajo su propia URL. Corrige un bug: antes cualquier navegación se guardaba
+  // como './index.html', y tras visitar el tutorial la app sin conexión abría el tutorial.
   if (req.mode === 'navigate') {
+    const scopePath = new URL(self.registration.scope).pathname;
+    const rel = url.pathname.startsWith(scopePath) ? url.pathname.slice(scopePath.length) : url.pathname;
+    const esApp = rel === '' || rel === 'index.html';
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       try {
         const fresh = await fetch(req);
         if (fresh && fresh.ok && fresh.type === 'basic') {
-          cache.put('./index.html', fresh.clone());
+          cache.put(esApp ? './index.html' : req, fresh.clone());
         }
         return fresh;
       } catch (_) {
-        const cached = await cache.match('./index.html') || await cache.match('./');
-        if (cached) return cached;
-        return new Response('', { status: 504, statusText: 'Sin conexión' });
+        if (esApp) {
+          const cached = await cache.match('./index.html') || await cache.match('./');
+          if (cached) return cached;
+          return new Response('', { status: 504, statusText: 'Sin conexión' });
+        }
+        const propia = await cache.match(req);
+        if (propia) return propia;
+        return new Response(
+          '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+          '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+          '<title>Sin conexión — Telora</title></head>' +
+          '<body style="margin:0;padding:24px 16px;background:#161011;color:#F3E9DD;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">' +
+          '<p>Sin conexión. Esta página necesita internet.</p>' +
+          '<p><a href="./" style="color:#C9A66B;">Volver a Telora</a></p>' +
+          '</body></html>',
+          { status: 503, statusText: 'Sin conexión', headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
       }
     })());
     return;
