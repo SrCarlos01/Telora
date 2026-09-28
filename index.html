@@ -4982,7 +4982,7 @@ function gastosFavoritos(){
       return byCat;
     };
     const d = new Date(); d.setMonth(d.getMonth() - 3);
-    const desde = d.toISOString().slice(0,10);
+    const desde = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');   // local, no UTC
     let byCat = contar(desde);
     if(Object.keys(byCat).filter(k=> byCat[k].count >= 2).length < 2) byCat = contar(null);
 
@@ -5013,7 +5013,7 @@ function openGastoForm(expenseId){
   fillSelect('gCategoria', state.config.categorias);
   fillSelect('gMetodo', state.config.metodos);
   const today = new Date();
-  document.getElementById('gFecha').value = today.toISOString().slice(0,10);
+  document.getElementById('gFecha').value = fechaHoyLocalISO();
   document.getElementById('gNombre').value = '';
   document.getElementById('gMonto').value = '';
   document.getElementById('gDescripcion').value = '';
@@ -5111,7 +5111,7 @@ document.getElementById('gdupConfirm').onclick = ()=>{
 document.getElementById('btnSaveGasto').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
   // Fecha: si está vacía se usa hoy (ya viene pre-llenada, pero puede borrarse).
-  const fecha = document.getElementById('gFecha').value || new Date().toISOString().slice(0,10);
+  const fecha = document.getElementById('gFecha').value || fechaHoyLocalISO();
   const nombre = document.getElementById('gNombre').value.trim();             // obligatorio (Tanda M)
   const monto = parseMonto('gMonto');
   const categoria = document.getElementById('gCategoria').value;
@@ -5186,7 +5186,7 @@ document.getElementById('btnSaveGasto').onclick = ()=>{
       e.date === fecha             // mismo día
     );
     if(dup){
-      const hoyIso = new Date().toISOString().slice(0,10);
+      const hoyIso = fechaHoyLocalISO();
       const cuando = fecha === hoyIso ? 'hoy' : `el ${fmtDiaMes(fecha)}`;
       document.getElementById('gdupTexto').textContent =
         `Ya registraste ${money(monto)} en ${categoria} ${cuando}. ¿Guardar de todas formas?`;
@@ -5370,7 +5370,7 @@ function openIngresoForm(incomeId){
   fillSelect('iFuente', state.config.fuentes);
   // Sin fuente preseleccionada al crear: opción vacía al inicio (obliga a elegir).
   document.getElementById('iFuente').insertAdjacentHTML('afterbegin', '<option value="" disabled selected>Elige una fuente…</option>');
-  document.getElementById('iFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('iFecha').value = fechaHoyLocalISO();
   document.getElementById('iNombre').value = '';
   document.getElementById('iMonto').value = '';
   document.getElementById('iDescripcion').value = '';
@@ -5411,7 +5411,7 @@ function openIngresoForm(incomeId){
 // sheet propio (mismo monto + misma fuente + misma fecha, solo al crear, no fijos).
 document.getElementById('btnSaveIngreso').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
-  const fecha = document.getElementById('iFecha').value || new Date().toISOString().slice(0,10);
+  const fecha = document.getElementById('iFecha').value || fechaHoyLocalISO();
   const nombre = document.getElementById('iNombre').value.trim();             // obligatorio (Tanda M)
   const fuente = document.getElementById('iFuente').value;
   const monto = parseMonto('iMonto');
@@ -5517,7 +5517,7 @@ function openTransferForm(transferId){
   if(!transferId && isReadOnly()){ blockReadOnly(); return; }
   editingTransferId = transferId || null;
   const vivas = cuentasVivas();
-  document.getElementById('tFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('tFecha').value = fechaHoyLocalISO();
   document.getElementById('tMonto').value = '';
   document.getElementById('tNombre').value = '';
   document.getElementById('btnDeleteTransfer').style.display = 'none';
@@ -5545,7 +5545,7 @@ function openTransferForm(transferId){
 }
 document.getElementById('btnSaveTransfer').onclick = ()=>{
   if(isReadOnly()){ blockReadOnly(); return; }
-  const fecha = document.getElementById('tFecha').value || new Date().toISOString().slice(0,10);
+  const fecha = document.getElementById('tFecha').value || fechaHoyLocalISO();
   const origen = document.getElementById('tOrigen').value;
   const destino = document.getElementById('tDestino').value;
   const monto = parseMonto('tMonto');
@@ -5774,7 +5774,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
         valor: autoTipo === 'porcentaje' ? autoValor : 0,
         diaDelMes: autoDia,
         pausado: false, razonPausa: null,
-        fechaActivacion: prev.fechaActivacion || new Date().toISOString().slice(0,10)
+        fechaActivacion: prev.fechaActivacion || fechaHoyLocalISO()
       };
     }
     return {
@@ -5815,7 +5815,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
     indefinida: indefinida,
     montoObjetivo: indefinida ? 0 : montoObjetivo,
     fechaLimite: indefinida ? "" : (fechaLimite || ""),
-    fechaCreacion: new Date().toISOString().slice(0,10),
+    fechaCreacion: fechaHoyLocalISO(),
     fechaCumplida: null,   // Tanda P3: se estampa la primera vez que se observa 0->100% en vivo
     _ultimoDoneVisto: false,   // Tanda P3 (rediseño): línea de base para chequearMetaCompletada()
     aportes: [],
@@ -6321,7 +6321,7 @@ document.getElementById('btnAportarConfirmar').onclick = ()=>{
   // rediseño: ahorrado puede completarse también sin ningún aporte, ver aporteAutomaticoAcumulado).
   const objetivo = g.montoObjetivo || 0;
   const ahorradoAntes = ahorradoDeMeta(g, mesActualReal());
-  g.aportes.push({ id: uid(), fecha: new Date().toISOString().slice(0,10), monto: monto, tipo: 'manual' });
+  g.aportes.push({ id: uid(), fecha: fechaHoyLocalISO(), monto: monto, tipo: 'manual' });
   const completaMeta = !g.indefinida && objetivo > 0 && ahorradoAntes < objetivo && ahorradoAntes + monto >= objetivo;
   chequearMetaCompletada(g);
   if(completaMeta) haptic(HAPTIC_GOAL);
@@ -6387,7 +6387,7 @@ document.getElementById('btnSaveAutoMeta').onclick = ()=>{
     razonPausa: null,
     // La activación fija el mes desde el cual se generan las ocurrencias virtuales
     // (las del mes siguiente en adelante). Si ya estaba activo, se conserva.
-    fechaActivacion: prev.fechaActivacion || new Date().toISOString().slice(0,10)
+    fechaActivacion: prev.fechaActivacion || fechaHoyLocalISO()
   };
   haptic(HAPTIC_OK);
   saveState(); closeSheet('sheetAutoMeta'); renderAll();
@@ -10369,7 +10369,7 @@ document.getElementById('cfgReadOnly').addEventListener('change', e=>{
 // (con sus aportes) y configuración.
 function buildBackupFile(){
   const payload = JSON.stringify(state, null, 2);
-  const fecha = new Date().toISOString().slice(0,10);
+  const fecha = fechaHoyLocalISO();
   const filename = `Telora_respaldo_${fecha}.json`;
   const blob = new Blob([payload], {type:'application/json'});
   let file = null;
@@ -10436,7 +10436,7 @@ function showSaveErrorDialog(kind, attemptedJSON){
       const url  = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Telora_respaldo_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `Telora_respaldo_${fechaHoyLocalISO()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -10721,14 +10721,14 @@ function migrateBackup(parsed){
       indefinida: isBool(g.indefinida) ? g.indefinida : false,
       montoObjetivo: isNum(g.montoObjetivo) ? g.montoObjetivo : 0,
       fechaLimite: isStr(g.fechaLimite) ? g.fechaLimite : '',
-      fechaCreacion: isStr(g.fechaCreacion) ? g.fechaCreacion : new Date().toISOString().slice(0,10),
+      fechaCreacion: isStr(g.fechaCreacion) ? g.fechaCreacion : fechaHoyLocalISO(),
       // Tanda P3: se conserva tal cual si es una fecha ISO válida; cualquier otra cosa
       // (ausente, basura) entra como null — nunca se estampa con la fecha de HOY acá,
       // que sería inventar cuándo se cumplió una meta que ya viene cumplida en el archivo.
       fechaCumplida: isIsoDate(g.fechaCumplida) ? g.fechaCumplida : null,
       aportes: arrOf(g.aportes).map(a=>({
         id: isStr(a.id) ? a.id : gen(),
-        fecha: isStr(a.fecha) ? a.fecha : new Date().toISOString().slice(0,10),
+        fecha: isStr(a.fecha) ? a.fecha : fechaHoyLocalISO(),
         monto: isNum(a.monto) ? a.monto : 0,
         tipo: isStr(a.tipo) ? a.tipo : 'manual'
       })),
@@ -11030,7 +11030,7 @@ function buildExportWorkbook(fromDate, toDate){
   appendSheet(wb, "Ingresos", incomeRows);
   appendSheet(wb, "Deudas (Cuotas)", debtRows);   // Tanda L3: filtrada a propias + compartidas
   const sufijoCuenta = ctaExp === 'total' ? '' : '_' + cuentaNombre(ctaExp).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
-  const filename = `Telora${sufijoCuenta}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const filename = `Telora${sufijoCuenta}_${fechaHoyLocalISO()}.xlsx`;
   return { wb, filename };
 }
 
@@ -12652,7 +12652,7 @@ function onboardingCrearGastosFijosSecuencial(items, onDone){
     editingExpenseId = null;
     confirmarMetodoSinCuotas = false;
     confirmarGastoDuplicado = false;
-    document.getElementById('gFecha').value = new Date().toISOString().slice(0,10);
+    document.getElementById('gFecha').value = fechaHoyLocalISO();
     document.getElementById('gNombre').value = item.nombre;
     setMonto('gMonto', item.monto);
     fillSelect('gCategoria', state.config.categorias, item.categoria);
