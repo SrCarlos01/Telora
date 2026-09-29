@@ -13,10 +13,9 @@
 <meta name="theme-color" content="#1B1210">
 
 <link rel="manifest" href="manifest.json">
-<link rel="mask-icon" href="icon.svg" color="#5C1F2E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%235C1F2E'/%3E%3Ctext x='90' y='118' font-family='Georgia,serif' font-size='104' font-weight='700' fill='%23C9A66B' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%235C1F2E'/%3E%3Ctext x='90' y='118' font-family='Georgia,serif' font-size='104' font-weight='700' fill='%23C9A66B' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
 <!-- XLSX autohospedada (Tanda Q · pto 5). Antes se cargaba desde cdnjs: rompía el
      uso offline, metía un punto único de falla de terceros y hacía una petición a un
@@ -112,11 +111,9 @@ button{font-family:inherit;}
   padding:18px 20px 8px;
 }
 .brand{display:flex; align-items:center; gap:8px;}
-.brand .mark{
-  width:32px; height:32px; border-radius:9px; background:var(--gold);
-  display:flex; align-items:center; justify-content:center;
-  color:var(--burgundy); font-weight:700; font-size:17px; font-family:ui-serif,Georgia,serif;
-}
+/* Moneda del logo (Día 19): mismo hueco de 32×32 que el antiguo cuadrado "$". Se usa
+   el PNG de 192 escalado para que se vea nítido en pantallas de alta densidad. */
+.brand .mark-img{width:32px; height:32px; display:block; flex-shrink:0;}
 .brand .name{font-size:14.5px; letter-spacing:0.06em; color:var(--gold-dim); text-transform:uppercase;}
 .top-actions{display:flex; gap:16px;}
 .icon-btn{
@@ -1782,7 +1779,7 @@ button:active{ transform:scale(0.93); }
 
   <div class="topbar">
     <div class="brand">
-      <div class="mark">$</div>
+      <img class="mark-img" src="icons/icon-192.png" alt="" width="32" height="32">
       <span class="name">Telora</span>
     </div>
     <div class="top-actions">
@@ -2773,7 +2770,7 @@ button:active{ transform:scale(0.93); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="brand" style="justify-content:center; margin-bottom:16px;">
-      <div class="mark">$</div>
+      <img class="mark-img" src="icons/icon-192.png" alt="" width="32" height="32">
       <span class="name">Telora</span>
     </div>
     <h2 style="text-align:center;">Tu respaldo está listo</h2>
@@ -12275,7 +12272,7 @@ function dispararNotificacionesCuotas(proximas){
         else cuerpo = `Cuota de ${nombre} vence en ${p.diasRestantes} días.`;
         reg.showNotification('Cuota próxima a vencer', {
           body: cuerpo,
-          icon: './icon.svg',
+          icon: './icons/icon-192.png',
           tag: 'misfinanzas-cuota-' + p.debt.id,
           data: { url: './index.html' }
         }).catch(()=>{});

@@ -35,17 +35,25 @@ jobs:
       # La lista sale de lo que referencian index.html, sw.js (ASSETS), manifest.json,
       # tutorial.html y las páginas legales. Si se agrega un archivo que el sitio
       # necesita, hay que sumarlo aquí. cp falla si falta alguno: el deploy se detiene.
+      # De icons/ se publican SOLO los íconos que usa el sitio (favicons, apple-touch,
+      # PWA any/maskable) y og-image.png (vista previa al compartir). icon-1024, logo-*,
+      # logo-maestro.svg y play-feature quedan en el repo: son para tiendas y marca.
       # (No hay CNAME: el dominio telora.cl está configurado en los ajustes de Pages.)
       - name: Armar _site con la lista permitida
         run: |
           set -euo pipefail
-          mkdir -p _site
-          cp index.html sw.js manifest.json icon.svg \
+          mkdir -p _site/icons
+          cp index.html sw.js manifest.json \
              xlsx.full.min.js supabase.min.js \
              tutorial.html privacidad.html terminos.html \
              _site/
+          cp icons/favicon-16.png icons/favicon-32.png icons/apple-touch-icon.png \
+             icons/icon-192.png icons/icon-512.png \
+             icons/icon-maskable-192.png icons/icon-maskable-512.png \
+             icons/og-image.png \
+             _site/icons/
           echo "Contenido de _site:"
-          ls -la _site
+          ls -la _site _site/icons
 
       # Se estampa el sw.js que efectivamente se publica (el de _site/).
       - name: Estampar BUILD en sw.js
