@@ -22,8 +22,10 @@
      uso offline, metía un punto único de falla de terceros y hacía una petición a un
      servidor externo en cada apertura. Ahora es un archivo local. Versión 0.20.3:
      corrige CVE-2023-30533 (prototype pollution, afecta <0.19.3) y CVE-2024-22363
-     (ReDoS en el parser de formatos, afecta <0.20.2), ambas presentes en la 0.18.5. -->
-<script src="./xlsx.full.min.js"></script>
+     (ReDoS en el parser de formatos, afecta <0.20.2), ambas presentes en la 0.18.5.
+     Día 19: ya NO se carga aquí. Pesa ~950 KB y solo se usa al exportar a Excel, así
+     que se inserta bajo demanda con cargarXLSX() (sección EXPORTAR) al abrir la hoja de
+     exportación. Sigue en ASSETS de sw.js, así que funciona sin conexión. -->
 
 <!-- Supabase autohospedada (Etapa 2 · Tanda 1): @supabase/supabase-js 2.117.1, build
      UMD (dist/umd/supabase.js del paquete npm, verificado contra su integrity sha512).
@@ -4737,6 +4739,11 @@ document.getElementById('btnConfig').onclick = ()=>{
   openSheet('sheetConfig');
 };
 document.getElementById('btnExport').onclick = ()=>{
+  // Día 19: XLSX se precarga al ABRIR la hoja (no al tocar "Generar/Compartir"), para que
+  // al confirmar ya esté lista y la descarga/compartir corran dentro del gesto del usuario.
+  // Si falla aquí no se avisa: el aviso sale al tocar el botón (conXLSX reintenta).
+  setExportOcupado(false);
+  cargarXLSX().catch(()=>{});
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
   // Tanda L3: el Excel respeta la cuenta activa (gastos, ingresos y cuotas propias +
@@ -10915,6 +10922,56 @@ async function shareFile(file, title, fallbackMsg){
 }
 
 /* ==================== EXPORTAR ==================== */
+// XLSX bajo demanda (Día 19): ya no va en el <head>. Se inserta un único <script> la
+// primera vez que se necesita. La promesa en curso se memoriza para que dos clics
+// seguidos no inserten dos scripts; si la carga falla se olvida (y se quita el <script>)
+// para que el siguiente intento vuelva a pedirla.
+let cargaXLSXEnCurso = null;
+function cargarXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(cargaXLSXEnCurso) return cargaXLSXEnCurso;
+  cargaXLSXEnCurso = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = './xlsx.full.min.js';
+    s.onload = ()=>{
+      cargaXLSXEnCurso = null;
+      if(window.XLSX) resolve(window.XLSX);
+      else { s.remove(); reject(new Error('xlsx.full.min.js cargó pero no definió XLSX')); }
+    };
+    s.onerror = ()=>{
+      cargaXLSXEnCurso = null;
+      s.remove();
+      reject(new Error('No se pudo cargar xlsx.full.min.js'));
+    };
+    document.head.appendChild(s);
+  });
+  return cargaXLSXEnCurso;
+}
+// Botones de la hoja: se deshabilitan desde el primer toque hasta que la hoja se vuelve
+// a abrir (btnExport), así un doble toque no genera dos archivos ni dos cargas.
+function setExportOcupado(on){
+  ['btnDoExport','btnShareExport'].forEach(id=>{ document.getElementById(id).disabled = on; });
+}
+// Corre fn con XLSX disponible. Lo normal es que ya esté cargada (se precarga al abrir la
+// hoja): entonces fn corre en el mismo tick del toque, SIN await, para no perder el gesto
+// del usuario que exigen navigator.share y la descarga (sobre todo en iOS Safari). Si aún
+// no está, se espera la carga con los botones deshabilitados.
+function conXLSX(fn){
+  const correr = ()=>{
+    try{
+      const r = fn();
+      if(r && typeof r.catch === 'function') r.catch(()=> setExportOcupado(false));
+      return r;
+    }catch(err){ setExportOcupado(false); throw err; }
+  };
+  setExportOcupado(true);
+  if(window.XLSX) return correr();
+  return cargarXLSX().then(correr, err=>{
+    console.warn(err);
+    setExportOcupado(false);
+    showToast('No se pudo preparar la exportación. Revisa tu conexión e inténtalo de nuevo.', 'error');
+  });
+}
 document.querySelectorAll('input[name=exportScope]').forEach(r=>{
   r.addEventListener('change', ()=>{
     document.getElementById('rangoFields').style.display = r.value==='rango' ? 'flex' : 'none';
@@ -10957,12 +11014,17 @@ function resolveExportRange(){
 document.getElementById('btnDoExport').onclick = ()=>{
   const range = resolveExportRange();
   if(!range) return;
-  exportExcel(range.fromDate, range.toDate);
-  closeSheet('sheetExportar');
+  conXLSX(()=>{
+    exportExcel(range.fromDate, range.toDate);
+    closeSheet('sheetExportar');
+  });
 };
-document.getElementById('btnShareExport').onclick = async ()=>{
+document.getElementById('btnShareExport').onclick = ()=>{
   const range = resolveExportRange();
   if(!range) return;
+  conXLSX(()=> compartirExport(range));
+};
+async function compartirExport(range){
   const { wb, filename } = buildExportWorkbook(range.fromDate, range.toDate);
   let file = null;
   try{
@@ -10976,7 +11038,7 @@ document.getElementById('btnShareExport').onclick = async ()=>{
   }
   await shareFile(file, 'Exportación de Telora', 'No se pudo compartir. Prueba "Generar Excel".');
   closeSheet('sheetExportar');
-};
+}
 
 function buildExportWorkbook(fromDate, toDate){
   const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
