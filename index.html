@@ -4766,7 +4766,12 @@ document.getElementById('btnExport').onclick = ()=>{
   exportListo = null;
   cargarExcelJS().catch(()=>{});
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
-  document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
+  // T22: en equipos sin pantalla táctil (PC) el botón principal es "Descargar Excel" y
+  // "Compartir" se oculta: Chrome de escritorio no comparte .xlsx (NotAllowedError). En
+  // móvil, sin cambios: "Compartir Excel" (si se puede) + "Generar Excel".
+  const esEscritorio = matchMedia('(pointer: fine)').matches && !('ontouchstart' in window);
+  document.getElementById('btnShareExport').style.display = (!esEscritorio && supportsFileShare()) ? 'block' : 'none';
+  document.getElementById('btnDoExport').textContent = esEscritorio ? 'Descargar Excel' : 'Generar Excel';
   // Tanda L3: el Excel respeta la cuenta activa (gastos, ingresos y cuotas propias +
   // compartidas). Se avisa aquí para que no sea silencioso.
   const expNota = document.getElementById('expCuentaNota');
@@ -11114,18 +11119,40 @@ document.getElementById('btnShareExport').onclick = ()=>{
   archivo.then(compartirExport, avisarFalloExport);
 };
 // Comparte el archivo ya generado. Se llama SIN await previo cuando el archivo estaba
-// listo, así navigator.share() (dentro de shareFile, antes de su primer await) corre con
-// el gesto del usuario todavía activo. Si hubo que generarlo y el navegador rechaza por
-// falta de gesto, shareFile muestra el aviso de siempre.
+// listo, así navigator.share() corre en el mismo tick del toque, con el gesto del usuario
+// todavía activo (iOS lo exige).
+//  · AbortError (el usuario cerró la hoja/diálogo de compartir): silencio.
+//  · canShare falso o cualquier otro error: se descarga el MISMO archivo ya generado.
+//    Chrome de escritorio responde canShare = true para un .xlsx pero rechaza el share con
+//    NotAllowedError ("Permission denied"): ese tipo no está en su lista de archivos
+//    compartibles. Antes eso terminaba en «No se pudo compartir»; ahora, en la descarga.
 function compartirExport(r){
   const file = new File([r.blob], r.filename, { type: XLSX_MIME });
-  if(!(navigator.canShare && navigator.canShare({ files:[file] }))){
-    descargarBlob(r.blob, r.filename);   // fallback: descarga normal
+  const descargar = ()=>{
+    descargarBlob(r.blob, r.filename);
     closeSheet('sheetExportar');
-    return;
+    showToast('Se descargó el archivo');
+  };
+  if(!(navigator.share && navigator.canShare && navigator.canShare({ files:[file] }))){
+    descargar();
+    return Promise.resolve('descarga');
   }
-  return shareFile(file, 'Exportación de Telora', 'No se pudo compartir. Prueba "Generar Excel".')
-    .then(()=> closeSheet('sheetExportar'));
+  let promesa;
+  try{
+    promesa = navigator.share({ files:[file], title: 'Exportación de Telora' });
+  }catch(err){
+    promesa = Promise.reject(err);
+  }
+  return promesa.then(()=>{
+    haptic(HAPTIC_OK);
+    closeSheet('sheetExportar');
+    return 'compartido';
+  }, err=>{
+    if(err && err.name === 'AbortError'){ setExportOcupado(false); return 'cancelado'; }
+    console.warn('No se pudo compartir el Excel; se descarga:', err);
+    descargar();
+    return 'descarga';
+  });
 }
 
 /* ==================== T22 · DATOS DEL EXCEL (función pura, testeable) ====================
