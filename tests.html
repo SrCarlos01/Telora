@@ -103,7 +103,7 @@ function setState(win, fixture){
 // al iframe que no existe.
 function mk(d){ return d.getFullYear()*12 + d.getMonth(); }
 
-function runTests(){
+async function runTests(){
   const iframe = document.getElementById('appFrame');
   const win = iframe.contentWindow;
 
@@ -1647,6 +1647,112 @@ function runTests(){
         'prepararDatosExport (f): cuotas pendientes = T.cuotasPendientes de la app (0 en mes cerrado) y Balance si se pagan = Balance − pendientes',
         `en curso: pendientes ${enCurso.cuotasPendientes} (app ${Tv.cuotasPendientes}), balance ${enCurso.balance} → si se pagan ${enCurso.balanceSiPagan} · ` +
         `cerrado: exportado ${cerrado.cuotasPendientes} (T.cuotasPendientes crudo ${Tc.cuotasPendientes}, ya cuenta como gasto)`);
+    }
+
+    // ---- (g) grupoMesExport(): previo / real / proyectado ----
+    {
+      const g = win.grupoMesExport;
+      const h = mk(primero(0));
+      const casos = [
+        [g(h - 3, h - 1, h), 'previo'], [g(h - 1, h - 1, h), 'real'], [g(h, h - 1, h), 'real'],
+        [g(h + 1, h - 1, h), 'proyectado'], [g(h - 3, null, h), 'real'], [g(h + 2, null, h), 'proyectado'],
+        [g(h + 1, h + 2, h), 'previo']
+      ];
+      assert(typeof g === 'function' && casos.every(([a, b])=> a === b),
+        'prepararDatosExport (g): grupoMesExport clasifica previo (antes del inicio de registro) / real (inicio..mes actual) / proyectado (posterior al actual)',
+        casos.map(([a, b])=> `${a}${a === b ? '' : ' ≠ ' + b}`).join(', '));
+    }
+
+    // ---- (h) Totales solo con meses reales: inicio de registro = M-1, rango M-2 .. M+1 ----
+    // M-2 = previo, M-1 y M = reales, M+1 = proyectado (va a Compromisos futuros).
+    {
+      const stR = JSON.parse(JSON.stringify(st));
+      stR.config.mesInicioRegistro = iso(Y, M-1, 1).slice(0, 7);
+      setState(win, stR);
+      resetCaches(win);
+      const d = win.prepararDatosExport(primero(-2), ultimo(1), 'total');
+      const r = d.resumen;
+      const Ta = win.resumenTotalesDelMes(primero(-1), 'total'), Tb = win.resumenTotalesDelMes(primero(0), 'total');
+      const balAB = (Ta.ingresos - Ta.gastos - Ta.cuotasGasto - Ta.aportesMetas) + (Tb.ingresos - Tb.gastos - Tb.cuotasGasto - Tb.aportesMetas);
+      const donaAB = win.donaResumenData(primero(-1), 'total').total + win.donaResumenData(primero(0), 'total').total;
+      const sc = win.cuotasSinConfirmarDelMes(primero(1), 'total');
+      const NOMBRES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+      const lower = off=> NOMBRES[primero(off).getMonth()] + ' ' + primero(off).getFullYear();
+      assert(r.meses.map(x=> x.grupo).join() === 'previo,real,real,proyectado' && r.meses[0].estado === 'Anterior al registro' &&
+        r.hayReales === true && r.ingresos === Ta.ingresos + Tb.ingresos && r.gastosContado === Ta.gastos + Tb.gastos &&
+        r.cuotas === Ta.cuotasGasto + Tb.cuotasGasto && r.aportes === Ta.aportesMetas + Tb.aportesMetas &&
+        Math.round(r.balance) === Math.round(balAB) && r.cuotasPendientes === Tb.cuotasPendientes &&
+        Math.round(r.totalCategorias) === Math.round(donaAB) &&
+        r.totalesTexto === lower(-1) + ' – ' + lower(0),
+        'prepararDatosExport (h): totales (ingresos, gastos, cuotas, balance, categorías, pendientes) = solo meses reales; el previo queda "Anterior al registro"',
+        `grupos: ${r.meses.map(x=> x.etiqueta + '=' + x.grupo).join(', ')} · ingresos ${r.ingresos} (reales ${Ta.ingresos + Tb.ingresos}) · balance ${r.balance} (reales ${balAB}) · ` +
+        `categorías ${Math.round(r.totalCategorias)} (dona reales ${Math.round(donaAB)}) · totales: «${r.totalesTexto}»`);
+      assert(r.compromisos.length === 1 && r.compromisos[0].mes === iso(Y, M+1, 1) &&
+        r.compromisos[0].cuotas === sc.count && r.compromisos[0].total === sc.total && sc.count > 0,
+        'prepararDatosExport (h): el mes proyectado sale de los totales y pasa a Compromisos futuros (cuotas por pagar y total)',
+        r.compromisos.map(c=> `${c.etiqueta}: ${c.cuotas} cuota(s), ${c.total}`).join(' · ') + ` · motor: ${sc.count}, ${sc.total}`);
+
+      // ---- (i) Rango solo futuro: sin meses reales -> totales en 0 y el texto lo dice ----
+      const f = win.prepararDatosExport(primero(1), ultimo(2), 'total');
+      const rf = f.resumen;
+      assert(rf.hayReales === false && rf.totalesTexto === 'Sin meses registrados en el período' &&
+        rf.ingresos === 0 && rf.balance === 0 && rf.categorias.length === 0 && rf.disponible === null &&
+        rf.compromisos.length === 2,
+        'prepararDatosExport (i): rango sin meses reales -> «Sin meses registrados en el período», sin totales, solo compromisos',
+        `hayReales ${rf.hayReales} · «${rf.totalesTexto}» · compromisos: ${rf.compromisos.map(c=> c.etiqueta + ' ' + c.total).join(', ')}`);
+
+      // ---- (j) Un solo mes (el actual): Disponible presente, sin compromisos ----
+      const u = win.prepararDatosExport(primero(0), ultimo(0), 'total');
+      assert(u.meta.mesUnico && u.resumen.hayReales && u.resumen.disponible && u.resumen.compromisos.length === 0 &&
+        u.resumen.totalesTexto === lower(0) && u.resumen.ingresos === Tb.ingresos,
+        'prepararDatosExport (j): un solo mes actual -> totales del mes, Disponible y sin bloque de compromisos',
+        `totales: «${u.resumen.totalesTexto}» · compromisos ${u.resumen.compromisos.length} · disponible ${u.resumen.disponible && u.resumen.disponible.disponible}`);
+      setState(win, st);
+      resetCaches(win);
+    }
+  }
+
+  // ==================== T22 — compartirExport(): AbortError silencioso, otros errores -> descarga ====================
+  // Se reemplazan navigator.share/canShare del iframe y showToast/descargarBlob por espías.
+  {
+    const nav = win.navigator;
+    const orig = { showToast: win.showToast, descargarBlob: win.descargarBlob };
+    let toasts = [], descargas = 0, llamadasShare = 0;
+    win.showToast = (msg)=>{ toasts.push(msg); };
+    win.descargarBlob = ()=>{ descargas++; };
+    const stub = (err, puede)=>{
+      Object.defineProperty(nav, 'canShare', { value: ()=> puede, configurable: true });
+      Object.defineProperty(nav, 'share', { value: ()=>{ llamadasShare++; return err ? Promise.reject(err) : Promise.resolve(); }, configurable: true });
+    };
+    const r = { blob: new win.Blob(['x']), filename: 'Telora_test.xlsx' };
+    const caso = async (err, puede)=>{
+      toasts = []; descargas = 0; llamadasShare = 0;
+      stub(err, puede);
+      const p = win.compartirExport(r);
+      const sincronico = llamadasShare;   // share debe llamarse en el mismo tick (iOS)
+      const res = await p;
+      return { res, sincronico, llamadasShare, toasts: toasts.slice(), descargas };
+    };
+    try{
+      const a = await caso(new win.DOMException('Share canceled', 'AbortError'), true);
+      assert(a.res === 'cancelado' && a.sincronico === 1 && a.toasts.length === 0 && a.descargas === 0,
+        'compartirExport: AbortError (se cerró el diálogo) -> silencio: sin toast y sin descarga; share llamado en el mismo tick',
+        JSON.stringify(a));
+      const b = await caso(new win.DOMException('Permission denied', 'NotAllowedError'), true);
+      assert(b.res === 'descarga' && b.sincronico === 1 && b.descargas === 1 && b.toasts.join() === 'Se descargó el archivo',
+        'compartirExport: NotAllowedError (Chrome de escritorio con .xlsx) -> descarga automática del mismo archivo + toast «Se descargó el archivo»',
+        JSON.stringify(b));
+      const c = await caso(null, false);
+      assert(c.res === 'descarga' && c.llamadasShare === 0 && c.descargas === 1 && c.toasts.join() === 'Se descargó el archivo',
+        'compartirExport: canShare falso -> no llama a share; descarga + toast',
+        JSON.stringify(c));
+      const e = await caso(null, true);
+      assert(e.res === 'compartido' && e.sincronico === 1 && e.descargas === 0 && e.toasts.length === 0,
+        'compartirExport: share exitoso -> sin descarga ni toast',
+        JSON.stringify(e));
+    }finally{
+      delete nav.canShare; delete nav.share;
+      win.showToast = orig.showToast; win.descargarBlob = orig.descargarBlob;
     }
   }
 
