@@ -22,7 +22,11 @@
 const BUILD = '__BUILD__';
 const CACHE = 'misfinanzas-' + BUILD;
 
-// index.html carga XLSX desde ./xlsx.full.min.js y el ícono desde ./icon.svg.
+// index.html ya no carga XLSX en el <head>: lo inserta bajo demanda con cargarXLSX()
+// al abrir la hoja de exportación, pero ./xlsx.full.min.js se precachea igual para
+// que exportar funcione sin conexión. ./supabase.min.js (login opcional y respaldo)
+// también se precachea: tras una actualización, la primera apertura sin red conserva
+// el login y la sincronización. El ícono sale de ./icon.svg.
 // './' e './index.html' son el mismo documento; se precachean los dos porque la
 // navegación puede pedir cualquiera de las dos rutas.
 const ASSETS = [
