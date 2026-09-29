@@ -11,6 +11,8 @@
 # Librería de terceros autohospedada (SheetJS): minificada y vendida tal cual.
 # Sin normalización de EOL ni diff de texto, para que quede byte a byte como el original.
 xlsx.full.min.js binary
+# ExcelJS 4.4.0 (T22): mismo criterio, byte a byte igual al dist/ del paquete npm verificado.
+exceljs.min.js binary
 
 # Documentos de Office: binarios, sin conversión de EOL ni diff de texto.
 *.docx binary

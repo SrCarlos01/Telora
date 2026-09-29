@@ -33,18 +33,23 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-<!-- XLSX autohospedada (Tanda Q · pto 5). Antes se cargaba desde cdnjs: rompía el
-     uso offline, metía un punto único de falla de terceros y hacía una petición a un
-     servidor externo en cada apertura. Ahora es un archivo local. Versión 0.20.3:
-     corrige CVE-2023-30533 (prototype pollution, afecta <0.19.3) y CVE-2024-22363
-     (ReDoS en el parser de formatos, afecta <0.20.2), ambas presentes en la 0.18.5.
-     Día 19: ya NO se carga aquí. Pesa ~950 KB y solo se usa al exportar a Excel, así
-     que se inserta bajo demanda con cargarXLSX() (sección EXPORTAR) al abrir la hoja de
-     exportación. Sigue en ASSETS de sw.js, así que funciona sin conexión. -->
+<!-- ExcelJS autohospedada (T22). Reemplaza a SheetJS Community 0.20.3 (xlsx.full.min.js),
+     cuya edición gratuita no escribe estilos (colores, negritas, bordes, rellenos) ni
+     imágenes. Versión 4.4.0, licencia MIT: exceljs.min.js es el dist/exceljs.min.js del
+     paquete npm exceljs@4.4.0, byte a byte (el .tgz publicado se verificó contra su
+     integrity sha512-XctvKaEM…IS6llvg==). Se autohospeda por lo mismo que antes SheetJS
+     (Tanda Q · pto 5): sin CDN no hay punto único de falla de terceros, ni petición a un
+     servidor externo, y funciona sin conexión (está en ASSETS de sw.js).
+     No se carga aquí: pesa ~925 KB y solo se usa al exportar, así que se inserta bajo
+     demanda con cargarExcelJS() (sección EXPORTAR) al abrir la hoja de exportación.
+     Aviso de npm audit al verificarla: uuid < 11.1.1 (GHSA-w5hq-g745-h8pq, severidad
+     moderada) — falta un chequeo de límites en v3/v5/v6 cuando se les pasa un búfer
+     externo. Telora solo GENERA archivos y nunca llama a uuid con búferes propios: no
+     le afecta. -->
 
 <!-- Supabase autohospedada (Etapa 2 · Tanda 1): @supabase/supabase-js 2.117.1, build
      UMD (dist/umd/supabase.js del paquete npm, verificado contra su integrity sha512).
-     Mismo criterio que XLSX: archivo local, sin CDN. Expone el global `supabase`. Solo
+     Mismo criterio que ExcelJS: archivo local, sin CDN. Expone el global `supabase`. Solo
      se usa para el login OPCIONAL con Google (bloque "Cuenta de usuario"); si no carga,
      la app funciona igual — ver el <script> de Cuenta de usuario al final del body. -->
 <script src="./supabase.min.js"></script>
@@ -4752,11 +4757,14 @@ document.getElementById('btnConfig').onclick = ()=>{
   openSheet('sheetConfig');
 };
 document.getElementById('btnExport').onclick = ()=>{
-  // Día 19: XLSX se precarga al ABRIR la hoja (no al tocar "Generar/Compartir"), para que
-  // al confirmar ya esté lista y la descarga/compartir corran dentro del gesto del usuario.
-  // Si falla aquí no se avisa: el aviso sale al tocar el botón (conXLSX reintenta).
+  // Día 19 / T22: ExcelJS se precarga al ABRIR la hoja (no al tocar "Generar/Compartir"),
+  // y además el archivo se genera en segundo plano (programarPregeneracion, al final, tras
+  // fijar el alcance) para que al tocar el botón ya esté listo y la descarga/compartir
+  // corran dentro del gesto del usuario. Si falla aquí no se avisa: el aviso sale al tocar
+  // el botón (que reintenta la carga).
   setExportOcupado(false);
-  cargarXLSX().catch(()=>{});
+  exportListo = null;
+  cargarExcelJS().catch(()=>{});
   document.getElementById('expMesLabel').textContent = MESES[currentDate.getMonth()]+" "+currentDate.getFullYear();
   document.getElementById('btnShareExport').style.display = supportsFileShare() ? 'block' : 'none';
   // Tanda L3: el Excel respeta la cuenta activa (gastos, ingresos y cuotas propias +
@@ -4771,7 +4779,7 @@ document.getElementById('btnExport').onclick = ()=>{
   // apuntando a ESE rango (opción "Rango de fechas" preseleccionada y fechas cargadas).
   // El usuario puede cambiarlo a "este mes" / "todo el historial" o editar las fechas.
   // Sin rango activo, la hoja abre con sus opciones de siempre. El motor de exportación
-  // (buildExportWorkbook) ya expande fijos y cuotas mes a mes dentro del rango elegido,
+  // (prepararDatosExport) ya expande fijos y cuotas mes a mes dentro del rango elegido,
   // así que el Excel refleja los mismos movimientos que la lista del Historial.
   if(hRango){
     const rRango = document.querySelector('input[name=exportScope][value="rango"]');
@@ -4788,6 +4796,7 @@ document.getElementById('btnExport').onclick = ()=>{
     document.getElementById('rangoFields').style.display = 'none';
   }
   openSheet('sheetExportar');
+  programarPregeneracion(0);
 };
 
 /* ==================== TANDA K · CALENDARIO PROPIO PARA "HASTA EL DÍA" ====================
@@ -10935,64 +10944,127 @@ async function shareFile(file, title, fallbackMsg){
 }
 
 /* ==================== EXPORTAR ==================== */
-// XLSX bajo demanda (Día 19): ya no va en el <head>. Se inserta un único <script> la
-// primera vez que se necesita. La promesa en curso se memoriza para que dos clics
-// seguidos no inserten dos scripts; si la carga falla se olvida (y se quita el <script>)
-// para que el siguiente intento vuelva a pedirla.
-let cargaXLSXEnCurso = null;
-function cargarXLSX(){
-  if(window.XLSX) return Promise.resolve(window.XLSX);
-  if(cargaXLSXEnCurso) return cargaXLSXEnCurso;
-  cargaXLSXEnCurso = new Promise((resolve, reject)=>{
+// ExcelJS bajo demanda (T22; mismo patrón que tenía XLSX desde el Día 19): no va en el
+// <head>. Se inserta un único <script> la primera vez que se necesita. La promesa en curso
+// se memoriza para que dos clics seguidos no inserten dos scripts; si la carga falla se
+// olvida (y se quita el <script>) para que el siguiente intento vuelva a pedirla.
+let cargaExcelJSEnCurso = null;
+function cargarExcelJS(){
+  if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if(cargaExcelJSEnCurso) return cargaExcelJSEnCurso;
+  cargaExcelJSEnCurso = new Promise((resolve, reject)=>{
     const s = document.createElement('script');
-    s.src = './xlsx.full.min.js';
+    s.src = './exceljs.min.js';
     s.onload = ()=>{
-      cargaXLSXEnCurso = null;
-      if(window.XLSX) resolve(window.XLSX);
-      else { s.remove(); reject(new Error('xlsx.full.min.js cargó pero no definió XLSX')); }
+      cargaExcelJSEnCurso = null;
+      if(window.ExcelJS) resolve(window.ExcelJS);
+      else { s.remove(); reject(new Error('exceljs.min.js cargó pero no definió ExcelJS')); }
     };
     s.onerror = ()=>{
-      cargaXLSXEnCurso = null;
+      cargaExcelJSEnCurso = null;
       s.remove();
-      reject(new Error('No se pudo cargar xlsx.full.min.js'));
+      reject(new Error('No se pudo cargar exceljs.min.js'));
     };
     document.head.appendChild(s);
   });
-  return cargaXLSXEnCurso;
+  return cargaExcelJSEnCurso;
 }
 // Botones de la hoja: se deshabilitan desde el primer toque hasta que la hoja se vuelve
 // a abrir (btnExport), así un doble toque no genera dos archivos ni dos cargas.
 function setExportOcupado(on){
   ['btnDoExport','btnShareExport'].forEach(id=>{ document.getElementById(id).disabled = on; });
 }
-// Corre fn con XLSX disponible. Lo normal es que ya esté cargada (se precarga al abrir la
-// hoja): entonces fn corre en el mismo tick del toque, SIN await, para no perder el gesto
-// del usuario que exigen navigator.share y la descarga (sobre todo en iOS Safari). Si aún
-// no está, se espera la carga con los botones deshabilitados.
-function conXLSX(fn){
-  const correr = ()=>{
-    try{
-      const r = fn();
-      if(r && typeof r.catch === 'function') r.catch(()=> setExportOcupado(false));
-      return r;
-    }catch(err){ setExportOcupado(false); throw err; }
-  };
-  setExportOcupado(true);
-  if(window.XLSX) return correr();
-  return cargarXLSX().then(correr, err=>{
-    console.warn(err);
-    setExportOcupado(false);
-    showToast('No se pudo preparar la exportación. Revisa tu conexión e inténtalo de nuevo.', 'error');
-  });
+// T22 · ARCHIVO PREGENERADO. ExcelJS escribe el .xlsx de forma ASÍNCRONA
+// (workbook.xlsx.writeBuffer()). Si eso se esperara al tocar "Compartir Excel",
+// navigator.share() llegaría fuera del gesto del usuario y iOS lo rechaza. Por eso el
+// archivo se genera en segundo plano al abrir la hoja y cada vez que cambia el alcance o
+// el rango (con un pequeño retardo), y se guarda con la CLAVE del alcance que lo produjo.
+// Al tocar un botón, si la clave coincide con la del alcance actual, se descarga o se
+// comparte en el mismo tick del toque, sin ningún await previo. Si no, se genera (con los
+// botones deshabilitados) y luego se descarga/comparte.
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+let exportListo = null;       // { clave, blob, filename } del último alcance generado
+let exportPregen = null;      // { clave, promesa } de la generación en segundo plano en curso
+let exportPregenTimer = null;
+function claveExport(range){
+  return [ctaVista(), isoLocal(range.fromDate), isoLocal(range.toDate)].join('|');
+}
+// Logo del Resumen (la moneda). Si no se puede cargar (p. ej. sin conexión y sin caché),
+// el libro sale igual, sin logo. Solo se memoriza un resultado exitoso.
+let logoExportBuf = null;
+async function logoExport(){
+  if(logoExportBuf) return logoExportBuf;
+  try{
+    const res = await fetch('./icons/icon-192.png');
+    if(res.ok) logoExportBuf = await res.arrayBuffer();
+  }catch(_){}
+  return logoExportBuf;
+}
+async function generarArchivoExport(range){
+  const ExcelJS = await cargarExcelJS();
+  const datos = prepararDatosExport(range.fromDate, range.toDate, ctaVista());
+  const logo = await logoExport();
+  const wb = construirLibroExcel(ExcelJS, datos, logo);
+  const buf = await wb.xlsx.writeBuffer();
+  return { blob: new Blob([buf], { type: XLSX_MIME }), filename: datos.meta.filename };
+}
+// Genera en segundo plano el archivo del alcance que está elegido en la hoja. Cada llamada
+// invalida lo anterior (alcance distinto = archivo distinto).
+function programarPregeneracion(ms){
+  clearTimeout(exportPregenTimer);
+  exportListo = null;
+  exportPregen = null;
+  exportPregenTimer = setTimeout(()=>{
+    const range = resolveExportRange(true);
+    if(!range) return;
+    const clave = claveExport(range);
+    const promesa = generarArchivoExport(range);
+    const esta = { clave, promesa };
+    exportPregen = esta;
+    promesa.then(r=>{
+      if(exportPregen === esta){ exportListo = { clave, ...r }; exportPregen = null; }
+    }, err=>{
+      if(exportPregen === esta) exportPregen = null;
+      console.warn('No se pudo pregenerar el Excel:', err);
+    });
+  }, ms == null ? 350 : ms);
+}
+// Archivo para `range`: el ya listo (sincrónico, sin promesa) o una promesa que lo produce
+// (reutiliza la pregeneración en curso si es del mismo alcance).
+function archivoExportPara(range){
+  const clave = claveExport(range);
+  if(exportListo && exportListo.clave === clave) return exportListo;
+  if(exportPregen && exportPregen.clave === clave) return exportPregen.promesa;
+  return generarArchivoExport(range);
+}
+function descargarBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+}
+function avisarFalloExport(err){
+  console.warn(err);
+  setExportOcupado(false);
+  showToast('No se pudo preparar la exportación. Revisa tu conexión e inténtalo de nuevo.', 'error');
 }
 document.querySelectorAll('input[name=exportScope]').forEach(r=>{
   r.addEventListener('change', ()=>{
     document.getElementById('rangoFields').style.display = r.value==='rango' ? 'flex' : 'none';
+    programarPregeneracion();
   });
 });
+['expDesde','expHasta'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=> programarPregeneracion());
+});
 // Resuelve el rango de fechas según la opción elegida. Devuelve null (y muestra el
-// aviso) si la selección no es válida, para que ni descargar ni compartir sigan.
-function resolveExportRange(){
+// aviso, salvo con `silencioso` — la pregeneración) si la selección no es válida, para
+// que ni descargar ni compartir sigan.
+function resolveExportRange(silencioso){
   const scope = document.querySelector('input[name=exportScope]:checked').value;
   if(scope==='mes'){
     return {
@@ -11006,7 +11078,7 @@ function resolveExportRange(){
       ...state.incomes.map(i=>i.date),
       ...state.debts.map(d=>d.purchaseDate)
     ];
-    if(allDates.length===0){ showToast('Todavía no hay datos para exportar.', 'error'); return null; }
+    if(allDates.length===0){ if(!silencioso) showToast('Todavía no hay datos para exportar.', 'error'); return null; }
     const minDate = new Date(allDates.reduce((a,b)=> a<b?a:b)+"T00:00:00");
     // hasta el mes más lejano con alguna cuota vigente, o hasta el mes actual visible, lo que sea más tarde
     let maxMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -11021,36 +11093,39 @@ function resolveExportRange(){
   }
   const d1 = document.getElementById('expDesde').value;
   const d2 = document.getElementById('expHasta').value;
-  if(!d1 || !d2){ showToast('Selecciona ambas fechas.', 'error'); return null; }
+  if(!d1 || !d2){ if(!silencioso) showToast('Selecciona ambas fechas.', 'error'); return null; }
   return { fromDate: new Date(d1+"T00:00:00"), toDate: new Date(d2+"T23:59:59") };
 }
 document.getElementById('btnDoExport').onclick = ()=>{
   const range = resolveExportRange();
   if(!range) return;
-  conXLSX(()=>{
-    exportExcel(range.fromDate, range.toDate);
-    closeSheet('sheetExportar');
-  });
+  setExportOcupado(true);
+  const descargar = r=>{ descargarBlob(r.blob, r.filename); closeSheet('sheetExportar'); };
+  const archivo = archivoExportPara(range);
+  if(archivo.blob) return descargar(archivo);
+  archivo.then(descargar, avisarFalloExport);
 };
 document.getElementById('btnShareExport').onclick = ()=>{
   const range = resolveExportRange();
   if(!range) return;
-  conXLSX(()=> compartirExport(range));
+  setExportOcupado(true);
+  const archivo = archivoExportPara(range);
+  if(archivo.blob) return compartirExport(archivo);   // mismo tick del toque: sin await previo
+  archivo.then(compartirExport, avisarFalloExport);
 };
-async function compartirExport(range){
-  const { wb, filename } = buildExportWorkbook(range.fromDate, range.toDate);
-  let file = null;
-  try{
-    const buf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
-    file = new File([buf], filename, { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  }catch(_){}
-  if(!file || !(navigator.canShare && navigator.canShare({ files:[file] }))){
-    exportExcel(range.fromDate, range.toDate);   // fallback: descarga normal
+// Comparte el archivo ya generado. Se llama SIN await previo cuando el archivo estaba
+// listo, así navigator.share() (dentro de shareFile, antes de su primer await) corre con
+// el gesto del usuario todavía activo. Si hubo que generarlo y el navegador rechaza por
+// falta de gesto, shareFile muestra el aviso de siempre.
+function compartirExport(r){
+  const file = new File([r.blob], r.filename, { type: XLSX_MIME });
+  if(!(navigator.canShare && navigator.canShare({ files:[file] }))){
+    descargarBlob(r.blob, r.filename);   // fallback: descarga normal
     closeSheet('sheetExportar');
     return;
   }
-  await shareFile(file, 'Exportación de Telora', 'No se pudo compartir. Prueba "Generar Excel".');
-  closeSheet('sheetExportar');
+  return shareFile(file, 'Exportación de Telora', 'No se pudo compartir. Prueba "Generar Excel".')
+    .then(()=> closeSheet('sheetExportar'));
 }
 
 /* ==================== T22 · DATOS DEL EXCEL (función pura, testeable) ====================
@@ -11065,7 +11140,7 @@ async function compartirExport(range){
        etiquetas y el mismo orden que la hoja "¿De dónde sale?" (DD_LABELS / DD_ORDEN).
      · Gasto por categoría → donaResumenData() de cada mes, sumado.
      · Gastos / Ingresos → la misma expansión mes a mes de fijos y el mismo filtro por
-       cuenta que usaba buildExportWorkbook() (getExpensesForMonth / getIncomesForMonth).
+       cuenta que usaba buildExportWorkbook() (SheetJS, hasta T22): getExpensesForMonth / getIncomesForMonth.
      · Cuotas → cuotaInfoForMonth() mes a mes del ciclo de cada compra. Una cuota cuenta
        como PAGADA con el mismo criterio con que el motor la cuenta como gasto
        (cuotasPorCategoriaGastoDelMes / T.cuotasGasto): mes cerrado o confirmada a mano.
@@ -11104,7 +11179,7 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
   const ultimoDiaHasta = new Date(toDate.getFullYear(), toDate.getMonth()+1, 0).getDate();
   const rangoParcial = fromDate.getDate() !== 1 || toDate.getDate() !== ultimoDiaHasta;
 
-  // --- Gastos: expansión mes a mes de fijos (misma que buildExportWorkbook) ---
+  // --- Gastos: expansión mes a mes de fijos (la misma que usaba buildExportWorkbook) ---
   const gastos = [];
   const vistosG = new Set();
   meses.forEach(m=>{
@@ -11259,157 +11334,362 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
   };
 }
 
-function buildExportWorkbook(fromDate, toDate){
-  const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
-  // Tanda L3: la exportación respeta la cuenta activa igual que la app. En una cuenta
-  // específica, las hojas Gastos, Ingresos y Deudas (Cuotas) traen lo propio + lo
-  // compartido; en "Total", todo. La hoja Deudas lleva una columna "Compartida".
-  const ctaExp = ctaVista();
-
-  // Expande cada gasto (incluyendo las ocurrencias mensuales de los gastos Fijos)
-  // mes por mes dentro del rango, para que el Excel refleje lo mismo que ves en la app.
-  const allExpenseRows = [];
-  const seenKeys = new Set();
-  let cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  const endCursor = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
-  while(cursor <= endCursor){
-    getExpensesForMonth(cursor, ctaExp).forEach(e=>{
-      const key = e.id + '-' + e.date;
-      if(seenKeys.has(key)) return;
-      seenKeys.add(key);
-      if(inRange(e.date)) allExpenseRows.push(e);
-    });
-    cursor.setMonth(cursor.getMonth()+1);
+/* ==================== T22 · DISEÑO DEL LIBRO (ExcelJS) ====================
+   Solo presentación: recibe el objeto de prepararDatosExport() y no calcula cifras.
+   Estilo idéntico en todas las hojas: encabezado burdeo con texto crema en negrita, filas
+   alternas crema muy suave, filas "Proyectado" en gris cálido cursiva sobre otro relleno
+   tenue (además de la columna Estado, para que se distingan sin depender del color),
+   pesos chilenos, fechas reales dd-mm-yyyy, fila de encabezado congelada, filtro, totales
+   con SUBTOTAL(109, …) —respeta los filtros—, horizontal y ajustado al ancho al imprimir. */
+const XL = {
+  burdeo: 'FF5C1F2E', crema: 'FFF3E9DD', dorado: 'FFC9A66B', alterna: 'FFFAF6F0',
+  proyTexto: 'FF8A6A55', proyFondo: 'FFF0E9E2', tinta: 'FF2B1A1E', gris: 'FF7A6A64',
+  linea: 'FFE6DCCF',
+  fmt: { money: '"$"#,##0;[Red]-"$"#,##0', moneyMes: '"$"#,##0" /mes"', fecha: 'dd-mm-yyyy', pct: '0%', int: '0' },
+  anchoMax: 45
+};
+const xlRelleno = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+const xlFuente = (extra)=> ({ name: 'Calibri', size: 11, color: { argb: XL.tinta }, ...(extra || {}) });
+const xlLetra = n => { let s = ''; for(n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };   // 0 -> A
+// Fecha ISO -> Date en UTC 00:00, así la celda queda en el día exacto (serial entero).
+const xlFecha = iso => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+// Largo aproximado de lo que se ve en la celda, para ajustar el ancho de columna.
+function xlLargo(v, tipo){
+  if(v == null || v === '') return 0;
+  if((tipo === 'money' || tipo === 'moneyMes') && typeof v === 'number'){
+    return ('$' + Math.round(Math.abs(v)).toLocaleString('es-CL')).length + (v < 0 ? 1 : 0) + (tipo === 'moneyMes' ? 5 : 0);
   }
-  const expenseRows = allExpenseRows.sort((a,b)=>a.date.localeCompare(b.date))
-    .map(e=>({ Fecha:e.date, Nombre:e.nombre||'', Monto:e.amount, Categoría:e.category, Método:e.method, Descripción:e.description, Tipo:e.tipo, "¿Es cuota?": e.debtId? "Sí":"No" }));
-
-  // Ingresos: misma expansión mes por mes que los gastos (incluye ocurrencias de los ingresos Fijos).
-  const allIncomeRows = [];
-  const seenIncomeKeys = new Set();
-  let icursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
-  while(icursor <= endCursor){
-    getIncomesForMonth(icursor, ctaExp).forEach(i=>{
-      const key = i.id + '-' + i.date;
-      if(seenIncomeKeys.has(key)) return;
-      seenIncomeKeys.add(key);
-      if(inRange(i.date)) allIncomeRows.push(i);
-    });
-    icursor.setMonth(icursor.getMonth()+1);
-  }
-  const incomeRows = allIncomeRows.sort((a,b)=>a.date.localeCompare(b.date))
-    .map(i=>({ Fecha:i.date, Nombre:i.nombre||'', Fuente:i.source, Monto:i.amount, Descripción:i.description, Tipo:i.tipo||'Casual' }));
-  // Tanda L3: cuotas propias de la cuenta activa + compartidas (en 'total', todas).
-  const debtRows = state.debts.filter(d=> itemEnVista(d, ctaExp)).map(d=>({
-    Descripción:d.description, "Fecha compra":d.purchaseDate, Categoría:d.category,
-    "Monto total":d.totalAmount, "N° cuotas":d.numCuotas, "Monto por cuota": Math.round(d.totalAmount/d.numCuotas),
-    Compartida: d.cuentaId === 'compartida' ? 'Sí' : 'No',
-    Estado: debtStatusForMonth(d, new Date())==='pagada' ? 'Pagada':'Activa'
-  }));
-
-  const totalIngresos = incomeRows.reduce((s,r)=>s+r.Monto,0);
-  const totalGastosNormales = expenseRows.filter(r=>r["¿Es cuota?"]==="No").reduce((s,r)=>s+r.Monto,0);
-  const summaryRows = [
-    {Concepto:"Total ingresos", Monto: totalIngresos},
-    {Concepto:"Total gastos normales", Monto: totalGastosNormales},
-    {Concepto:"Balance", Monto: totalIngresos-totalGastosNormales},
-  ];
-
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, "Resumen", summaryRows);
-  appendSheet(wb, "Gastos", expenseRows);
-  appendSheet(wb, "Ingresos", incomeRows);
-  appendSheet(wb, "Deudas (Cuotas)", debtRows);   // Tanda L3: filtrada a propias + compartidas
-  const sufijoCuenta = ctaExp === 'total' ? '' : '_' + cuentaNombre(ctaExp).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
-  const filename = `Telora${sufijoCuenta}_${fechaHoyLocalISO()}.xlsx`;
-  return { wb, filename };
+  if(tipo === 'fecha') return 10;
+  if(tipo === 'pct') return 4;
+  return String(v).length;
 }
-
-// Tanda H · ancho de columna. SheetJS (edición community 0.20.3, autohospedada
-// desde Tanda Q) NO tiene autofit, pero SÍ respeta ws['!cols'] con `wch` al
-// escribir .xlsx. Medimos el texto más largo de cada columna —encabezado
-// incluido— y fijamos ese ancho para que ninguna celda quede cortada. Esto es
-// solo presentación: no altera ningún valor exportado.
-// (Colores de encabezado/bordes/totales y logo quedaron FUERA de alcance: la
-// edición community de SheetJS ignora los estilos de celda y la inserción de
-// imágenes al escribir, y añadir un fork con estilos sería una dependencia
-// nueva — prohibido en esta tanda. Ver reporte de la Tanda H.)
-function fitColsForRows(rows){
-  if(!Array.isArray(rows) || rows.length === 0) return [];
-  // Unión de claves en orden de aparición: es el mismo criterio con que
-  // json_to_sheet arma los encabezados, por si alguna fila trae menos campos.
-  const cols = [];
-  rows.forEach(r=> Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
-  return cols.map(key=>{
-    let max = String(key).length;
-    for(const r of rows){
-      const v = r[key];
-      const len = (v == null ? '' : String(v)).length;
-      if(len > max) max = len;
+function xlEncabezado(celda){
+  celda.font = xlFuente({ bold: true, color: { argb: XL.crema } });
+  celda.fill = xlRelleno(XL.burdeo);
+  celda.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+  celda.border = { bottom: { style: 'thin', color: { argb: XL.dorado } } };
+}
+// Escribe una tabla: fila de encabezado + filas de datos, en (fila0, col0) (1-based).
+// cols: [{ key, header, tipo:'texto'|'money'|'moneyMes'|'fecha'|'pct'|'int', wrap }]
+// Devuelve { desde, hasta } (filas de datos) y acumula anchos en `anchos` (por columna).
+function xlTabla(ws, fila0, col0, cols, filas, anchos){
+  const fh = ws.getRow(fila0);
+  fh.height = 24;
+  cols.forEach((c, j)=>{
+    const celda = fh.getCell(col0 + j);
+    celda.value = c.header;
+    xlEncabezado(celda);
+    // +6: sangría del encabezado y el botón del filtro, que tapaba títulos cortos ("Monto").
+    anchos[col0 + j] = Math.max(anchos[col0 + j] || 0, c.header.length + 6);
+  });
+  filas.forEach((f, i)=>{
+    const fila = ws.getRow(fila0 + 1 + i);
+    const proyectado = f.estado === 'Proyectado';
+    cols.forEach((c, j)=>{
+      const celda = fila.getCell(col0 + j);
+      let v = f[c.key];
+      if(v == null || v === '') v = null;
+      if(c.tipo === 'fecha' && v) v = xlFecha(v);
+      celda.value = v;
+      const esNum = typeof v === 'number';
+      if(esNum && c.tipo === 'money') celda.numFmt = XL.fmt.money;
+      if(esNum && c.tipo === 'moneyMes') celda.numFmt = XL.fmt.moneyMes;
+      if(esNum && c.tipo === 'pct') celda.numFmt = XL.fmt.pct;
+      if(esNum && c.tipo === 'int') celda.numFmt = XL.fmt.int;
+      if(c.tipo === 'fecha' && v) celda.numFmt = XL.fmt.fecha;
+      celda.font = proyectado ? xlFuente({ italic: true, color: { argb: XL.proyTexto } }) : xlFuente();
+      if(proyectado) celda.fill = xlRelleno(XL.proyFondo);
+      else if(i % 2 === 1) celda.fill = xlRelleno(XL.alterna);
+      celda.alignment = { vertical: 'top', wrapText: !!c.wrap, horizontal: (!esNum && ['money','moneyMes','pct','int'].includes(c.tipo)) ? 'right' : undefined };
+      celda.border = { bottom: { style: 'hair', color: { argb: XL.linea } } };
+      const largo = xlLargo(f[c.key], c.tipo) + 2;
+      anchos[col0 + j] = Math.max(anchos[col0 + j] || 0, largo);
+    });
+  });
+  return { desde: fila0 + 1, hasta: fila0 + filas.length };
+}
+// Fila de totales bajo una tabla. Cada columna cuya key esté en `valores` recibe una
+// fórmula sobre su rango de datos —SUBTOTAL(109, …) por defecto, que respeta los filtros;
+// SUM si `funcion` === 'SUM'— con el valor del motor como resultado en caché.
+function xlFilaTotal(ws, filaN, col0, cols, rango, valores, etiqueta, funcion){
+  const fila = ws.getRow(filaN);
+  cols.forEach((c, j)=>{
+    const celda = fila.getCell(col0 + j);
+    const L = xlLetra(col0 + j - 1);
+    if(j === 0) celda.value = etiqueta || 'Total';
+    else if(c.key in valores){
+      const f = funcion === 'SUM' ? `SUM(${L}${rango.desde}:${L}${rango.hasta})` : `SUBTOTAL(109,${L}${rango.desde}:${L}${rango.hasta})`;
+      celda.value = { formula: f, result: valores[c.key] };
+      celda.numFmt = XL.fmt.money;
     }
-    // +2 de margen para que el contenido nunca quede pegado al borde. El tope de
-    // 200 (Excel admite hasta 255) es solo un seguro ante un valor degenerado;
-    // ningún texto real de la app se acerca, así que nada queda cortado.
-    return { wch: Math.min(200, max + 2) };
+    celda.font = xlFuente({ bold: true, color: { argb: XL.burdeo } });
+    celda.fill = xlRelleno(XL.crema);
+    celda.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'thin', color: { argb: XL.burdeo } } };
+  });
+  fila.height = 20;
+}
+function xlNota(ws, filaN, col, texto, color){
+  const celda = ws.getRow(filaN).getCell(col);
+  celda.value = texto;
+  celda.font = xlFuente({ italic: true, size: 10, color: { argb: color || XL.gris } });
+}
+function xlAplicarAnchos(ws, anchos, cols, col0){
+  Object.keys(anchos).forEach(k=>{
+    const n = +k, c = cols ? cols[n - col0] : null;
+    ws.getColumn(n).width = Math.min(XL.anchoMax, Math.max(c && c.wrap ? 14 : 9, anchos[k]));
   });
 }
-// Tanda H2 · formato numérico por celda. El escritor community de SheetJS descarta
-// fuente/relleno/borde/alineación/freeze/color de pestaña, pero SÍ respeta el
-// numFmt por celda (`cell.z`). Aplicamos:
-//   · Monto / Monto total / Monto por cuota → formato moneda con separador de miles
-//     y el signo ANTES del "$" en negativos (mismo criterio que money() de la app).
-//   · Fecha / Fecha compra → se convierten del string ISO a fecha serial real de
-//     Excel (celda numérica + numFmt de fecha), para que ordenen y filtren como
-//     fecha y no como texto.
-// No se toca ninguna otra celda, ni columnas, ni anchos (resueltos en Tanda H).
-function applyNumFmts(ws){
-  if(!ws || !ws['!ref']) return;
-  const MONEY_FMT = '"$"#,##0;-"$"#,##0';
-  const DATE_FMT  = 'dd-mm-yyyy';
-  const rg = XLSX.utils.decode_range(ws['!ref']);
-  // Fila superior = encabezados (json_to_sheet). Clasificamos cada columna por su título.
-  const kind = {};
-  for(let c = rg.s.c; c <= rg.e.c; c++){
-    const hc = ws[XLSX.utils.encode_cell({ r: rg.s.r, c })];
-    const h = hc && hc.v != null ? String(hc.v) : '';
-    if(/^Monto/.test(h)) kind[c] = 'money';
-    else if(/^Fecha/.test(h)) kind[c] = 'date';
+function xlHojaBase(wb, nombre, color, conTitulosDeImpresion){
+  const ws = wb.addWorksheet(nombre, {
+    properties: { tabColor: { argb: color } },
+    pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } },
+    headerFooter: { oddFooter: '&L&"Calibri"&9Telora · ' + nombre + '&R&"Calibri"&9Página &P de &N' }
+  });
+  if(conTitulosDeImpresion) ws.pageSetup.printTitlesRow = '1:1';
+  return ws;
+}
+// Hoja de datos (Gastos, Ingresos, Cuotas, Metas): tabla desde A1, encabezado congelado,
+// filtro sobre la tabla y fila de totales (si corresponde).
+function xlHojaDatos(wb, nombre, color, cols, filas, totales, vacio){
+  const ws = xlHojaBase(wb, nombre, color, true);
+  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1, topLeftCell: 'A2', activeCell: 'A2' }];
+  const anchos = {};
+  const rango = xlTabla(ws, 1, 1, cols, filas, anchos);
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rango.hasta), column: cols.length } };
+  if(!filas.length){
+    xlNota(ws, 2, 1, vacio);
+  } else if(totales){
+    xlFilaTotal(ws, rango.hasta + 1, 1, cols, rango, totales);
   }
-  for(let c = rg.s.c; c <= rg.e.c; c++){
-    const k = kind[c];
-    if(!k) continue;
-    for(let r = rg.s.r + 1; r <= rg.e.r; r++){
-      const cell = ws[XLSX.utils.encode_cell({ r, c })];
-      if(!cell || cell.v == null || cell.v === '') continue;
-      if(k === 'money'){
-        cell.z = MONEY_FMT;   // solo formato: el valor numérico queda igual
-      } else {
-        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(cell.v));
-        if(!m) continue;
-        // Serial de Excel: días desde 1899-12-30 (el epoch -30 ya absorbe el falso
-        // 29-feb-1900 para toda fecha moderna). En UTC para no depender de la zona.
-        const serial = Math.round(
-          (Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000
-        );
-        cell.t = 'n';
-        cell.v = serial;
-        cell.z = DATE_FMT;
-        delete cell.w;   // texto cacheado del string anterior, si lo hubiera
-      }
+  xlAplicarAnchos(ws, anchos, cols, 1);
+  return { ws, rango };
+}
+
+function construirLibroExcel(ExcelJS, datos, logo){
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Telora';
+  wb.lastModifiedBy = 'Telora';
+  wb.created = datos.meta.generado;
+  wb.modified = datos.meta.generado;
+  wb.title = 'Telora — Resumen financiero';
+
+  /* ---------- Resumen ---------- */
+  const R = datos.resumen;
+  const ws = xlHojaBase(wb, 'Resumen', XL.burdeo, false);
+  ws.views = [{ showGridLines: false }];
+  ws.getColumn(1).width = 8;
+  ws.getColumn(2).width = 30;
+  for(let c = 3; c <= 8; c++) ws.getColumn(c).width = 17;
+  const anchosR = {};
+
+  ws.getRow(1).height = 40;
+  if(logo){
+    try{
+      const id = wb.addImage({ buffer: logo, extension: 'png' });
+      ws.addImage(id, { tl: { col: 0.25, row: 0.12 }, ext: { width: 44, height: 44 }, editAs: 'oneCell' });
+    }catch(err){ console.warn('Logo del Excel omitido:', err); }
+  }
+  const tit = ws.getCell('B1');
+  tit.value = 'Telora — Resumen financiero';
+  tit.font = { name: 'Georgia', size: 20, bold: true, color: { argb: XL.burdeo } };
+  tit.alignment = { vertical: 'middle' };
+  ws.getRow(2).height = 6;
+  for(let c = 2; c <= 8; c++) ws.getRow(2).getCell(c).border = { bottom: { style: 'medium', color: { argb: XL.dorado } } };
+
+  let f = 4;
+  [['Período', datos.meta.periodoTexto], ['Cuenta', datos.meta.cuentaTexto], ['Generado', datos.meta.generadoTexto]].forEach(([k, v])=>{
+    const ck = ws.getCell(f, 2), cv = ws.getCell(f, 3);
+    ck.value = k; ck.font = xlFuente({ bold: true, color: { argb: XL.gris } });
+    cv.value = v; cv.font = xlFuente();
+    f++;
+  });
+  if(datos.meta.rangoParcial){
+    xlNota(ws, f, 2, 'El rango corta uno o más meses: las cifras de esta hoja son de meses completos; Gastos e Ingresos listan solo lo que cae dentro del rango.');
+    f++;
+  }
+  const seccion = (fila, texto)=>{
+    const c = ws.getCell(fila, 2);
+    c.value = texto;
+    c.font = { name: 'Georgia', size: 13, bold: true, color: { argb: XL.burdeo } };
+    ws.getRow(fila).height = 22;
+  };
+
+  // Cifras del período
+  f += 1;
+  seccion(f, datos.meta.mesUnico ? 'Cifras del mes' : 'Cifras del período');
+  f += 1;
+  const colsCifras = [{ key: 'concepto', header: 'Concepto', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }];
+  const cifras = [
+    { concepto: 'Ingresos', monto: R.ingresos },
+    { concepto: 'Gastos al contado', monto: R.gastosContado },
+    { concepto: 'Cuotas del período', monto: R.cuotas },
+    { concepto: 'Aportes a metas', monto: R.aportes }
+  ];
+  if(Math.round(R.transferencias) !== 0) cifras.push({ concepto: 'Transferencias netas', monto: R.transferencias });
+  const rc = xlTabla(ws, f, 2, colsCifras, cifras, anchosR);
+  // Balance = Ingresos − Contado − Cuotas − Aportes (+ Transferencias): fórmula visible,
+  // con el valor del motor como resultado.
+  const fb = rc.hasta + 1;
+  let formula = `C${rc.desde}-C${rc.desde + 1}-C${rc.desde + 2}-C${rc.desde + 3}`;
+  if(cifras.length > 4) formula += `+C${rc.desde + 4}`;
+  ws.getCell(fb, 2).value = 'Balance del período';
+  ws.getCell(fb, 3).value = { formula, result: R.balance };
+  ws.getCell(fb, 3).numFmt = XL.fmt.money;
+  [2, 3].forEach(c=>{
+    const cel = ws.getCell(fb, c);
+    cel.font = xlFuente({ bold: true, color: { argb: XL.burdeo } });
+    cel.fill = xlRelleno(XL.crema);
+    cel.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'thin', color: { argb: XL.burdeo } } };
+  });
+  xlNota(ws, fb + 1, 2, 'Cuotas: las que cuentan como gasto — todas en meses cerrados; en el mes en curso y los futuros, solo las confirmadas como pagadas (igual que en la app).');
+  f = fb + 3;
+
+  // Disponible (mes único) con los términos de "¿De dónde sale?"
+  if(R.disponible){
+    seccion(f, 'Disponible del mes · ¿De dónde sale?');
+    f += 1;
+    const colsDisp = [{ key: 'label', header: 'Término', tipo: 'texto' }, { key: 'signo', header: 'Signo', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }];
+    const filasDisp = R.disponible.terminos.map(t=> ({
+      label: t.label, signo: t.signo > 0 ? (t.monto < 0 ? '−' : '+') : '−', monto: Math.abs(t.monto)
+    }));
+    const rd = xlTabla(ws, f, 2, colsDisp, filasDisp, anchosR);
+    for(let r = rd.desde; r <= rd.hasta; r++) ws.getCell(r, 3).alignment = { horizontal: 'center', vertical: 'top' };
+    const ft = rd.hasta + 1;
+    ws.getCell(ft, 2).value = 'Disponible';
+    ws.getCell(ft, 4).value = R.disponible.disponible;
+    ws.getCell(ft, 4).numFmt = XL.fmt.money;
+    [2, 3, 4].forEach(c=>{
+      const cel = ws.getCell(ft, c);
+      cel.font = xlFuente({ bold: true, size: 12, color: { argb: XL.burdeo } });
+      cel.fill = xlRelleno(XL.crema);
+      cel.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'double', color: { argb: XL.burdeo } } };
+    });
+    f = ft + 1;
+    if(R.disponible.cuotasPendientes > 0){
+      xlNota(ws, f, 2, `Las cuotas pendientes (${money(R.disponible.cuotasPendientes)}) no están descontadas: aún no las confirmas como pagadas.`);
+      f++;
+    }
+    if(!R.disponible.cuadra){
+      xlNota(ws, f, 2, `⚠ El desglose suma ${money(R.disponible.suma)}, que no coincide con el Disponible (${money(R.disponible.disponible)}). Reporta este error.`, 'FFB3261E');
+      f++;
+    }
+    f += 1;
+  }
+
+  // Detalle por mes (período de más de un mes)
+  if(!datos.meta.mesUnico){
+    seccion(f, 'Detalle por mes');
+    f += 1;
+    const colsMes = [
+      { key: 'etiqueta', header: 'Mes', tipo: 'texto' },
+      { key: 'ingresos', header: 'Ingresos', tipo: 'money' },
+      { key: 'gastosContado', header: 'Gastos al contado', tipo: 'money' },
+      { key: 'cuotas', header: 'Cuotas', tipo: 'money' },
+      { key: 'aportes', header: 'Aportes a metas', tipo: 'money' },
+      { key: 'balance', header: 'Balance', tipo: 'money' },
+      { key: 'estadoMes', header: 'Estado del mes', tipo: 'texto' }
+    ];
+    // estado 'Proyectado' pinta la fila como proyectada (mismo estilo que Gastos/Ingresos).
+    const filasMes = R.meses.map(m=> ({ ...m, estadoMes: m.estado }));
+    const rm = xlTabla(ws, f, 2, colsMes, filasMes, anchosR);
+    xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, rm,
+      { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance }, 'Total', 'SUM');
+    f = rm.hasta + 3;
+  }
+
+  // Gasto por categoría, de mayor a menor, con barra de datos en el %.
+  seccion(f, 'Gasto por categoría');
+  f += 1;
+  const colsCat = [{ key: 'categoria', header: 'Categoría', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }, { key: 'pct', header: '% del total', tipo: 'pct' }];
+  if(R.categorias.length){
+    const rk = xlTabla(ws, f, 2, colsCat, R.categorias, anchosR);
+    xlFilaTotal(ws, rk.hasta + 1, 2, colsCat, rk, { monto: R.totalCategorias }, 'Total', 'SUM');
+    ws.getCell(rk.hasta + 1, 4).value = 1;
+    ws.getCell(rk.hasta + 1, 4).numFmt = XL.fmt.pct;
+    ws.addConditionalFormatting({
+      ref: `D${rk.desde}:D${rk.hasta}`,
+      rules: [{ type: 'dataBar', priority: 1, gradient: false, border: false,
+        cfvo: [{ type: 'num', value: 0 }, { type: 'num', value: 1 }], color: { argb: XL.dorado } }]
+    });
+  } else {
+    xlTabla(ws, f, 2, colsCat, [], anchosR);
+    xlNota(ws, f + 1, 2, 'Sin gastos en el período.');
+  }
+  // Ancho de B según su contenido más largo (conceptos, meses, categorías).
+  ws.getColumn(2).width = Math.min(XL.anchoMax, Math.max(30, anchosR[2] || 0));
+
+  /* ---------- Gastos ---------- */
+  const mc = datos.meta.variasCuentas;
+  const colsG = [
+    { key: 'fecha', header: 'Fecha', tipo: 'fecha' },
+    { key: 'nombre', header: 'Nombre', tipo: 'texto', wrap: true },
+    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true },
+    { key: 'categoria', header: 'Categoría', tipo: 'texto' },
+    { key: 'metodo', header: 'Método', tipo: 'texto' },
+    ...(mc ? [{ key: 'cuenta', header: 'Cuenta', tipo: 'texto' }] : []),
+    { key: 'monto', header: 'Monto', tipo: 'money' },
+    { key: 'tipo', header: 'Tipo', tipo: 'texto' },
+    { key: 'cuota', header: 'Cuota', tipo: 'texto' },
+    { key: 'estado', header: 'Estado', tipo: 'texto' }
+  ];
+  const hg = xlHojaDatos(wb, 'Gastos', XL.dorado, colsG, datos.gastos.filas, { monto: datos.gastos.total }, 'Sin gastos en el período.');
+  if(datos.gastos.filas.some(x=> x.cuota === 'Sí')){
+    xlNota(hg.ws, hg.rango.hasta + 3, 1, 'Cuota = «Sí»: es la compra completa a crédito; su costo se reparte en la hoja Cuotas y en «Cuotas del período» del Resumen. Filtra Cuota = «No» para ver el gasto al contado.');
+  }
+
+  /* ---------- Ingresos ---------- */
+  const colsI = [
+    { key: 'fecha', header: 'Fecha', tipo: 'fecha' },
+    { key: 'nombre', header: 'Nombre', tipo: 'texto', wrap: true },
+    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true },
+    { key: 'fuente', header: 'Fuente', tipo: 'texto' },
+    ...(mc ? [{ key: 'cuenta', header: 'Cuenta', tipo: 'texto' }] : []),
+    { key: 'monto', header: 'Monto', tipo: 'money' },
+    { key: 'tipo', header: 'Tipo', tipo: 'texto' },
+    { key: 'estado', header: 'Estado', tipo: 'texto' }
+  ];
+  xlHojaDatos(wb, 'Ingresos', XL.dorado, colsI, datos.ingresos.filas, { monto: datos.ingresos.total }, 'Sin ingresos en el período.');
+
+  /* ---------- Cuotas ---------- */
+  const colsC = [
+    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true },
+    { key: 'categoria', header: 'Categoría', tipo: 'texto' },
+    { key: 'fechaCompra', header: 'Fecha de compra', tipo: 'fecha' },
+    { key: 'montoTotal', header: 'Monto total', tipo: 'money' },
+    { key: 'numCuotas', header: 'N° cuotas', tipo: 'int' },
+    { key: 'valorCuota', header: 'Valor cuota', tipo: 'money' },
+    { key: 'pagadas', header: 'Pagadas', tipo: 'int' },
+    { key: 'restantes', header: 'Restantes', tipo: 'int' },
+    { key: 'saldoPendiente', header: 'Saldo pendiente', tipo: 'money' },
+    { key: 'proxima', header: 'Próxima cuota', tipo: 'texto' },
+    { key: 'estado', header: 'Estado', tipo: 'texto' },
+    { key: 'compartida', header: 'Compartida', tipo: 'texto' }
+  ];
+  const hc = xlHojaDatos(wb, 'Cuotas', XL.burdeo, colsC, datos.cuotas.filas,
+    { montoTotal: datos.cuotas.totalMonto, saldoPendiente: datos.cuotas.totalSaldo }, 'Sin compras en cuotas.');
+  if(datos.cuotas.filas.length){
+    xlNota(hc.ws, hc.rango.hasta + 3, 1, `Estado al ${datos.meta.hoyISO.split('-').reverse().join('-')}. Pagadas: cuotas de meses ya cerrados o confirmadas a mano en la app (el mismo criterio con que cuentan como gasto).`);
+  }
+
+  /* ---------- Metas ---------- */
+  const colsM = [
+    { key: 'meta', header: 'Meta', tipo: 'texto', wrap: true },
+    { key: 'objetivo', header: 'Objetivo', tipo: 'money' },
+    { key: 'ahorrado', header: 'Ahorrado', tipo: 'money' },
+    { key: 'pct', header: '% de avance', tipo: 'pct' },
+    { key: 'aporteAuto', header: 'Aporte automático', tipo: 'moneyMes' },
+    { key: 'estado', header: 'Estado', tipo: 'texto' }
+  ];
+  const filasM = datos.metas.filas.map(m=> ({ ...m, objetivo: m.objetivo == null ? 'Indefinida' : m.objetivo, pct: m.pct == null ? '—' : m.pct }));
+  const hm = xlHojaDatos(wb, 'Metas', XL.burdeo, colsM, filasM, null, 'Sin metas registradas');
+  if(filasM.length){
+    for(let r = hm.rango.desde; r <= hm.rango.hasta; r++){
+      const est = hm.ws.getCell(r, 6);
+      if(est.value === 'Cumplida') est.font = xlFuente({ bold: true, color: { argb: 'FF8A6A1F' } });
     }
   }
-}
-function appendSheet(wb, name, rows){
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const cols = fitColsForRows(rows);
-  if(cols.length) ws['!cols'] = cols;
-  applyNumFmts(ws);
-  XLSX.utils.book_append_sheet(wb, ws, name);
-}
-// Descarga (comportamiento de siempre de "Generar Excel").
-function exportExcel(fromDate, toDate){
-  const { wb, filename } = buildExportWorkbook(fromDate, toDate);
-  XLSX.writeFile(wb, filename);
+  return wb;
 }
 
 /* ==================== EXPORTAR RESUMEN COMO IMAGEN (Canvas API nativa) ==================== */
