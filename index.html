@@ -11136,6 +11136,9 @@ function compartirExport(r){
        (Gastos al contado = T.gastos · Cuotas = T.cuotasGasto, la misma cifra "Cuotas" del
        Resumen · Aportes = T.aportesMetas). Balance del mes = la suma de esos términos, que
        por construcción es T.dispLibre − T.saldoAnterior (se verifica en tests.html).
+     · Totales del período → SOLO meses "reales" (grupoMesExport): los anteriores al Mes de
+       inicio de registro quedan en la tabla como "Anterior al registro" y los posteriores
+       al mes actual pasan a `compromisos` (cuotas por pagar, cuotasSinConfirmarDelMes).
      · Disponible (sólo mes único) → desgloseDisponible(mes, true, cuenta), con las mismas
        etiquetas y el mismo orden que la hoja "¿De dónde sale?" (DD_LABELS / DD_ORDEN).
      · Gasto por categoría → donaResumenData() de cada mes, sumado.
@@ -11161,6 +11164,12 @@ function descripcionExport(desc, nombre){
   const d = String(desc == null ? '' : desc).trim();
   const n = String(nombre == null ? '' : nombre).trim();
   return (d && d.toLocaleLowerCase('es') !== n.toLocaleLowerCase('es')) ? d : '';
+}
+// Grupo de un mes para los totales del Excel: 'previo' | 'real' | 'proyectado'.
+// inicioMk = mesInicioRegistroMk() (null si no hay), hoyMk = monthKey(mesActualReal()).
+function grupoMesExport(mk, inicioMk, hoyMk){
+  if(inicioMk !== null && mk < inicioMk) return 'previo';
+  return mk > hoyMk ? 'proyectado' : 'real';
 }
 function prepararDatosExport(fromDate, toDate, cuentaId){
   const cta = ctaCalc(cuentaId);
@@ -11230,32 +11239,49 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
   // T.cuotasPendientes, con la misma condición con que la app la muestra (mes no cerrado y
   // no anterior al "Mes de inicio de registro"). En un mes CERRADO esas cuotas ya cuentan
   // como gasto (la app lo dice en una nota, no como pendiente): acá valen 0.
+  // T22 · Grupo de cada mes (grupoMesExport): 'previo' (anterior al "Mes de inicio de
+  // registro", el mismo criterio esPreRegistro de renderResumen), 'real' (desde el inicio de
+  // registro hasta el mes actual) o 'proyectado' (posterior al mes actual). Los totales del
+  // Resumen (cifras, balance, categorías, cuotas pendientes) suman SOLO los meses reales.
   const inicioMk = mesInicioRegistroMk();
   const filasMeses = meses.map(m=>{
     const T = resumenTotalesDelMes(m, cta);
     const balance = T.ingresos - T.gastos - T.cuotasGasto - T.aportesMetas + T.transferenciasNetas;
     const mk = monthKey(m);
-    const esPreRegistro = inicioMk !== null && mk < inicioMk;
-    const cuotasPendientes = (!T.cerrado && !esPreRegistro) ? T.cuotasPendientes : 0;
+    const grupo = grupoMesExport(mk, inicioMk, mesHoyMk);
+    const cuotasPendientes = (!T.cerrado && grupo !== 'previo') ? T.cuotasPendientes : 0;
     return {
-      mes: isoLocal(m), etiqueta: MESES[m.getMonth()] + ' ' + m.getFullYear(),
+      mes: isoLocal(m), etiqueta: MESES[m.getMonth()] + ' ' + m.getFullYear(), grupo,
       ingresos: T.ingresos, gastosContado: T.gastos, cuotas: T.cuotasGasto,
       aportes: T.aportesMetas, transferencias: T.transferenciasNetas, balance,
       cuotasPendientes, balanceSiPagan: balance - cuotasPendientes,
       dispLibre: T.dispLibre, saldoAnterior: T.saldoAnterior,
-      estado: T.cerrado ? 'Cerrado' : (mk === mesHoyMk ? 'En curso' : 'Proyectado')
+      estado: grupo === 'previo' ? 'Anterior al registro'
+        : T.cerrado ? 'Cerrado' : (mk === mesHoyMk ? 'En curso' : 'Proyectado')
     };
   });
-  const suma = k => filasMeses.reduce((s,r)=> s + r[k], 0);
+  const reales = filasMeses.filter(r=> r.grupo === 'real');
+  const suma = k => reales.reduce((s,r)=> s + r[k], 0);
+  const mesLargo = r=> r.etiqueta.toLowerCase();
   const resumen = {
     ingresos: suma('ingresos'), gastosContado: suma('gastosContado'), cuotas: suma('cuotas'),
     aportes: suma('aportes'), transferencias: suma('transferencias'), balance: suma('balance'),
     cuotasPendientes: suma('cuotasPendientes'), balanceSiPagan: suma('balanceSiPagan'),
-    meses: filasMeses, disponible: null
+    meses: filasMeses, disponible: null,
+    hayReales: reales.length > 0,
+    totalesTexto: !reales.length ? 'Sin meses registrados en el período'
+      : reales.length === 1 ? mesLargo(reales[0])
+      : mesLargo(reales[0]) + ' – ' + mesLargo(reales[reales.length - 1]),
+    // Compromisos futuros: por cada mes proyectado, las cuotas aún sin pagar
+    // (cuotasSinConfirmarDelMes: misma fuente que T.cuotasPendientes). Sin ingresos.
+    compromisos: meses.filter((m, i)=> filasMeses[i].grupo === 'proyectado').map(m=>{
+      const c = cuotasSinConfirmarDelMes(m, cta);
+      return { mes: isoLocal(m), etiqueta: MESES[m.getMonth()] + ' ' + m.getFullYear(), cuotas: c.count, total: c.total };
+    })
   };
 
-  // Disponible con los términos de "¿De dónde sale?" (sólo si el período es un mes).
-  if(meses.length === 1){
+  // Disponible con los términos de "¿De dónde sale?" (sólo si el período es un mes real).
+  if(meses.length === 1 && filasMeses[0].grupo === 'real'){
     const m = meses[0];
     const T = resumenTotalesDelMes(m, cta);
     const dsg = desgloseDisponible(m, true, cta);
@@ -11272,9 +11298,9 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
     };
   }
 
-  // Gasto por categoría: donaResumenData() de cada mes, sumado, de mayor a menor.
+  // Gasto por categoría: donaResumenData() de cada mes REAL, sumado, de mayor a menor.
   const porCat = {};
-  meses.forEach(m=> donaResumenData(m, cta).segs.forEach(s=>{ porCat[s.label] = (porCat[s.label]||0) + s.value; }));
+  meses.filter((m, i)=> filasMeses[i].grupo === 'real').forEach(m=> donaResumenData(m, cta).segs.forEach(s=>{ porCat[s.label] = (porCat[s.label]||0) + s.value; }));
   const totalCategorias = Object.values(porCat).reduce((s,v)=> s + v, 0);
   resumen.categorias = Object.entries(porCat).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1])
     .map(([categoria, monto])=> ({ categoria, monto, pct: totalCategorias > 0 ? monto / totalCategorias : 0 }));
@@ -11393,7 +11419,8 @@ function xlTabla(ws, fila0, col0, cols, filas, anchos){
   });
   filas.forEach((f, i)=>{
     const fila = ws.getRow(fila0 + 1 + i);
-    const proyectado = f.estado === 'Proyectado';
+    // Proyectado y "Anterior al registro" (Detalle por mes) comparten el estilo atenuado.
+    const proyectado = f.estado === 'Proyectado' || f.estado === 'Anterior al registro';
     cols.forEach((c, j)=>{
       const celda = fila.getCell(col0 + j);
       let v = f[c.key];
@@ -11507,7 +11534,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
   for(let c = 2; c <= (datos.meta.mesUnico ? 8 : 10); c++) ws.getRow(2).getCell(c).border = { bottom: { style: 'medium', color: { argb: XL.dorado } } };
 
   let f = 4;
-  [['Período', datos.meta.periodoTexto], ['Cuenta', datos.meta.cuentaTexto], ['Generado', datos.meta.generadoTexto]].forEach(([k, v])=>{
+  [['Período', datos.meta.periodoTexto], ['Totales', R.totalesTexto], ['Cuenta', datos.meta.cuentaTexto], ['Generado', datos.meta.generadoTexto]].forEach(([k, v])=>{
     const ck = ws.getCell(f, 2), cv = ws.getCell(f, 3);
     ck.value = k; ck.font = xlFuente({ bold: true, color: { argb: XL.gris } });
     cv.value = v; cv.font = xlFuente();
@@ -11524,46 +11551,58 @@ function construirLibroExcel(ExcelJS, datos, logo){
     ws.getRow(fila).height = 22;
   };
 
-  // Cifras del período
+  if(!datos.meta.mesUnico && R.hayReales && R.meses.some(m=> m.grupo !== 'real')){
+    xlNota(ws, f, 2, 'Los totales suman solo los meses registrados (desde el mes de inicio de registro hasta el mes actual). Los meses anteriores al registro se listan aparte y los futuros van en «Compromisos futuros».');
+    f++;
+  }
+
+  // Cifras del período (solo meses reales)
   f += 1;
   seccion(f, datos.meta.mesUnico ? 'Cifras del mes' : 'Cifras del período');
   f += 1;
-  const colsCifras = [{ key: 'concepto', header: 'Concepto', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }];
-  const cifras = [
-    { concepto: 'Ingresos', monto: R.ingresos },
-    { concepto: 'Gastos al contado', monto: R.gastosContado },
-    { concepto: 'Cuotas del período', monto: R.cuotas },
-    { concepto: 'Aportes a metas', monto: R.aportes }
-  ];
-  if(Math.round(R.transferencias) !== 0) cifras.push({ concepto: 'Transferencias netas', monto: R.transferencias });
-  const rc = xlTabla(ws, f, 2, colsCifras, cifras, anchosR);
-  // Balance = Ingresos − Contado − Cuotas − Aportes (+ Transferencias): fórmula visible,
-  // con el valor del motor como resultado.
-  const fb = rc.hasta + 1;
-  let formula = `C${rc.desde}-C${rc.desde + 1}-C${rc.desde + 2}-C${rc.desde + 3}`;
-  if(cifras.length > 4) formula += `+C${rc.desde + 4}`;
-  ws.getCell(fb, 2).value = 'Balance del período';
-  ws.getCell(fb, 3).value = { formula, result: R.balance };
-  ws.getCell(fb, 3).numFmt = XL.fmt.money;
-  [2, 3].forEach(c=>{
-    const cel = ws.getCell(fb, c);
-    cel.font = xlFuente({ bold: true, color: { argb: XL.burdeo } });
-    cel.fill = xlRelleno(XL.crema);
-    cel.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'thin', color: { argb: XL.burdeo } } };
-  });
-  // Cuotas pendientes: informativa, bajo el Balance y FUERA de su fórmula (no descontadas).
-  const fp = fb + 1;
-  ws.getCell(fp, 2).value = 'Cuotas pendientes (no descontadas)';
-  ws.getCell(fp, 3).value = R.cuotasPendientes;
-  ws.getCell(fp, 3).numFmt = XL.fmt.money;
-  [2, 3].forEach(c=>{
-    const cel = ws.getCell(fp, c);
-    cel.font = xlFuente();
-    cel.border = { bottom: { style: 'hair', color: { argb: XL.linea } } };
-  });
-  xlNota(ws, fp + 1, 2, 'Cuotas: las que cuentan como gasto — todas en meses cerrados; en el mes en curso y los futuros, solo las confirmadas como pagadas (igual que en la app).');
-  xlNota(ws, fp + 2, 2, 'Las cuotas pendientes son compras a crédito aún no confirmadas como pagadas; la app las muestra como "No descontado".');
-  f = fp + 4;
+  if(!R.hayReales){
+    xlNota(ws, f, 2, datos.meta.mesUnico
+      ? 'Este mes no es un mes registrado (es anterior al mes de inicio de registro o posterior al mes actual): no hay totales que mostrar.'
+      : 'Sin meses registrados en el período: el rango es anterior al mes de inicio de registro o posterior al mes actual, así que no hay totales que mostrar.');
+    f += 2;
+  } else {
+    const colsCifras = [{ key: 'concepto', header: 'Concepto', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }];
+    const cifras = [
+      { concepto: 'Ingresos', monto: R.ingresos },
+      { concepto: 'Gastos al contado', monto: R.gastosContado },
+      { concepto: 'Cuotas del período', monto: R.cuotas },
+      { concepto: 'Aportes a metas', monto: R.aportes }
+    ];
+    if(Math.round(R.transferencias) !== 0) cifras.push({ concepto: 'Transferencias netas', monto: R.transferencias });
+    const rc = xlTabla(ws, f, 2, colsCifras, cifras, anchosR);
+    // Balance = Ingresos − Contado − Cuotas − Aportes (+ Transferencias): fórmula visible,
+    // con el valor del motor como resultado.
+    const fb = rc.hasta + 1;
+    let formula = `C${rc.desde}-C${rc.desde + 1}-C${rc.desde + 2}-C${rc.desde + 3}`;
+    if(cifras.length > 4) formula += `+C${rc.desde + 4}`;
+    ws.getCell(fb, 2).value = 'Balance del período';
+    ws.getCell(fb, 3).value = { formula, result: R.balance };
+    ws.getCell(fb, 3).numFmt = XL.fmt.money;
+    [2, 3].forEach(c=>{
+      const cel = ws.getCell(fb, c);
+      cel.font = xlFuente({ bold: true, color: { argb: XL.burdeo } });
+      cel.fill = xlRelleno(XL.crema);
+      cel.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'thin', color: { argb: XL.burdeo } } };
+    });
+    // Cuotas pendientes: informativa, bajo el Balance y FUERA de su fórmula (no descontadas).
+    const fp = fb + 1;
+    ws.getCell(fp, 2).value = 'Cuotas pendientes (no descontadas)';
+    ws.getCell(fp, 3).value = R.cuotasPendientes;
+    ws.getCell(fp, 3).numFmt = XL.fmt.money;
+    [2, 3].forEach(c=>{
+      const cel = ws.getCell(fp, c);
+      cel.font = xlFuente();
+      cel.border = { bottom: { style: 'hair', color: { argb: XL.linea } } };
+    });
+    xlNota(ws, fp + 1, 2, 'Cuotas: las que cuentan como gasto — todas en meses cerrados; en el mes en curso, solo las confirmadas como pagadas (igual que en la app).');
+    xlNota(ws, fp + 2, 2, 'Las cuotas pendientes son compras a crédito aún no confirmadas como pagadas; la app las muestra como "No descontado".');
+    f = fp + 4;
+  }
 
   // Disponible (mes único) con los términos de "¿De dónde sale?"
   if(R.disponible){
@@ -11597,8 +11636,10 @@ function construirLibroExcel(ExcelJS, datos, logo){
     f += 1;
   }
 
-  // Detalle por mes (período de más de un mes)
-  if(!datos.meta.mesUnico){
+  // Detalle por mes (período de más de un mes): meses anteriores al registro (atenuados,
+  // fuera del total) y meses reales. Los futuros van en «Compromisos futuros».
+  const filasDetalle = R.meses.filter(m=> m.grupo !== 'proyectado');
+  if(!datos.meta.mesUnico && filasDetalle.length){
     seccion(f, 'Detalle por mes');
     f += 1;
     const colsMes = [
@@ -11612,18 +11653,45 @@ function construirLibroExcel(ExcelJS, datos, logo){
       { key: 'balanceSiPagan', header: 'Balance si se pagan las cuotas', tipo: 'money' },
       { key: 'estadoMes', header: 'Estado del mes', tipo: 'texto' }
     ];
-    // estado 'Proyectado' pinta la fila como proyectada (mismo estilo que Gastos/Ingresos).
-    const filasMes = R.meses.map(m=> ({ ...m, estadoMes: m.estado }));
+    // estado 'Anterior al registro' pinta la fila atenuada (mismo estilo que los proyectados).
+    const filasMes = filasDetalle.map(m=> ({ ...m, estadoMes: m.estado }));
     const rm = xlTabla(ws, f, 2, colsMes, filasMes, anchosR);
     // Los dos encabezados nuevos ocupan dos líneas: fila más alta y columnas H e I más
     // anchas (con 17 "Cuotas pendientes (no descontadas)" se partía en tres y se cortaba).
     ws.getRow(f).height = 32;
     ws.getColumn(8).width = 21;
     ws.getColumn(9).width = 21;
-    xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, rm,
-      { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance,
-        cuotasPendientes: R.cuotasPendientes, balanceSiPagan: R.balanceSiPagan }, 'Total', 'SUM');
-    f = rm.hasta + 3;
+    // Los meses previos van siempre antes que los reales: el total (SUM) cubre solo las
+    // filas reales, que son las últimas de la tabla.
+    const nPrevios = filasDetalle.filter(m=> m.grupo === 'previo').length;
+    if(R.hayReales){
+      xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, { desde: rm.desde + nPrevios, hasta: rm.hasta },
+        { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance,
+          cuotasPendientes: R.cuotasPendientes, balanceSiPagan: R.balanceSiPagan }, nPrevios ? 'Total meses registrados' : 'Total', 'SUM');
+      f = rm.hasta + 2;
+    } else {
+      f = rm.hasta + 1;
+    }
+    if(nPrevios){
+      xlNota(ws, f, 2, 'Anterior al registro: meses previos al mes de inicio de registro. Se muestran como referencia y no suman a los totales (igual que en la app, no arrastran saldo).');
+      f++;
+    }
+    f += 1;
+  }
+
+  // Compromisos futuros: cuotas por pagar de cada mes posterior al actual (sin ingresos).
+  if(R.compromisos.length){
+    seccion(f, 'Compromisos futuros');
+    f += 1;
+    const colsComp = [
+      { key: 'etiqueta', header: 'Mes', tipo: 'texto' },
+      { key: 'cuotas', header: 'Cuotas por pagar', tipo: 'int' },
+      { key: 'total', header: 'Total comprometido', tipo: 'money' }
+    ];
+    const rq = xlTabla(ws, f, 2, colsComp, R.compromisos, anchosR);
+    xlFilaTotal(ws, rq.hasta + 1, 2, colsComp, rq, { total: R.compromisos.reduce((s,c)=> s + c.total, 0) }, 'Total', 'SUM');
+    xlNota(ws, rq.hasta + 2, 2, 'Cuotas de compras a crédito que vencen en meses futuros y aún no están pagadas. No se proyectan ingresos: estos montos no entran en los totales.');
+    f = rq.hasta + 4;
   }
 
   // Gasto por categoría, de mayor a menor, con barra de datos en el %.
@@ -11642,7 +11710,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
     });
   } else {
     xlTabla(ws, f, 2, colsCat, [], anchosR);
-    xlNota(ws, f + 1, 2, 'Sin gastos en el período.');
+    xlNota(ws, f + 1, 2, R.hayReales ? 'Sin gastos en el período.' : 'Sin meses registrados en el período.');
   }
   // Ancho de B según su contenido más largo (conceptos, meses, categorías).
   ws.getColumn(2).width = Math.min(XL.anchoMax, Math.max(30, anchosR[2] || 0));
