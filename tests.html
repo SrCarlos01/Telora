@@ -1506,6 +1506,131 @@ function runTests(){
     }
   }
 
+  // ==================== T22 — prepararDatosExport() (Excel con ExcelJS) ====================
+  // Función pura que arma filas y totales del libro. Las fechas del fixture son RELATIVAS
+  // a hoy (mes pasado, mes actual, mes siguiente) porque "Proyectado" depende de
+  // fechaHoyLocalISO() y de esMesCerrado(), que leen el reloj real.
+  {
+    assert(typeof win.prepararDatosExport === 'function', 'iframe.contentWindow.prepararDatosExport existe y es function',
+      `typeof = ${typeof win.prepararDatosExport}`);
+    const hoy = new Date();
+    const Y = hoy.getFullYear(), M = hoy.getMonth();
+    const iso = (y, m, d)=>{ const x = new Date(y, m, d); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
+    const primero = off => new Date(Y, M + off, 1);
+    const ultimo  = off => new Date(Y, M + off + 1, 0);
+    const hoyISO = iso(Y, M, hoy.getDate());
+
+    const st = fixtureBase();
+    st.incomes.push({ id:'xI1', date: iso(Y, M-2, 1), amount: 800000, tipo:'Fijo', source:'Sueldo', nombre:'Sueldo', description:'Sueldo' });
+    st.incomes.push({ id:'xI2', date: iso(Y, M-1, 5), amount: 120000, tipo:'Casual', source:'Ventas', nombre:'Venta bicicleta', description:'Usada' });
+    st.expenses.push({ id:'xG1', date: iso(Y, M-2, 15), amount: 2990, tipo:'Fijo', category:'Cuentas y Servicios', method:'Crédito', nombre:'iCloud', description:'iCloud' });
+    st.expenses.push({ id:'xG2', date: iso(Y, M-1, 10), amount: 60000, tipo:'Casual', category:'Comida', method:'Débito', nombre:'Supermercado', description:'  supermercado ' });
+    st.expenses.push({ id:'xG3', date: iso(Y, M-1, 12), amount: 15000, tipo:'Casual', category:'Salud', method:'Efectivo', nombre:'Farmacia', description:'Remedios' });
+    st.expenses.push({ id:'xG4', date: hoyISO, amount: 3500, tipo:'Casual', category:'Comida', method:'Débito', nombre:'Café', description:'' });
+    // Compra en 6 cuotas hecha hace 3 meses (fila de origen con debtId, como la crea la app):
+    // cuotas en M-2, M-1 (meses cerrados) y M (confirmada a mano) -> 3 pagadas, 3 restantes.
+    st.expenses.push({ id:'xG5', date: iso(Y, M-3, 3), amount: 300000, tipo:'Casual', category:'Vestimenta', method:'Crédito', nombre:'Chaqueta', description:'Chaqueta', debtId:'xD1' });
+    st.debts.push({ id:'xD1', purchaseDate: iso(Y, M-3, 3), numCuotas: 6, totalAmount: 300000, category:'Vestimenta', description:'Chaqueta',
+      manualPaidMonthKeys: [mk(primero(0))], manualUnpaidMonthKeys: [] });
+    // Segunda compra, cuota del mes en curso SIN confirmar: así T.cuotas (todas) ≠ T.cuotasGasto
+    // (sólo confirmadas) y la prueba (a) distingue cuál de las dos exporta el Resumen.
+    st.debts.push({ id:'xD2', purchaseDate: iso(Y, M-1, 3), numCuotas: 2, totalAmount: 80000, category:'Entretenimiento', description:'Audífonos',
+      manualPaidMonthKeys: [], manualUnpaidMonthKeys: [] });
+    st.goals.push({ id:'xM1', name:'Viaje', indefinida:false, montoObjetivo: 1000000, fechaCreacion: iso(Y, M-3, 1),
+      aportes: [{ id:'xA1', fecha: iso(Y, M-1, 20), monto: 50000, tipo:'manual' }],
+      aporteAutomatico: { activo:true, tipo:'monto', monto:20000, diaDelMes:5, fechaActivacion: iso(Y, M-3, 1) } });
+    st.goals.push({ id:'xM2', name:'Colchón', indefinida:true, fechaCreacion: iso(Y, M-2, 1),
+      aportes: [{ id:'xA2', fecha: iso(Y, M-2, 8), monto: 30000, tipo:'manual' }] });
+    setState(win, st);
+    resetCaches(win);
+
+    // ---- (a) mes único: Resumen == resumenTotalesDelMes() y Disponible == desgloseDisponible() ----
+    [[-1, 'mes cerrado'], [0, 'mes en curso']].forEach(([off, nombre])=>{
+      const ref = primero(off);
+      const d = win.prepararDatosExport(primero(off), ultimo(off), 'total');
+      const T = win.resumenTotalesDelMes(ref, 'total');
+      const dsg = win.desgloseDisponible(ref, true, 'total');
+      const r = d.resumen;
+      const sumaTerm = r.disponible ? r.disponible.terminos.reduce((s,t)=> s + t.signo * t.monto, 0) : NaN;
+      assert(d.meta.mesUnico && r.ingresos === T.ingresos && r.gastosContado === T.gastos && r.cuotas === T.cuotasGasto &&
+        r.aportes === T.aportesMetas && Math.round(r.balance) === Math.round(T.dispLibre - T.saldoAnterior),
+        `prepararDatosExport (a): ${nombre} — Ingresos, Contado, Cuotas, Aportes y Balance = resumenTotalesDelMes()`,
+        `export: ${r.ingresos}/${r.gastosContado}/${r.cuotas}/${r.aportes}/bal ${r.balance} · motor: ${T.ingresos}/${T.gastos}/${T.cuotasGasto}/${T.aportesMetas}/bal ${T.dispLibre - T.saldoAnterior}`);
+      assert(r.disponible && r.disponible.disponible === dsg.disponible && r.disponible.disponible === T.dispLibre &&
+        Math.round(sumaTerm) === Math.round(dsg.disponible) && r.disponible.cuadra === true,
+        `prepararDatosExport (a): ${nombre} — Disponible = desgloseDisponible() y sus términos suman el Disponible`,
+        `export: ${r.disponible && r.disponible.disponible} · desglose: ${dsg.disponible} · Σ términos: ${sumaTerm}`);
+      const dona = win.donaResumenData(ref, 'total');
+      assert(Math.round(r.totalCategorias) === Math.round(dona.total) && r.categorias.every((c,i,a)=> i === 0 || a[i-1].monto >= c.monto),
+        `prepararDatosExport (a): ${nombre} — gasto por categoría suma lo mismo que la dona y va de mayor a menor`,
+        `categorías: ${Math.round(r.totalCategorias)} · dona: ${Math.round(dona.total)}`);
+    });
+
+    // ---- (b) Proyectado vs Registrado (rango M-2 .. M+1, como "Todo el historial") ----
+    {
+      const d = win.prepararDatosExport(primero(-2), ultimo(1), 'total');
+      const icloud = d.gastos.filas.filter(f=> f.nombre === 'iCloud');
+      const pasada = icloud.find(f=> f.fecha.slice(0,7) === iso(Y, M-1, 1).slice(0,7));
+      const futura = icloud.find(f=> f.fecha.slice(0,7) === iso(Y, M+1, 1).slice(0,7));
+      const cafe = d.gastos.filas.find(f=> f.nombre === 'Café');
+      const sueldoFut = d.ingresos.filas.find(f=> f.nombre === 'Sueldo' && f.fecha.slice(0,7) === iso(Y, M+1, 1).slice(0,7));
+      assert(icloud.length === 4 && pasada && pasada.estado === 'Registrado' && futura && futura.estado === 'Proyectado' &&
+        cafe && cafe.estado === 'Registrado' && sueldoFut && sueldoFut.estado === 'Proyectado' &&
+        d.gastos.filas.every(f=> f.estado === (f.fecha > hoyISO ? 'Proyectado' : 'Registrado')),
+        'prepararDatosExport (b): ocurrencia fija futura = "Proyectado", pasada y la de hoy = "Registrado"',
+        `iCloud: ${icloud.map(f=> f.fecha + ' ' + f.estado).join(', ')} · Café(hoy): ${cafe && cafe.estado} · Sueldo M+1: ${sueldoFut && sueldoFut.estado}`);
+      const ultimoMes = d.resumen.meses[d.resumen.meses.length - 1];
+      const mesActual = d.resumen.meses.find(x=> x.mes === iso(Y, M, 1));
+      assert(!d.meta.mesUnico && d.resumen.disponible === null && d.resumen.meses.length === 4 &&
+        d.resumen.meses[0].estado === 'Cerrado' && mesActual.estado === 'En curso' && ultimoMes.estado === 'Proyectado',
+        'prepararDatosExport (b): tabla por mes con Estado del mes Cerrado / En curso / Proyectado (sin Disponible si hay varios meses)',
+        d.resumen.meses.map(x=> x.etiqueta + ': ' + x.estado).join(' · '));
+    }
+
+    // ---- (c) Descripción igual al Nombre -> vacía ----
+    {
+      const d = win.prepararDatosExport(primero(-2), ultimo(0), 'total');
+      const s = d.gastos.filas.find(f=> f.nombre === 'Supermercado');
+      const f = d.gastos.filas.find(f=> f.nombre === 'Farmacia');
+      const i1 = d.ingresos.filas.find(f=> f.nombre === 'Sueldo');
+      const i2 = d.ingresos.filas.find(f=> f.nombre === 'Venta bicicleta');
+      assert(s && s.descripcion === '' && f && f.descripcion === 'Remedios' && i1 && i1.descripcion === '' && i2 && i2.descripcion === 'Usada',
+        'prepararDatosExport (c): si la Descripción repite el Nombre, sale vacía (gastos e ingresos); si no, se conserva',
+        `Supermercado: "${s && s.descripcion}" · Farmacia: "${f && f.descripcion}" · Sueldo: "${i1 && i1.descripcion}" · Venta: "${i2 && i2.descripcion}"`);
+    }
+
+    // ---- (d) Cuotas: pagadas + restantes = N° y saldo = restantes × valor cuota (motor) ----
+    {
+      const d = win.prepararDatosExport(primero(0), ultimo(0), 'total');
+      const c = d.cuotas.filas.find(x=> x.descripcion === 'Chaqueta');
+      const deuda = st.debts[0];
+      const info = win.cuotaInfoForMonth(deuda, win.addMonths(deuda.purchaseDate, 1));
+      assert(c && c.pagadas + c.restantes === c.numCuotas && c.numCuotas === 6 && c.pagadas === 3 &&
+        c.valorCuota === info.monto && c.saldoPendiente === c.restantes * info.monto &&
+        d.cuotas.filas.every(x=> x.pagadas + x.restantes === x.numCuotas) &&
+        d.cuotas.totalSaldo === d.cuotas.filas.reduce((s,x)=> s + x.saldoPendiente, 0),
+        'prepararDatosExport (d): cuotas pagadas + restantes = N° de cuotas y saldo pendiente = restantes × valor cuota',
+        c ? `pagadas ${c.pagadas} + restantes ${c.restantes} = ${c.numCuotas} · saldo ${c.saldoPendiente} = ${c.restantes} × ${info.monto} · próxima ${c.proxima}` : 'sin fila');
+    }
+
+    // ---- (e) Metas == ahorradoDeMeta() ----
+    {
+      const d = win.prepararDatosExport(primero(0), ultimo(0), 'total');
+      const hoyMes = win.mesActualReal();
+      const ok = st.goals.every(g=>{
+        const fila = d.metas.filas.find(x=> x.meta === g.name);
+        return fila && fila.ahorrado === win.ahorradoDeMeta(g, hoyMes);
+      });
+      const viaje = d.metas.filas.find(x=> x.meta === 'Viaje');
+      const colchon = d.metas.filas.find(x=> x.meta === 'Colchón');
+      assert(ok && d.metas.filas.length === 2 && viaje.aporteAuto === 20000 && viaje.estado === 'En curso' &&
+        viaje.pct === Math.min(100, Math.round(viaje.ahorrado / 1000000 * 100)) / 100 &&
+        colchon.objetivo === null && colchon.pct === null && colchon.aporteAuto === 'No',
+        'prepararDatosExport (e): Ahorrado de cada meta = ahorradoDeMeta(); % y aporte automático como en la pestaña Metas',
+        d.metas.filas.map(x=> `${x.meta}: ahorrado ${x.ahorrado}, ${x.pct === null ? 'sin %' : Math.round(x.pct*100)+'%'}, auto ${x.aporteAuto}, ${x.estado}`).join(' · '));
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }

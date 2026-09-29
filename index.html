@@ -11053,6 +11053,212 @@ async function compartirExport(range){
   closeSheet('sheetExportar');
 }
 
+/* ==================== T22 · DATOS DEL EXCEL (función pura, testeable) ====================
+   prepararDatosExport() arma TODAS las filas y totales del libro, sin DOM ni ExcelJS, para
+   que tests.html pueda comprobar que las cifras del Excel son las de la app. No recalcula
+   nada por su cuenta: cada cifra sale del motor existente.
+     · Cifras del período y tabla por mes → resumenTotalesDelMes() de cada mes del rango
+       (Gastos al contado = T.gastos · Cuotas = T.cuotasGasto, la misma cifra "Cuotas" del
+       Resumen · Aportes = T.aportesMetas). Balance del mes = la suma de esos términos, que
+       por construcción es T.dispLibre − T.saldoAnterior (se verifica en tests.html).
+     · Disponible (sólo mes único) → desgloseDisponible(mes, true, cuenta), con las mismas
+       etiquetas y el mismo orden que la hoja "¿De dónde sale?" (DD_LABELS / DD_ORDEN).
+     · Gasto por categoría → donaResumenData() de cada mes, sumado.
+     · Gastos / Ingresos → la misma expansión mes a mes de fijos y el mismo filtro por
+       cuenta que usaba buildExportWorkbook() (getExpensesForMonth / getIncomesForMonth).
+     · Cuotas → cuotaInfoForMonth() mes a mes del ciclo de cada compra. Una cuota cuenta
+       como PAGADA con el mismo criterio con que el motor la cuenta como gasto
+       (cuotasPorCategoriaGastoDelMes / T.cuotasGasto): mes cerrado o confirmada a mano.
+     · Metas → ahorradoDeMeta(meta, mesActualReal()) y metaEstaCompleta(), las mismas
+       metas que lista la pestaña Metas (no eliminadas, propias de la cuenta + compartidas).
+   "Proyectado" = fecha del movimiento POSTERIOR a hoy (fechaHoyLocalISO, hora local).
+   Las cifras del Resumen son por MES COMPLETO (el motor no tiene totales de medio mes): si
+   el rango corta un mes, `meta.rangoParcial` lo marca y el libro lo advierte. */
+function fechaLargaES(d){
+  return `${d.getDate()} de ${MESES[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`;
+}
+function isoLocal(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+// Descripción exportada: vacía si sólo repite el nombre (registros antiguos guardaban la
+// misma cadena en ambos campos).
+function descripcionExport(desc, nombre){
+  const d = String(desc == null ? '' : desc).trim();
+  const n = String(nombre == null ? '' : nombre).trim();
+  return (d && d.toLocaleLowerCase('es') !== n.toLocaleLowerCase('es')) ? d : '';
+}
+function prepararDatosExport(fromDate, toDate, cuentaId){
+  const cta = ctaCalc(cuentaId);
+  const hoyISO = fechaHoyLocalISO();
+  const mesHoyMk = monthKey(mesActualReal());
+  const estadoDe = iso => iso > hoyISO ? 'Proyectado' : 'Registrado';
+  const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
+  const variasCuentas = cuentasVivas().length > 1;
+  const nombreCuenta = id => id ? cuentaNombre(id) : '';
+
+  // Meses del rango (día 1 de cada uno), del mes de fromDate al de toDate.
+  const meses = [];
+  for(let c = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1),
+          fin = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+      c <= fin; c = new Date(c.getFullYear(), c.getMonth()+1, 1)) meses.push(c);
+  const ultimoDiaHasta = new Date(toDate.getFullYear(), toDate.getMonth()+1, 0).getDate();
+  const rangoParcial = fromDate.getDate() !== 1 || toDate.getDate() !== ultimoDiaHasta;
+
+  // --- Gastos: expansión mes a mes de fijos (misma que buildExportWorkbook) ---
+  const gastos = [];
+  const vistosG = new Set();
+  meses.forEach(m=>{
+    getExpensesForMonth(m, cta).forEach(e=>{
+      const key = e.id + '-' + e.date;
+      if(vistosG.has(key)) return;
+      vistosG.add(key);
+      if(inRange(e.date)) gastos.push(e);
+    });
+  });
+  const filasGastos = gastos.sort((a,b)=> a.date.localeCompare(b.date)).map(e=>({
+    fecha: e.date,
+    nombre: e.nombre || '',
+    descripcion: descripcionExport(e.description, e.nombre),
+    categoria: e.category || '',
+    metodo: e.method || '',
+    cuenta: nombreCuenta(e.cuentaId),
+    monto: e.amount,
+    tipo: e.tipo === 'Fijo' ? 'Fijo' : 'Casual',
+    cuota: e.debtId ? 'Sí' : 'No',
+    estado: estadoDe(e.date)
+  }));
+
+  // --- Ingresos: misma expansión ---
+  const ingresos = [];
+  const vistosI = new Set();
+  meses.forEach(m=>{
+    getIncomesForMonth(m, cta).forEach(i=>{
+      const key = i.id + '-' + i.date;
+      if(vistosI.has(key)) return;
+      vistosI.add(key);
+      if(inRange(i.date)) ingresos.push(i);
+    });
+  });
+  const filasIngresos = ingresos.sort((a,b)=> a.date.localeCompare(b.date)).map(i=>({
+    fecha: i.date,
+    nombre: i.nombre || '',
+    descripcion: descripcionExport(i.description, i.nombre),
+    fuente: i.source || '',
+    cuenta: nombreCuenta(i.cuentaId),
+    monto: i.amount,
+    tipo: i.tipo === 'Fijo' ? 'Fijo' : 'Casual',
+    estado: estadoDe(i.date)
+  }));
+
+  // --- Resumen: por mes, desde resumenTotalesDelMes() ---
+  const filasMeses = meses.map(m=>{
+    const T = resumenTotalesDelMes(m, cta);
+    const balance = T.ingresos - T.gastos - T.cuotasGasto - T.aportesMetas + T.transferenciasNetas;
+    const mk = monthKey(m);
+    return {
+      mes: isoLocal(m), etiqueta: MESES[m.getMonth()] + ' ' + m.getFullYear(),
+      ingresos: T.ingresos, gastosContado: T.gastos, cuotas: T.cuotasGasto,
+      aportes: T.aportesMetas, transferencias: T.transferenciasNetas, balance,
+      dispLibre: T.dispLibre, saldoAnterior: T.saldoAnterior,
+      estado: T.cerrado ? 'Cerrado' : (mk === mesHoyMk ? 'En curso' : 'Proyectado')
+    };
+  });
+  const suma = k => filasMeses.reduce((s,r)=> s + r[k], 0);
+  const resumen = {
+    ingresos: suma('ingresos'), gastosContado: suma('gastosContado'), cuotas: suma('cuotas'),
+    aportes: suma('aportes'), transferencias: suma('transferencias'), balance: suma('balance'),
+    meses: filasMeses, disponible: null
+  };
+
+  // Disponible con los términos de "¿De dónde sale?" (sólo si el período es un mes).
+  if(meses.length === 1){
+    const m = meses[0];
+    const T = resumenTotalesDelMes(m, cta);
+    const dsg = desgloseDisponible(m, true, cta);
+    const porGrupo = {};
+    dsg.terminos.forEach(t=>{
+      porGrupo[(t.clave === 'cuotasPagadas' || t.clave === 'cuotasMes') ? 'cuotas' : t.clave] = t;
+    });
+    const terminos = DD_ORDEN.map(g=> porGrupo[g])
+      .filter(t=> t && !(t.clave === 'transferencias' && Math.round(t.monto) === 0))
+      .map(t=> ({ clave: t.clave, label: DD_LABELS[t.clave] || t.label, signo: t.signo, monto: t.monto }));
+    resumen.disponible = {
+      terminos, disponible: dsg.disponible, suma: dsg.suma, cuadra: dsg.cuadra,
+      cuotasPendientes: (!T.cerrado && Math.round(T.cuotasPendientes) > 0) ? T.cuotasPendientes : 0
+    };
+  }
+
+  // Gasto por categoría: donaResumenData() de cada mes, sumado, de mayor a menor.
+  const porCat = {};
+  meses.forEach(m=> donaResumenData(m, cta).segs.forEach(s=>{ porCat[s.label] = (porCat[s.label]||0) + s.value; }));
+  const totalCategorias = Object.values(porCat).reduce((s,v)=> s + v, 0);
+  resumen.categorias = Object.entries(porCat).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1])
+    .map(([categoria, monto])=> ({ categoria, monto, pct: totalCategorias > 0 ? monto / totalCategorias : 0 }));
+  resumen.totalCategorias = totalCategorias;
+
+  // --- Cuotas: estado de cada compra a hoy ---
+  const filasCuotas = state.debts.filter(d=> itemEnVista(d, cta)).map(d=>{
+    let pagadas = 0, valorCuota = d.totalAmount / d.numCuotas, proxima = null;
+    for(let n = 1; n <= d.numCuotas; n++){
+      const mesCuota = addMonths(d.purchaseDate, n);
+      const info = cuotaInfoForMonth(d, mesCuota);
+      if(!info) continue;
+      valorCuota = info.monto;
+      if(esMesCerrado(mesCuota) || cuotaPagadaDelMes(d, mesCuota)) pagadas++;
+      else if(!proxima) proxima = mesCuota;
+    }
+    const restantes = d.numCuotas - pagadas;
+    return {
+      descripcion: d.description || '', categoria: d.category || '', fechaCompra: d.purchaseDate,
+      montoTotal: d.totalAmount, numCuotas: d.numCuotas, valorCuota, pagadas, restantes,
+      saldoPendiente: restantes * valorCuota,
+      proxima: proxima ? MESES[proxima.getMonth()] + ' ' + proxima.getFullYear() : '—',
+      estado: restantes === 0 ? 'Pagada' : (debtStatusForMonth(d, mesActualReal()) === 'futura' ? 'Por comenzar' : 'Activa'),
+      compartida: d.cuentaId === 'compartida' ? 'Sí' : 'No'
+    };
+  }).sort((a,b)=> a.fechaCompra.localeCompare(b.fechaCompra));
+
+  // --- Metas: las mismas que muestra la pestaña Metas ---
+  const hoyMes = mesActualReal();
+  const filasMetas = state.goals.filter(g=> g.goalEndMonthKey == null && itemEnVista(g, cta)).map(g=>{
+    const aa = g.aporteAutomatico || {};
+    const ahorrado = ahorradoDeMeta(g, hoyMes);
+    const definida = !g.indefinida && g.montoObjetivo > 0;
+    let aporteAuto = 'No';
+    if(aa.activo) aporteAuto = aa.tipo === 'porcentaje' ? `${aa.valor || 0}% del Disponible` : (aa.monto || 0);
+    if(aa.activo && aa.pausado) aporteAuto = 'Pausado';
+    return {
+      meta: g.name || 'Meta',
+      objetivo: definida ? g.montoObjetivo : null,
+      ahorrado,
+      pct: definida ? Math.min(100, Math.round(ahorrado / g.montoObjetivo * 100)) / 100 : null,
+      aporteAuto,
+      estado: metaEstaCompleta(g) ? 'Cumplida' : 'En curso'
+    };
+  });
+
+  const generado = new Date();
+  const sufijoCuenta = cta === 'total' ? '' : '_' + cuentaNombre(cta).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+  const toDia = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+  return {
+    meta: {
+      periodoTexto: fechaLargaES(fromDate) + ' – ' + fechaLargaES(toDia),
+      cuentaTexto: cta === 'total' ? 'Todas' : cuentaNombre(cta),
+      generado, generadoTexto: isoLocal(generado).split('-').reverse().join('-') + ' ' +
+        String(generado.getHours()).padStart(2,'0') + ':' + String(generado.getMinutes()).padStart(2,'0'),
+      hoyISO, mesUnico: meses.length === 1, rangoParcial, variasCuentas,
+      filename: `Telora${sufijoCuenta}_${hoyISO}.xlsx`
+    },
+    resumen,
+    gastos: { filas: filasGastos, total: filasGastos.reduce((s,r)=> s + r.monto, 0) },
+    ingresos: { filas: filasIngresos, total: filasIngresos.reduce((s,r)=> s + r.monto, 0) },
+    cuotas: { filas: filasCuotas,
+      totalMonto: filasCuotas.reduce((s,r)=> s + r.montoTotal, 0),
+      totalSaldo: filasCuotas.reduce((s,r)=> s + r.saldoPendiente, 0) },
+    metas: { filas: filasMetas }
+  };
+}
+
 function buildExportWorkbook(fromDate, toDate){
   const inRange = iso => { const d = new Date(iso+"T00:00:00"); return d>=fromDate && d<=toDate; };
   // Tanda L3: la exportación respeta la cuenta activa igual que la app. En una cuenta
