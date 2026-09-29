@@ -11226,14 +11226,22 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
   }));
 
   // --- Resumen: por mes, desde resumenTotalesDelMes() ---
+  // Cuotas pendientes = la línea "Cuotas pendientes · NO DESCONTADO" de renderResumen():
+  // T.cuotasPendientes, con la misma condición con que la app la muestra (mes no cerrado y
+  // no anterior al "Mes de inicio de registro"). En un mes CERRADO esas cuotas ya cuentan
+  // como gasto (la app lo dice en una nota, no como pendiente): acá valen 0.
+  const inicioMk = mesInicioRegistroMk();
   const filasMeses = meses.map(m=>{
     const T = resumenTotalesDelMes(m, cta);
     const balance = T.ingresos - T.gastos - T.cuotasGasto - T.aportesMetas + T.transferenciasNetas;
     const mk = monthKey(m);
+    const esPreRegistro = inicioMk !== null && mk < inicioMk;
+    const cuotasPendientes = (!T.cerrado && !esPreRegistro) ? T.cuotasPendientes : 0;
     return {
       mes: isoLocal(m), etiqueta: MESES[m.getMonth()] + ' ' + m.getFullYear(),
       ingresos: T.ingresos, gastosContado: T.gastos, cuotas: T.cuotasGasto,
       aportes: T.aportesMetas, transferencias: T.transferenciasNetas, balance,
+      cuotasPendientes, balanceSiPagan: balance - cuotasPendientes,
       dispLibre: T.dispLibre, saldoAnterior: T.saldoAnterior,
       estado: T.cerrado ? 'Cerrado' : (mk === mesHoyMk ? 'En curso' : 'Proyectado')
     };
@@ -11242,6 +11250,7 @@ function prepararDatosExport(fromDate, toDate, cuentaId){
   const resumen = {
     ingresos: suma('ingresos'), gastosContado: suma('gastosContado'), cuotas: suma('cuotas'),
     aportes: suma('aportes'), transferencias: suma('transferencias'), balance: suma('balance'),
+    cuotasPendientes: suma('cuotasPendientes'), balanceSiPagan: suma('balanceSiPagan'),
     meses: filasMeses, disponible: null
   };
 
@@ -11480,7 +11489,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
   ws.views = [{ showGridLines: false }];
   ws.getColumn(1).width = 8;
   ws.getColumn(2).width = 30;
-  for(let c = 3; c <= 8; c++) ws.getColumn(c).width = 17;
+  for(let c = 3; c <= 10; c++) ws.getColumn(c).width = 17;
   const anchosR = {};
 
   ws.getRow(1).height = 40;
@@ -11495,7 +11504,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
   tit.font = { name: 'Georgia', size: 20, bold: true, color: { argb: XL.burdeo } };
   tit.alignment = { vertical: 'middle' };
   ws.getRow(2).height = 6;
-  for(let c = 2; c <= 8; c++) ws.getRow(2).getCell(c).border = { bottom: { style: 'medium', color: { argb: XL.dorado } } };
+  for(let c = 2; c <= (datos.meta.mesUnico ? 8 : 10); c++) ws.getRow(2).getCell(c).border = { bottom: { style: 'medium', color: { argb: XL.dorado } } };
 
   let f = 4;
   [['Período', datos.meta.periodoTexto], ['Cuenta', datos.meta.cuentaTexto], ['Generado', datos.meta.generadoTexto]].forEach(([k, v])=>{
@@ -11542,8 +11551,19 @@ function construirLibroExcel(ExcelJS, datos, logo){
     cel.fill = xlRelleno(XL.crema);
     cel.border = { top: { style: 'thin', color: { argb: XL.burdeo } }, bottom: { style: 'thin', color: { argb: XL.burdeo } } };
   });
-  xlNota(ws, fb + 1, 2, 'Cuotas: las que cuentan como gasto — todas en meses cerrados; en el mes en curso y los futuros, solo las confirmadas como pagadas (igual que en la app).');
-  f = fb + 3;
+  // Cuotas pendientes: informativa, bajo el Balance y FUERA de su fórmula (no descontadas).
+  const fp = fb + 1;
+  ws.getCell(fp, 2).value = 'Cuotas pendientes (no descontadas)';
+  ws.getCell(fp, 3).value = R.cuotasPendientes;
+  ws.getCell(fp, 3).numFmt = XL.fmt.money;
+  [2, 3].forEach(c=>{
+    const cel = ws.getCell(fp, c);
+    cel.font = xlFuente();
+    cel.border = { bottom: { style: 'hair', color: { argb: XL.linea } } };
+  });
+  xlNota(ws, fp + 1, 2, 'Cuotas: las que cuentan como gasto — todas en meses cerrados; en el mes en curso y los futuros, solo las confirmadas como pagadas (igual que en la app).');
+  xlNota(ws, fp + 2, 2, 'Las cuotas pendientes son compras a crédito aún no confirmadas como pagadas; la app las muestra como "No descontado".');
+  f = fp + 4;
 
   // Disponible (mes único) con los términos de "¿De dónde sale?"
   if(R.disponible){
@@ -11588,13 +11608,21 @@ function construirLibroExcel(ExcelJS, datos, logo){
       { key: 'cuotas', header: 'Cuotas', tipo: 'money' },
       { key: 'aportes', header: 'Aportes a metas', tipo: 'money' },
       { key: 'balance', header: 'Balance', tipo: 'money' },
+      { key: 'cuotasPendientes', header: 'Cuotas pendientes (no descontadas)', tipo: 'money' },
+      { key: 'balanceSiPagan', header: 'Balance si se pagan las cuotas', tipo: 'money' },
       { key: 'estadoMes', header: 'Estado del mes', tipo: 'texto' }
     ];
     // estado 'Proyectado' pinta la fila como proyectada (mismo estilo que Gastos/Ingresos).
     const filasMes = R.meses.map(m=> ({ ...m, estadoMes: m.estado }));
     const rm = xlTabla(ws, f, 2, colsMes, filasMes, anchosR);
+    // Los dos encabezados nuevos ocupan dos líneas: fila más alta y columnas H e I más
+    // anchas (con 17 "Cuotas pendientes (no descontadas)" se partía en tres y se cortaba).
+    ws.getRow(f).height = 32;
+    ws.getColumn(8).width = 21;
+    ws.getColumn(9).width = 21;
     xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, rm,
-      { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance }, 'Total', 'SUM');
+      { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance,
+        cuotasPendientes: R.cuotasPendientes, balanceSiPagan: R.balanceSiPagan }, 'Total', 'SUM');
     f = rm.hasta + 3;
   }
 

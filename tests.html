@@ -1629,6 +1629,25 @@ function runTests(){
         'prepararDatosExport (e): Ahorrado de cada meta = ahorradoDeMeta(); % y aporte automático como en la pestaña Metas',
         d.metas.filas.map(x=> `${x.meta}: ahorrado ${x.ahorrado}, ${x.pct === null ? 'sin %' : Math.round(x.pct*100)+'%'}, auto ${x.aporteAuto}, ${x.estado}`).join(' · '));
     }
+
+    // ---- (f) Cuotas pendientes (no descontadas) = la línea "Cuotas pendientes" de la app ----
+    // Mes en curso: la cuota de Audífonos está sin confirmar -> renderResumen() muestra
+    // T.cuotasPendientes como "NO DESCONTADO". Mes cerrado (M-1): la cuota de Chaqueta quedó
+    // sin confirmar, pero la app ya la cuenta como gasto (nota, no pendiente) -> 0.
+    {
+      const d = win.prepararDatosExport(primero(-1), ultimo(0), 'total');
+      const cerrado = d.resumen.meses[0], enCurso = d.resumen.meses[1];
+      const Tc = win.resumenTotalesDelMes(primero(-1), 'total');
+      const Tv = win.resumenTotalesDelMes(primero(0), 'total');
+      assert(Tv.cerrado === false && Tv.cuotasPendientes > 0 && enCurso.cuotasPendientes === Tv.cuotasPendientes &&
+        enCurso.balanceSiPagan === enCurso.balance - enCurso.cuotasPendientes &&
+        Tc.cerrado === true && cerrado.cuotasPendientes === 0 && cerrado.balanceSiPagan === cerrado.balance &&
+        d.resumen.cuotasPendientes === enCurso.cuotasPendientes &&
+        d.resumen.balanceSiPagan === d.resumen.balance - d.resumen.cuotasPendientes,
+        'prepararDatosExport (f): cuotas pendientes = T.cuotasPendientes de la app (0 en mes cerrado) y Balance si se pagan = Balance − pendientes',
+        `en curso: pendientes ${enCurso.cuotasPendientes} (app ${Tv.cuotasPendientes}), balance ${enCurso.balance} → si se pagan ${enCurso.balanceSiPagan} · ` +
+        `cerrado: exportado ${cerrado.cuotasPendientes} (T.cuotasPendientes crudo ${Tc.cuotasPendientes}, ya cuenta como gasto)`);
+    }
   }
 
   renderResultados();
