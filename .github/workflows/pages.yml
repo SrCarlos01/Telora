@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           mkdir -p _site/icons
           cp index.html sw.js manifest.json \
-             xlsx.full.min.js supabase.min.js \
+             exceljs.min.js supabase.min.js \
              tutorial.html privacidad.html terminos.html \
              _site/
           cp icons/favicon-16.png icons/favicon-32.png icons/apple-touch-icon.png \

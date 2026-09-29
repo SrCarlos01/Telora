@@ -22,20 +22,21 @@
 const BUILD = '__BUILD__';
 const CACHE = 'misfinanzas-' + BUILD;
 
-// index.html ya no carga XLSX en el <head>: lo inserta bajo demanda con cargarXLSX()
-// al abrir la hoja de exportación, pero ./xlsx.full.min.js se precachea igual para
-// que exportar funcione sin conexión. ./supabase.min.js (login opcional y respaldo)
-// también se precachea: tras una actualización, la primera apertura sin red conserva
-// el login y la sincronización. Íconos precacheados (lo que se ve sin conexión): el de
-// 192 (encabezado y notificaciones), el favicon de 32 y el apple-touch-icon; el resto
-// de icons/ (512 y maskable) lo pide el sistema al instalar y no hace falta offline.
+// index.html no carga ExcelJS en el <head>: lo inserta bajo demanda con cargarExcelJS()
+// al abrir la hoja de exportación, pero ./exceljs.min.js se precachea igual para que
+// exportar funcione sin conexión (T22: reemplaza a ./xlsx.full.min.js, ya eliminado).
+// ./supabase.min.js (login opcional y respaldo) también se precachea: tras una
+// actualización, la primera apertura sin red conserva el login y la sincronización.
+// Íconos precacheados (lo que se ve sin conexión): el de 192 (encabezado y
+// notificaciones), el favicon de 32 y el apple-touch-icon; el resto de icons/ (512 y
+// maskable) lo pide el sistema al instalar y no hace falta offline.
 // './' e './index.html' son el mismo documento; se precachean los dos porque la
 // navegación puede pedir cualquiera de las dos rutas.
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './xlsx.full.min.js',
+  './exceljs.min.js',
   './supabase.min.js',
   './icons/icon-192.png',
   './icons/favicon-32.png',
