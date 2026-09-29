@@ -11499,7 +11499,9 @@ function xlNota(ws, filaN, col, texto, color){
 function xlAplicarAnchos(ws, anchos, cols, col0){
   Object.keys(anchos).forEach(k=>{
     const n = +k, c = cols ? cols[n - col0] : null;
-    ws.getColumn(n).width = Math.min(XL.anchoMax, Math.max(c && c.wrap ? 14 : 9, anchos[k]));
+    // c.anchoMin / c.anchoMax: límites propios de una columna (p. ej. Descripción, 18–40).
+    const min = c && c.anchoMin ? c.anchoMin : (c && c.wrap ? 14 : 9);
+    ws.getColumn(n).width = Math.min(c && c.anchoMax ? c.anchoMax : XL.anchoMax, Math.max(min, anchos[k]));
   });
 }
 function xlHojaBase(wb, nombre, color, conTitulosDeImpresion){
@@ -11747,7 +11749,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
   const colsG = [
     { key: 'fecha', header: 'Fecha', tipo: 'fecha' },
     { key: 'nombre', header: 'Nombre', tipo: 'texto', wrap: true },
-    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true },
+    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true, anchoMin: 18, anchoMax: 40 },
     { key: 'categoria', header: 'Categoría', tipo: 'texto' },
     { key: 'metodo', header: 'Método', tipo: 'texto' },
     ...(mc ? [{ key: 'cuenta', header: 'Cuenta', tipo: 'texto' }] : []),
@@ -11765,7 +11767,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
   const colsI = [
     { key: 'fecha', header: 'Fecha', tipo: 'fecha' },
     { key: 'nombre', header: 'Nombre', tipo: 'texto', wrap: true },
-    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true },
+    { key: 'descripcion', header: 'Descripción', tipo: 'texto', wrap: true, anchoMin: 18, anchoMax: 40 },
     { key: 'fuente', header: 'Fuente', tipo: 'texto' },
     ...(mc ? [{ key: 'cuenta', header: 'Cuenta', tipo: 'texto' }] : []),
     { key: 'monto', header: 'Monto', tipo: 'money' },
