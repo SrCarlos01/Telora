@@ -26,7 +26,9 @@ const CACHE = 'misfinanzas-' + BUILD;
 // al abrir la hoja de exportación, pero ./xlsx.full.min.js se precachea igual para
 // que exportar funcione sin conexión. ./supabase.min.js (login opcional y respaldo)
 // también se precachea: tras una actualización, la primera apertura sin red conserva
-// el login y la sincronización. El ícono sale de ./icon.svg.
+// el login y la sincronización. Íconos precacheados (lo que se ve sin conexión): el de
+// 192 (encabezado y notificaciones), el favicon de 32 y el apple-touch-icon; el resto
+// de icons/ (512 y maskable) lo pide el sistema al instalar y no hace falta offline.
 // './' e './index.html' son el mismo documento; se precachean los dos porque la
 // navegación puede pedir cualquiera de las dos rutas.
 const ASSETS = [
@@ -35,7 +37,9 @@ const ASSETS = [
   './manifest.json',
   './xlsx.full.min.js',
   './supabase.min.js',
-  './icon.svg'
+  './icons/icon-192.png',
+  './icons/favicon-32.png',
+  './icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {
