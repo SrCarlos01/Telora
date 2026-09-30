@@ -1756,6 +1756,249 @@ async function runTests(){
     }
   }
 
+  // ==================== T2b — Eliminar mi cuenta (sin red: todo con stubs) ====================
+  // Nada de esto toca el localStorage real: el apartado/restauración de la cola y el borrado
+  // local corren contra un almacenamiento falso (AlmacenFalso); supa, syncTransporte,
+  // syncAlmacen, showToast y compañía se reemplazan y se restauran en cada finally.
+  {
+    class AlmacenFalso {
+      constructor(obj){ this.m = new Map(Object.entries(obj || {})); }
+      get length(){ return this.m.size; }
+      key(i){ return [...this.m.keys()][i] ?? null; }
+      getItem(k){ return this.m.has(k) ? this.m.get(k) : null; }
+      setItem(k, v){ this.m.set(k, String(v)); }
+      removeItem(k){ this.m.delete(k); }
+    }
+    const $ = id => win.document.getElementById(id);
+    const tick = ms => new Promise(r => setTimeout(r, ms));
+    const UID = 'uid-prueba-t2b';
+    const opA = { tabla: 'expenses', clave: 'e1', tipo: 'upsert', fila: { id: 'e1', user_id: UID }, v: 'a.0', intentos: 0, proximo: 0 };
+    const opB = { tabla: 'goals', clave: 'g1', tipo: 'upsert', fila: { id: 'g1', user_id: UID }, v: 'a.1', intentos: 0, proximo: 0 };
+    const opC = { tabla: 'incomes', clave: 'i1', tipo: 'upsert', fila: { id: 'i1', user_id: UID }, v: 'b.0', intentos: 0, proximo: 0 };
+    const err23503 = { code: '23503', message: 'insert or update on table "expenses" violates foreign key constraint "expenses_user_id_fkey"',
+                       details: 'Key (user_id)=(' + UID + ') is not present in table "users".' };
+
+    // ---- (a) El botón solo aparece con sesión ----
+    {
+      const sin = $('cuentaUsuarioSinSesion'), con = $('cuentaUsuarioConSesion'), btn = $('btnEliminarCuenta');
+      const antes = { sin: sin.style.display, con: con.style.display, email: $('cuentaUsuarioEmail').textContent };
+      try{
+        win.renderCuentaUsuario(null);
+        const sinSesion = { conOculto: con.style.display === 'none', sinVisible: sin.style.display !== 'none' };
+        win.renderCuentaUsuario({ user: { email: 'prueba@ejemplo.cl', user_metadata: {} } });
+        const conSesion = { conVisible: con.style.display !== 'none', sinOculto: sin.style.display === 'none' };
+        assert(!!btn && con.contains(btn) && !sin.contains(btn) && sinSesion.conOculto && sinSesion.sinVisible && conSesion.conVisible && conSesion.sinOculto,
+          'T2b (a): «Eliminar mi cuenta» vive en el bloque con sesión: oculto sin sesión, visible con sesión; el bloque sin sesión no cambia',
+          JSON.stringify({ sinSesion, conSesion, texto: btn && btn.textContent }));
+      }finally{
+        win.renderCuentaUsuario(null);   // también devuelve el avatar del topbar a "sin sesión"
+        sin.style.display = antes.sin; con.style.display = antes.con; $('cuentaUsuarioEmail').textContent = antes.email;
+      }
+    }
+
+    // ---- (b) El botón final exige escribir ELIMINAR ----
+    {
+      const inp = $('inpEliminarCuentaConfirma'), conf = $('btnEliminarCuentaConfirmar');
+      const probar = v => { inp.value = v; inp.dispatchEvent(new win.Event('input')); win.actualizarBotonesEliminarCuenta(true); return conf.disabled; };
+      try{
+        const r = { vacio: probar(''), minus: probar('eliminar'), parcial: probar('ELIMINA'), otro: probar('BORRAR'), exacto: probar('ELIMINAR'), espacios: probar('  ELIMINAR ') };
+        assert(r.vacio && r.minus && r.parcial && r.otro && !r.exacto && !r.espacios,
+          'T2b (b): el botón final queda deshabilitado hasta escribir ELIMINAR (mayúsculas; espacios alrededor se ignoran)',
+          JSON.stringify(r));
+        assert(win.confirmacionEliminarValida('ELIMINAR') && !win.confirmacionEliminarValida('Eliminar') && !win.confirmacionEliminarValida(null),
+          'T2b (b): confirmacionEliminarValida solo acepta ELIMINAR');
+      }finally{
+        inp.value = ''; win.actualizarBotonesEliminarCuenta(true);
+      }
+    }
+
+    // ---- (c) Sin conexión: botón deshabilitado con el texto pedido ----
+    {
+      const btn = $('btnEliminarCuenta'), conf = $('btnEliminarCuentaConfirmar'), inp = $('inpEliminarCuentaConfirma');
+      try{
+        inp.value = 'ELIMINAR';
+        win.actualizarBotonesEliminarCuenta(false);
+        const off = { disabled: btn.disabled, texto: btn.textContent, confDisabled: conf.disabled };
+        win.actualizarBotonesEliminarCuenta(true);
+        const on = { disabled: btn.disabled, texto: btn.textContent };
+        assert(off.disabled && off.texto === 'Necesitas conexión para eliminar tu cuenta' && off.confDisabled && !on.disabled && on.texto === 'Eliminar mi cuenta',
+          'T2b (c): sin conexión el botón queda deshabilitado con «Necesitas conexión para eliminar tu cuenta» (y el final tampoco se puede usar); con conexión vuelve',
+          JSON.stringify({ off, on }));
+      }finally{
+        inp.value = ''; win.actualizarBotonesEliminarCuenta(true);
+      }
+    }
+
+    // ---- (d) Pureza: 23503 contra auth.users vs. otras FK; borrado local conserva solo device_id ----
+    {
+      const goalsFk = { code: '23503', details: 'Key (user_id, goal_id)=(x, y) is not present in table "goals".' };
+      assert(win.esErrorCuentaEliminada({ error: err23503, status: 409 }) && !win.esErrorCuentaEliminada({ error: goalsFk, status: 409 })
+        && !win.esErrorCuentaEliminada({ error: { code: '23505' }, status: 409 }) && !win.esErrorCuentaEliminada({ error: null }),
+        'T2b (d): esErrorCuentaEliminada = 23503 contra la tabla "users" (no la FK goal_aportes -> goals ni otros códigos)');
+      const ls = new AlmacenFalso({ misfinanzas_data: '{}', misfinanzas_build: 'x', telora_device_id: 'dev-1', telora_dueno_confirmado: UID,
+        ['telora_sync_cola:' + UID]: '[]', 'sb-ekavuxaznjbvrzpxtslz-auth-token': '{}' });
+      const borradas = win.borrarDatosLocalesTelora(ls);
+      assert(ls.length === 1 && ls.getItem('telora_device_id') === 'dev-1' && borradas.length === 5,
+        'T2b (d): borrarDatosLocalesTelora borra todo el almacenamiento salvo telora_device_id',
+        'borradas: ' + borradas.sort().join(', '));
+    }
+
+    // ---- (e)–(g) Orquestación: detener sync -> esperar envío en vuelo -> apartar -> invocar -> cerrar sesión ----
+    const origE = {
+      leerDuenoConfirmado: win.leerDuenoConfirmado, esPestanaLiderSync: win.esPestanaLiderSync,
+      upsert: win.eval('syncTransporte').upsert
+    };
+    try{
+      win.leerDuenoConfirmado = () => UID;
+      win.esPestanaLiderSync = () => true;
+      let envios = 0;
+      win.eval('syncTransporte').upsert = async () => { envios++; return { error: null, status: 201 }; };
+
+      // (e) Éxito con escrituras pendientes y un envío en vuelo al pedir la eliminación.
+      const ls = new AlmacenFalso({ ['telora_sync_cola:' + UID]: JSON.stringify([opA, opB]), ['telora_sync_base:' + UID]: '{"x":1}' });
+      const log = [];
+      let colaDuranteInvocar = 'sin-leer', vaciandoDuranteInvocar = null;
+      win.eval('syncCtx = { userId: "' + UID + '", deviceId: "dev-t2b", esEscritor: true }; syncVaciando = true;');
+      setTimeout(() => { log.push('termina-envio-en-vuelo'); win.eval('syncVaciando = false;'); }, 150);
+      const base = win.depsEliminarCuenta();
+      const deps = {
+        detenerSync: u => { const e = base.detenerSync(u); log.push('detenerSync'); return e; },
+        esperarSyncInactiva: () => base.esperarSyncInactiva(),
+        apartarSync: u => { log.push('apartar'); return win.apartarSyncCuenta(u, ls); },
+        restaurarSync: (u, g) => { log.push('restaurar'); win.restaurarSyncCuenta(u, g, ls); },
+        reanudarSync: () => log.push('reanudar'),
+        invocar: async () => {
+          log.push('invocar');
+          colaDuranteInvocar = ls.getItem('telora_sync_cola:' + UID);
+          vaciandoDuranteInvocar = win.eval('syncVaciando');
+          // Una escritura que intente salir mientras se invoca no pasa: la sync está detenida.
+          win.alGuardarEstadoSync(); await win.vaciarColaSync();
+          return { ok: true, verificacion: {} };
+        },
+        limpiarEstadoCuenta: () => log.push('limpiarEstado'),
+        cerrarSesion: async () => { log.push('cerrarSesion'); },
+        borrarDatosLocales: () => log.push('borrarLocal')
+      };
+      const r = await win.flujoEliminarCuenta(UID, false, deps);
+      const esperado = ['detenerSync', 'termina-envio-en-vuelo', 'apartar', 'invocar', 'limpiarEstado', 'cerrarSesion'];
+      assert(r.ok && JSON.stringify(log) === JSON.stringify(esperado) && win.eval('syncCtx') === null
+        && colaDuranteInvocar === null && vaciandoDuranteInvocar === false && envios === 0,
+        'T2b (e): éxito -> detener sync, ESPERAR el envío en vuelo, apartar la cola pendiente (2 ops) y recién entonces invocar; después cerrar sesión. Durante la invocación la cola no está en el almacenamiento y nada se envía',
+        JSON.stringify({ log, colaDuranteInvocar, vaciandoDuranteInvocar, envios }));
+
+      // (f) Falla la función: la sesión se mantiene, la cola vuelve (combinada con lo nuevo) y la sync se reanuda.
+      const ls2 = new AlmacenFalso({ ['telora_sync_cola:' + UID]: JSON.stringify([opA, opB]) });
+      const log2 = [];
+      const deps2 = { ...deps,
+        detenerSync: () => { log2.push('detenerSync'); return { realtime: true, escritura: true }; },
+        esperarSyncInactiva: async () => true,
+        apartarSync: u => { log2.push('apartar'); return win.apartarSyncCuenta(u, ls2); },
+        restaurarSync: (u, g) => { log2.push('restaurar'); win.restaurarSyncCuenta(u, g, ls2); },
+        reanudarSync: (u, e) => log2.push('reanudar:' + JSON.stringify(e)),
+        invocar: async () => {
+          log2.push('invocar');
+          ls2.setItem('telora_sync_cola:' + UID, JSON.stringify([opC]));   // otra pestaña encoló algo mientras tanto
+          return { ok: false, error: 'error_borrando_usuario' };
+        },
+        limpiarEstadoCuenta: () => log2.push('limpiarEstado'),
+        cerrarSesion: async () => { log2.push('cerrarSesion'); },
+        borrarDatosLocales: () => log2.push('borrarLocal')
+      };
+      const r2 = await win.flujoEliminarCuenta(UID, true, deps2);
+      const cola2 = JSON.parse(ls2.getItem('telora_sync_cola:' + UID) || '[]').map(o => o.clave);
+      assert(!r2.ok && r2.error === 'error_borrando_usuario'
+        && JSON.stringify(log2) === JSON.stringify(['detenerSync', 'apartar', 'invocar', 'restaurar', 'reanudar:{"realtime":true,"escritura":true}'])
+        && JSON.stringify(cola2) === JSON.stringify(['e1', 'g1', 'i1']),
+        'T2b (f): si la función falla, NO se cierra sesión ni se borra lo local; la cola apartada vuelve (combinada con lo encolado entretanto) y la sync se reanuda',
+        JSON.stringify({ r2, log2, cola2 }));
+
+      // (g) La invocación lanza (sin red): mismo camino de falla, código 'red'.
+      const log3 = [];
+      const r3 = await win.flujoEliminarCuenta(UID, false, { ...deps2,
+        detenerSync: () => ({ realtime: false, escritura: false }),
+        apartarSync: () => ({}),
+        restaurarSync: () => log3.push('restaurar'),
+        reanudarSync: () => log3.push('reanudar'),
+        invocar: async () => { throw new TypeError('Failed to fetch'); },
+        cerrarSesion: async () => log3.push('cerrarSesion')
+      });
+      assert(!r3.ok && r3.error === 'red' && JSON.stringify(log3) === JSON.stringify(['restaurar', 'reanudar']),
+        'T2b (g): si la invocación lanza (sin red), se restaura y reanuda la sync y la sesión sigue abierta',
+        JSON.stringify({ r3, log3 }));
+    }finally{
+      win.eval('syncCtx = null; syncVaciando = false;');
+      win.leerDuenoConfirmado = origE.leerDuenoConfirmado;
+      win.esPestanaLiderSync = origE.esPestanaLiderSync;
+      win.eval('syncTransporte').upsert = origE.upsert;
+    }
+
+    // ---- (h) Otro dispositivo: un 23503 al subir -> detener, cerrar sesión, avisar UNA vez, sin bucle ----
+    const alm = win.eval('syncAlmacen'), tr = win.eval('syncTransporte');
+    const origH = {
+      leerDuenoConfirmado: win.leerDuenoConfirmado, esPestanaLiderSync: win.esPestanaLiderSync,
+      limpiarEstadoSyncCuenta: win.limpiarEstadoSyncCuenta, renderCuentaUsuario: win.renderCuentaUsuario, showToast: win.showToast,
+      upsert: tr.upsert, leerCola: alm.leerCola, guardarCola: alm.guardarCola, leerFallidas: alm.leerFallidas, guardarFallidas: alm.guardarFallidas
+    };
+    win.__t2bSupaOrig = win.eval('supa');
+    try{
+      let cola = [opA], fallidas = [], envios = 0, signOuts = 0, limpiezas = [];
+      const toasts = [];
+      alm.leerCola = () => cola.slice(); alm.guardarCola = (u, c) => { cola = c; return true; };
+      alm.leerFallidas = () => fallidas.slice(); alm.guardarFallidas = (u, f) => { fallidas = f; return true; };
+      tr.upsert = async () => { envios++; return { error: err23503, status: 409 }; };
+      win.leerDuenoConfirmado = () => UID;
+      win.esPestanaLiderSync = () => true;
+      win.limpiarEstadoSyncCuenta = u => { limpiezas.push(u); return []; };
+      win.renderCuentaUsuario = () => {};
+      win.showToast = msg => toasts.push(msg);
+      win.__t2bSupaStub = {
+        auth: {
+          getSession: async () => ({ data: { session: { user: { id: UID } } } }),
+          signOut: async () => { signOuts++; return { error: null }; },
+          getUser: async () => ({ data: { user: null }, error: { code: 'user_not_found', status: 403, message: 'User from sub claim in JWT does not exist' } })
+        },
+        removeChannel(){}
+      };
+      win.eval('supa = window.__t2bSupaStub; cuentaEliminadaAvisada = false; syncCtx = { userId: "' + UID + '", deviceId: "dev-t2b", esEscritor: true };');
+      await win.vaciarColaSync();
+      await tick(30);
+      const primera = { envios, signOuts, toasts: toasts.slice(), fallidas: fallidas.length, syncCtx: win.eval('syncCtx'), reintento: win.eval('syncTimerReintento'), limpiezas: limpiezas.slice() };
+      // Segunda vuelta (p. ej. otra pestaña vuelve a activar la sync): nuevo 23503, sin repetir aviso ni cierre.
+      win.eval('syncCtx = { userId: "' + UID + '", deviceId: "dev-t2b", esEscritor: true };');
+      await win.vaciarColaSync();
+      await tick(30);
+      assert(primera.envios === 1 && primera.signOuts === 1 && primera.toasts.join() === 'Tu cuenta de Telora fue eliminada. Tus datos siguen en este dispositivo.'
+        && primera.fallidas === 0 && primera.syncCtx === null && primera.reintento === null && primera.limpiezas.join() === UID,
+        'T2b (h): stub que devuelve 23503 (FK de user_id) -> se detiene la sync (sin reintento ni fallidas), se limpia el estado de la cuenta, se cierra la sesión y se avisa «Tu cuenta de Telora fue eliminada…»',
+        JSON.stringify(primera));
+      assert(envios === 2 && signOuts === 1 && toasts.length === 1,
+        'T2b (h): un segundo 23503 no repite el aviso ni el cierre de sesión (una sola vez, sin bucle)',
+        JSON.stringify({ envios, signOuts, toasts: toasts.length }));
+
+      // (i) Cierre de sesión inesperado (refresco rechazado / otra pestaña): user_not_found -> mismo manejo; usuario vivo -> nada.
+      toasts.length = 0; signOuts = 0;
+      win.eval('cuentaEliminadaAvisada = false;');
+      await win.verificarCuentaTrasCierreInesperado({ userId: UID, token: 'token-prueba' });
+      await tick(30);
+      const eliminado = { toasts: toasts.slice(), signOuts };
+      win.eval('cuentaEliminadaAvisada = false;');
+      win.__t2bSupaStub.auth.getUser = async () => ({ data: { user: { id: UID } }, error: null });
+      toasts.length = 0;
+      await win.verificarCuentaTrasCierreInesperado({ userId: UID, token: 'token-prueba' });
+      await tick(30);
+      assert(eliminado.toasts.length === 1 && eliminado.signOuts === 1 && toasts.length === 0,
+        'T2b (i): sesión cerrada sin pedirla -> si auth responde user_not_found se avisa que la cuenta fue eliminada; si el usuario existe, no se muestra nada',
+        JSON.stringify({ eliminado, usuarioVivo: toasts.length }));
+    }finally{
+      win.eval('supa = window.__t2bSupaOrig; cuentaEliminadaAvisada = false; syncCtx = null;');
+      delete win.__t2bSupaOrig; delete win.__t2bSupaStub;
+      Object.assign(alm, { leerCola: origH.leerCola, guardarCola: origH.guardarCola, leerFallidas: origH.leerFallidas, guardarFallidas: origH.guardarFallidas });
+      tr.upsert = origH.upsert;
+      win.leerDuenoConfirmado = origH.leerDuenoConfirmado; win.esPestanaLiderSync = origH.esPestanaLiderSync;
+      win.limpiarEstadoSyncCuenta = origH.limpiarEstadoSyncCuenta; win.renderCuentaUsuario = origH.renderCuentaUsuario; win.showToast = origH.showToast;
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
