@@ -1215,6 +1215,8 @@ button{font-family:inherit;}
   width:100%; background:none; color:var(--danger); border:1px solid var(--danger); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; font-weight:600; cursor:pointer; margin-top:10px;
 }
+/* T2b: mismo tratamiento que los botones [disabled] de la lista de cuentas (.3). */
+.btn-danger:disabled{opacity:.3; cursor:default;}
 .btn-ghost{
   width:100%; background:none; color:var(--cream-dim); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; cursor:pointer; margin-top:8px;
@@ -2524,6 +2526,9 @@ button:active{ transform:scale(0.93); }
             Sesión iniciada como <strong id="cuentaUsuarioEmail" style="color:var(--cream);"></strong>
           </p>
           <button class="btn-ghost" id="btnLogout" style="margin-top:0;">Cerrar sesión</button>
+          <!-- T2b: eliminar la cuenta (exigido por Google Play y App Store). Sin conexión queda
+               deshabilitado y cambia de texto (actualizarBotonesEliminarCuenta). -->
+          <button class="btn-danger" id="btnEliminarCuenta">Eliminar mi cuenta</button>
         </div>
       </div>
     </details>
@@ -2783,6 +2788,28 @@ button:active{ transform:scale(0.93); }
     </p>
     <button class="btn-primary" id="btnLegadoSi">Sí, usar este dispositivo</button>
     <button class="btn-ghost" data-close>Ahora no</button>
+  </div>
+</div>
+
+<!-- SHEET: eliminar la cuenta de usuario (T2b). Se abre sobre Configuración; «Descargar
+     respaldo primero» abre la tarjeta de respaldo encima, sin cerrar este sheet. -->
+<div class="sheet-overlay" id="sheetEliminarCuenta">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Eliminar mi cuenta</h2>
+    <p class="sheet-note" style="margin-top:0;"><strong style="color:var(--cream);">Qué se borra:</strong> tu cuenta de Telora y todos los datos respaldados en la nube. Es permanente y no se puede deshacer.</p>
+    <p class="sheet-note"><strong style="color:var(--cream);">Qué no se borra:</strong> lo guardado en este dispositivo sigue aquí, salvo que marques la casilla de abajo.</p>
+    <button class="btn-ghost" id="btnEliminarCuentaRespaldo" style="margin-top:0;">Descargar respaldo primero</button>
+    <label class="check-row" style="margin-top:16px;">
+      <input type="checkbox" id="chkEliminarCuentaLocal"><span>Borrar también los datos de este dispositivo</span>
+    </label>
+    <div class="field">
+      <label for="inpEliminarCuentaConfirma">Para confirmar, escribe ELIMINAR</label>
+      <input type="text" id="inpEliminarCuentaConfirma" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <p class="sheet-note" id="eliminarCuentaError" role="alert" style="color:var(--danger);" hidden></p>
+    <button class="btn-danger" id="btnEliminarCuentaConfirmar" disabled>Eliminar mi cuenta para siempre</button>
+    <button class="btn-ghost" id="btnEliminarCuentaCancelar" data-close>Cancelar</button>
   </div>
 </div>
 
@@ -10498,15 +10525,20 @@ function showSaveErrorDialog(kind, attemptedJSON){
 /* ---- Tarjeta previa: resumen del contenido + Compartir (nativo, con archivo) / Descargar ---- */
 let pendingBackup = null;
 document.getElementById('btnBackupData').onclick = ()=>{
+  closeSheet('sheetConfig');
+  abrirTarjetaRespaldo();
+};
+// Arma el respaldo y abre su tarjeta (Compartir / Descargar). T2b: también se abre desde
+// el sheet de eliminar la cuenta, apilada encima y sin cerrarlo.
+function abrirTarjetaRespaldo(){
   pendingBackup = buildBackupFile();
   document.getElementById('backupSummaryText').textContent = backupSummaryLine();
   document.getElementById('backupFilenameText').textContent = pendingBackup.filename;
   let canShareFiles = false;
   try{ canShareFiles = !!(pendingBackup.file && navigator.canShare && navigator.canShare({files:[pendingBackup.file]})); }catch(_){}
   document.getElementById('btnBackupShare').style.display = canShareFiles ? 'block' : 'none';
-  closeSheet('sheetConfig');
   openSheet('sheetBackupShare');
-};
+}
 document.getElementById('btnBackupShare').onclick = async ()=>{
   if(!pendingBackup || !pendingBackup.file) return;
   try{
@@ -14661,6 +14693,8 @@ async function vaciarColaSync(){
       if(!lote.length){ programarReintentoSync(ctx.userId); return; }
       const res = await enviarLoteSync(ctx, lote);
       if(syncCtx !== ctx) return;
+      // T2b: la cuenta fue eliminada (desde otro dispositivo u otra pestaña): no se reintenta.
+      if(esErrorCuentaEliminada(res)){ manejarCuentaEliminadaEnServidor(ctx.userId); return; }
       const tipo = clasificarRespuestaSync(res);
       if(tipo === 'ok'){ quitarDeColaSync(ctx.userId, lote); continue; }
       if(tipo === 'red'){
@@ -14674,6 +14708,7 @@ async function vaciarColaSync(){
       for(const op of lote){
         const r = await enviarLoteSync(ctx, [op]);
         if(syncCtx !== ctx) return;
+        if(esErrorCuentaEliminada(r)){ manejarCuentaEliminadaEnServidor(ctx.userId); return; }
         const t = clasificarRespuestaSync(r);
         if(t === 'ok') quitarDeColaSync(ctx.userId, [op]);
         else if(t === 'permanente') moverAFallidasSync(ctx.userId, op, r);
@@ -14925,14 +14960,27 @@ document.getElementById('btnConflictoDuenoOk').onclick = ()=>{
   document.getElementById('dlgConflictoDueno').classList.remove('open');
 };
 
+// T2b: última sesión vista en esta carga y cierre de sesión pedido por esta pestaña. Van
+// antes de crear el cliente porque onAuthStateChange los lee.
+let sesionConocida = null;        // { userId, token }
+let cierreSesionPropio = false;   // true mientras esta pestaña cierra la sesión a propósito
+
 try{
   if(typeof supabase !== 'undefined' && supabase.createClient){
     supa = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     supa.auth.onAuthStateChange((event, session)=>{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
-      if(session) intentarSubidaInicial(session);
-      else { desactivarRealtime(); detenerEscrituraContinua(); }   // sesión cerrada (acá, en otra pestaña o por expiración)
+      if(session){
+        sesionConocida = { userId: session.user && session.user.id, token: session.access_token };
+        intentarSubidaInicial(session);
+      } else {
+        desactivarRealtime(); detenerEscrituraContinua();   // sesión cerrada (acá, en otra pestaña o por expiración)
+        // T2b: cierre que esta pestaña no pidió (otra pestaña, refresco rechazado): ¿se eliminó la cuenta?
+        const previa = sesionConocida;
+        sesionConocida = null;
+        if(previa && previa.userId && !cierreSesionPropio) setTimeout(()=> verificarCuentaTrasCierreInesperado(previa), 0);
+      }
     });
     supa.auth.getSession().then(({ data, error })=>{
       renderCuentaUsuario(data && data.session);
@@ -14970,11 +15018,284 @@ document.getElementById('btnLogout').onclick = async ()=>{
   detenerEscrituraContinua();   // Tanda 4a: base y cola quedan guardadas bajo su user_id
   // scope 'local': cierra la sesión en este dispositivo aunque no haya red (el default
   // 'global' pide al servidor revocar todas las sesiones y puede fallar sin conexión).
+  cierreSesionPropio = true;
   try{ await supa.auth.signOut({ scope: 'local' }); }
   catch(e){ console.warn('Cuenta de usuario: signOut', e); }
+  finally{ cierreSesionPropio = false; }
   renderCuentaUsuario(null);
   showToast('Sesión cerrada. Tus datos siguen en este dispositivo.');
 };
+
+/* ==================== ELIMINAR MI CUENTA (T2b) ====================
+   La Edge Function «eliminar-cuenta» borra el usuario de auth (las 9 tablas caen por
+   ON DELETE CASCADE) y verifica 0 filas; el uid lo saca solo del JWT. Acá, antes de
+   invocarla: se detiene la sync de esta pestaña, se espera a que termine cualquier envío
+   ya en vuelo y se aparta a memoria la cola (con base y fallidas). Si la función falla,
+   se restaura y se reanuda; si funciona, se descarta para siempre y se cierra la sesión.
+   Lo que otra pestaña u otro dispositivo intente subir después del borrado choca con la FK
+   de user_id (23503): manejarCuentaEliminadaEnServidor() lo detecta y cierra la sesión. */
+const TEXTO_CONFIRMAR_ELIMINAR = 'ELIMINAR';
+const MSG_CUENTA_ELIMINADA_SERVIDOR = 'Tu cuenta de Telora fue eliminada. Tus datos siguen en este dispositivo.';
+const CLAVE_TOAST_TRAS_RECARGA = 'telora_toast_tras_recarga';   // sessionStorage, no localStorage
+const PREFIJOS_SYNC_CUENTA = ['telora_sync_base:', 'telora_sync_cola:', 'telora_sync_fallidas:'];
+
+function confirmacionEliminarValida(texto){ return String(texto == null ? '' : texto).trim() === TEXTO_CONFIRMAR_ELIMINAR; }
+function estadoBotonEliminarCuenta(enLinea){
+  return enLinea ? { disabled: false, texto: 'Eliminar mi cuenta' }
+                 : { disabled: true, texto: 'Necesitas conexión para eliminar tu cuenta' };
+}
+
+// 23503 contra auth.users: el user_id ya no existe. La otra FK (goal_aportes -> goals)
+// también da 23503, pero su detalle nombra la tabla "goals", no "users".
+function esErrorCuentaEliminada(res){
+  const e = res && res.error;
+  if(!e || String(e.code) !== '23503') return false;
+  return /table "users"/.test(String(e.details || '') + ' ' + String(e.message || ''));
+}
+function esErrorUsuarioInexistente(err){
+  return !!err && (err.code === 'user_not_found' || /user.*(not found|does not exist)/i.test(String(err.message || '')));
+}
+
+// Claves de sync y marcas de sesión de ESA cuenta (los datos financieros no se tocan).
+// Devuelve las claves que borró.
+function limpiarEstadoSyncCuenta(userId){
+  const claves = PREFIJOS_SYNC_CUENTA.map(p => p + userId);
+  [CLAVE_DUENO_CONFIRMADO, CLAVE_SUBIDA_PENDIENTE, CLAVE_PULL_PENDIENTE, CLAVE_CONFLICTO_ADVERTIDO].forEach(k => {
+    try{ if(localStorage.getItem(k) === userId) claves.push(k); }catch(_){}
+  });
+  claves.forEach(k => { try{ localStorage.removeItem(k); }catch(_){} });
+  return claves;
+}
+
+// Otro dispositivo/pestaña eliminó la cuenta: se detiene todo, se conservan los datos
+// locales, se cierra la sesión y se avisa UNA sola vez por carga (sin reintentos en bucle).
+let cuentaEliminadaAvisada = false;
+async function manejarCuentaEliminadaEnServidor(userId){
+  if(cuentaEliminadaAvisada) return;
+  cuentaEliminadaAvisada = true;
+  console.info('[Sync] la cuenta ya no existe en el servidor: se detiene la sincronización y se cierra la sesión.');
+  desactivarRealtime();
+  detenerEscrituraContinua();
+  limpiarEstadoSyncCuenta(userId);
+  cierreSesionPropio = true;
+  try{ if(supa) await supa.auth.signOut({ scope: 'local' }); }
+  catch(e){ console.warn('Cuenta de usuario: signOut', e); }
+  finally{ cierreSesionPropio = false; }
+  renderCuentaUsuario(null);
+  showToast(MSG_CUENTA_ELIMINADA_SERVIDOR, null, 6000);
+}
+// La sesión se cerró sin que esta pestaña lo pidiera. Con el último access token (si aún
+// no vence) se pregunta a auth si el usuario existe: user_not_found = cuenta eliminada.
+// Otras causas (cierre en otra pestaña, token vencido) no muestran nada nuevo.
+async function verificarCuentaTrasCierreInesperado(previa){
+  if(!supa || !previa || !previa.token || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  try{
+    const { error } = await supa.auth.getUser(previa.token);
+    if(esErrorUsuarioInexistente(error)) manejarCuentaEliminadaEnServidor(previa.userId);
+  }catch(_){}
+}
+
+// Orquestación con dependencias inyectables (tests.html las reemplaza por stubs).
+// Orden: detener sync -> esperar envíos en vuelo -> apartar cola -> invocar ->
+//   ok:    limpiar estado de la cuenta -> cerrar sesión -> (casilla) borrar datos locales
+//   falla: restaurar cola -> reanudar sync (la sesión se mantiene)
+async function flujoEliminarCuenta(userId, borrarLocal, d){
+  const estadoSync = d.detenerSync(userId);
+  const libre = await d.esperarSyncInactiva();
+  let apartado = null, res;
+  if(!libre) res = { ok: false, error: 'sync_ocupada' };
+  else {
+    apartado = d.apartarSync(userId);
+    try{ res = await d.invocar(); }
+    catch(e){ res = { ok: false, error: 'red' }; }
+  }
+  if(!res || !res.ok){
+    if(apartado) d.restaurarSync(userId, apartado);
+    d.reanudarSync(userId, estadoSync);
+    return { ok: false, error: (res && res.error) || 'desconocido' };
+  }
+  d.limpiarEstadoCuenta(userId);
+  await d.cerrarSesion();
+  if(borrarLocal) d.borrarDatosLocales();
+  return { ok: true };
+}
+
+// Saca de `ls` la base, la cola y las fallidas de la cuenta y las devuelve (texto crudo):
+// mientras se invoca la función, ninguna pestaña puede enviar esas escrituras.
+function apartarSyncCuenta(userId, ls){
+  const guardado = {};
+  PREFIJOS_SYNC_CUENTA.forEach(p => {
+    const k = p + userId;
+    try{ guardado[k] = ls.getItem(k); if(guardado[k] !== null) ls.removeItem(k); }catch(_){ guardado[k] = null; }
+  });
+  return guardado;
+}
+// Devuelve lo apartado. Si mientras tanto otra pestaña encoló algo, se combina (coalescerOps:
+// lo más nuevo gana); fallidas se suman; la base solo se repone si no hay otra.
+function restaurarSyncCuenta(userId, guardado, ls){
+  const parse = s => { try{ return s ? JSON.parse(s) : null; }catch(_){ return null; } };
+  Object.keys(guardado || {}).forEach(k => {
+    const antes = guardado[k];
+    if(antes === null || antes === undefined) return;
+    try{
+      const ahora = ls.getItem(k);
+      if(ahora === null) ls.setItem(k, antes);
+      else if(k.startsWith('telora_sync_cola:')) ls.setItem(k, JSON.stringify(coalescerOps(parse(antes) || [], parse(ahora) || [])));
+      else if(k.startsWith('telora_sync_fallidas:')) ls.setItem(k, JSON.stringify((parse(antes) || []).concat(parse(ahora) || []).slice(-100)));
+    }catch(e){ console.warn('[Sync] no se pudo restaurar ' + k, e); }
+  });
+}
+
+// Borrado local (solo si se marcó la casilla): todo localStorage del origen salvo el
+// device_id — misfinanzas_* (datos, avisos, build, instalación), telora_* (marcas y sync) y
+// la sesión de Supabase si quedara. Después se recarga en estado de primera apertura.
+function borrarDatosLocalesTelora(ls){
+  const borradas = [];
+  try{
+    for(let i = ls.length - 1; i >= 0; i--){
+      const k = ls.key(i);
+      if(k !== null && k !== 'telora_device_id') borradas.push(k);
+    }
+    borradas.forEach(k => ls.removeItem(k));
+  }catch(e){ console.warn('No se pudieron borrar los datos locales', e); }
+  return borradas;
+}
+
+// Envíos de sync que ya salieron (o cálculo/activación a medias): se espera a que terminen
+// antes de invocar la función. Tope de 15 s.
+async function esperarSyncInactiva(topeMs = 15000){
+  const inicio = Date.now();
+  while(syncVaciando || syncProcesando || syncActivando){
+    if(Date.now() - inicio > topeMs) return false;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return true;
+}
+
+function depsEliminarCuenta(){
+  return {
+    detenerSync(userId){
+      const estado = { realtime: rtUserId === userId, escritura: !!(syncCtx && syncCtx.userId === userId) };
+      desactivarRealtime();
+      detenerEscrituraContinua();
+      return estado;
+    },
+    esperarSyncInactiva: () => esperarSyncInactiva(),
+    apartarSync: userId => apartarSyncCuenta(userId, localStorage),
+    restaurarSync: (userId, guardado) => restaurarSyncCuenta(userId, guardado, localStorage),
+    reanudarSync(userId, estado){
+      if(estado && estado.realtime) activarRealtime(userId);
+      if(estado && estado.escritura) activarEscrituraContinua(userId, getDeviceId());
+    },
+    async invocar(){
+      const { data, error } = await supa.functions.invoke('eliminar-cuenta', { method: 'POST', body: {} });
+      if(error){
+        let codigo = (error.name === 'FunctionsFetchError') ? 'red' : 'error';
+        try{ const j = await error.context.json(); if(j && j.error) codigo = j.error; }catch(_){}
+        return { ok: false, error: codigo };
+      }
+      return (data && data.ok) ? data : { ok: false, error: (data && data.error) || 'respuesta_invalida' };
+    },
+    limpiarEstadoCuenta: userId => limpiarEstadoSyncCuenta(userId),
+    async cerrarSesion(){
+      cuentaEliminadaAvisada = true;   // esta pestaña ya sabe: no repetir el aviso de "eliminada en otro lado"
+      cierreSesionPropio = true;
+      try{ await supa.auth.signOut({ scope: 'local' }); }
+      catch(e){ console.warn('Cuenta de usuario: signOut', e); }
+      finally{ cierreSesionPropio = false; }
+      renderCuentaUsuario(null);
+    },
+    borrarDatosLocales(){
+      const borradas = borrarDatosLocalesTelora(localStorage);
+      console.info('[Eliminar cuenta] claves locales borradas: ' + borradas.join(', '));
+      try{ sessionStorage.setItem(CLAVE_TOAST_TRAS_RECARGA, 'Tu cuenta fue eliminada'); }catch(_){}
+      location.reload();
+    }
+  };
+}
+
+function mensajeErrorEliminarCuenta(codigo){
+  if(codigo === 'sync_ocupada') return 'Tus datos se están sincronizando. Espera unos segundos e inténtalo de nuevo.';
+  if(codigo === 'subida_en_curso') return 'Todavía se están subiendo tus datos a la nube. Espera a que termine e inténtalo de nuevo.';
+  if(codigo === 'sin_conexion' || codigo === 'red') return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
+  if(codigo === 'no_autenticado' || codigo === 'sin_sesion') return 'Tu sesión expiró. Cierra sesión, vuelve a entrar e inténtalo de nuevo.';
+  return 'No se pudo eliminar tu cuenta. Inténtalo de nuevo más tarde.';
+}
+function mostrarErrorEliminarCuenta(codigo){
+  const p = document.getElementById('eliminarCuentaError');
+  p.textContent = mensajeErrorEliminarCuenta(codigo) + ' Si el problema sigue, escríbenos a ';
+  const a = document.createElement('a');
+  a.className = 'legal-link';
+  a.href = 'mailto:privacidad@telora.cl';
+  a.textContent = 'privacidad@telora.cl';
+  p.append(a, ' desde el correo de tu cuenta.');
+  p.hidden = false;
+}
+
+let eliminandoCuenta = false;
+function actualizarBotonesEliminarCuenta(enLinea = navigator.onLine !== false){
+  const est = estadoBotonEliminarCuenta(enLinea);
+  const btn = document.getElementById('btnEliminarCuenta');
+  btn.disabled = est.disabled;
+  btn.textContent = est.texto;
+  const conf = document.getElementById('btnEliminarCuentaConfirmar');
+  if(!eliminandoCuenta){
+    conf.disabled = !enLinea || !confirmacionEliminarValida(document.getElementById('inpEliminarCuentaConfirma').value);
+    conf.textContent = enLinea ? 'Eliminar mi cuenta para siempre' : est.texto;
+  }
+}
+window.addEventListener('online', ()=> actualizarBotonesEliminarCuenta(true));
+window.addEventListener('offline', ()=> actualizarBotonesEliminarCuenta(false));
+actualizarBotonesEliminarCuenta();
+
+document.getElementById('btnEliminarCuenta').onclick = ()=>{
+  if(navigator.onLine === false) return;
+  document.getElementById('inpEliminarCuentaConfirma').value = '';
+  document.getElementById('chkEliminarCuentaLocal').checked = false;
+  document.getElementById('eliminarCuentaError').hidden = true;
+  actualizarBotonesEliminarCuenta();
+  openSheet('sheetEliminarCuenta');
+};
+document.getElementById('inpEliminarCuentaConfirma').addEventListener('input', ()=> actualizarBotonesEliminarCuenta());
+document.getElementById('btnEliminarCuentaRespaldo').onclick = ()=> abrirTarjetaRespaldo();
+document.getElementById('btnEliminarCuentaConfirmar').onclick = async ()=>{
+  if(eliminandoCuenta || !confirmacionEliminarValida(document.getElementById('inpEliminarCuentaConfirma').value)) return;
+  document.getElementById('eliminarCuentaError').hidden = true;
+  if(!supa || navigator.onLine === false){ mostrarErrorEliminarCuenta('sin_conexion'); return; }
+  const { data } = await supa.auth.getSession();
+  const userId = data && data.session && data.session.user && data.session.user.id;
+  if(!userId){ mostrarErrorEliminarCuenta('sin_sesion'); return; }
+  if(leerSubidaPendiente() === userId || leerPullPendiente() === userId){ mostrarErrorEliminarCuenta('subida_en_curso'); return; }
+  const borrarLocal = document.getElementById('chkEliminarCuentaLocal').checked;
+  const sheet = document.getElementById('sheetEliminarCuenta');
+  const conf = document.getElementById('btnEliminarCuentaConfirmar');
+  eliminandoCuenta = true;
+  sheet.setAttribute('data-nodismiss', '');   // mientras se elimina, no se cierra con swipe/fondo/Escape
+  document.getElementById('btnEliminarCuentaCancelar').disabled = true;
+  conf.disabled = true;
+  conf.textContent = 'Eliminando…';
+  let r;
+  try{ r = await flujoEliminarCuenta(userId, borrarLocal, depsEliminarCuenta()); }
+  catch(e){ console.warn('[Eliminar cuenta] error inesperado', e); r = { ok: false, error: 'desconocido' }; }
+  eliminandoCuenta = false;
+  sheet.removeAttribute('data-nodismiss');
+  document.getElementById('btnEliminarCuentaCancelar').disabled = false;
+  actualizarBotonesEliminarCuenta();
+  if(!r.ok){
+    console.warn('[Eliminar cuenta] no se pudo eliminar: ' + r.error);
+    mostrarErrorEliminarCuenta(r.error);
+    return;
+  }
+  if(borrarLocal) return;   // borrarDatosLocales() ya recargó la app; el toast sale tras la recarga
+  closeSheet('sheetEliminarCuenta');
+  closeSheet('sheetConfig');
+  showToast('Tu cuenta fue eliminada', 'success');
+};
+// Toast pendiente de una recarga tras borrar los datos locales.
+try{
+  const t = sessionStorage.getItem(CLAVE_TOAST_TRAS_RECARGA);
+  if(t){ sessionStorage.removeItem(CLAVE_TOAST_TRAS_RECARGA); showToast(t, 'success'); }
+}catch(_){}
 </script>
 </body>
 </html>
