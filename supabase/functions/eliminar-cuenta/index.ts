@@ -1,22 +1,24 @@
 /* Edge Function «eliminar-cuenta» (Telora · T2b)
    ------------------------------------------------------------------------------------------
    REQUISITOS DE DESPLIEGUE (no omitir):
-     1. Desplegar con «Verify JWT» ACTIVADO. El gateway de Supabase verifica la firma del JWT
-        antes de llegar acá; esta función igual valida el usuario con auth.getUser y, solo si el
-        usuario ya no existe (reintento tras un borrado exitoso), se apoya en esa verificación
-        para leer el uid del token ya verificado.
-     2. Usa SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY, que Supabase inyecta por defecto en toda
-        Edge Function. No se crea ningún secret a mano y la service role NUNCA va al cliente
-        ni al repositorio.
+     1. «Verify JWT with legacy secret» = OFF; la autenticación se hace aquí. El proyecto ya
+        no usa el secreto JWT legacy, así que el gateway no verifica nada: esta función valida
+        el usuario con auth.getUser(jwt) y, en el caso idempotente (usuario ya inexistente),
+        verifica la firma del token con auth.getClaims (JWKS del proyecto) antes de usar su sub.
+     2. Usa SUPABASE_URL y la clave secreta que Supabase inyecta por defecto en toda Edge
+        Function: primero SUPABASE_SECRET_KEYS (diccionario JSON; la clave "default" o, si no
+        existe, la primera) y, solo como respaldo, SUPABASE_SERVICE_ROLE_KEY (variable legacy).
+        No se crea ningún secret a mano y la clave secreta NUNCA va al cliente ni al repositorio.
 
    Qué hace (solo POST; el uid sale SOLO del JWT, jamás del cuerpo de la petición):
      1. Obtiene el usuario con el JWT del header Authorization. Sin JWT válido -> 401.
      2. auth.admin.deleteUser(uid, false): borrado real (no soft delete). Las 9 tablas tienen
         FK user_id -> auth.users(id) ON DELETE CASCADE, así que sus filas se van con el usuario
         y, desde ese instante, ningún insert con ese user_id puede volver a entrar (23503).
-     3. Verifica con la service role que las 9 tablas quedaron en 0 filas para ese uid. Si alguna
-        tuviera filas, las borra explícitamente (goal_aportes antes que goals) y lo informa.
-   Idempotente: si el usuario ya no existe en auth, solo verifica 0 filas y responde ok.
+     3. Verifica con la clave secreta que las 9 tablas quedaron en 0 filas para ese uid. Si
+        alguna tuviera filas, las borra explícitamente (goal_aportes antes que goals) y lo informa.
+   Idempotente: si el usuario ya no existe en auth (y la firma del token es válida), solo
+   verifica 0 filas y responde ok.
    Respuesta: { ok, verificacion: { tabla: 0, ... }, borradasExplicitas?: { tabla: n } }.
    Logs sin datos personales: solo el uid truncado. */
 
@@ -55,16 +57,48 @@ function responder(origen: string | null, status: number, cuerpo: unknown): Resp
 
 const uidCorto = (uid: string) => uid.slice(0, 8) + "…";
 
-// Payload del JWT (ya verificado por el gateway con «Verify JWT»). Solo se usa cuando
-// auth.getUser responde que el usuario no existe: el caso idempotente de un reintento.
-function claimsDelToken(jwt: string): Record<string, unknown> | null {
-  try {
-    const parte = jwt.split(".")[1];
-    const b64 = parte.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(parte.length / 4) * 4, "=");
-    return JSON.parse(atob(b64));
-  } catch (_) {
-    return null;
+// <puro> — Lógica pura sin Deno ni red. tests.html extrae este bloque, le quita las
+// anotaciones de tipo de los parámetros (solo «nombre: tipo» simples, sin tipo de retorno)
+// y lo prueba en el navegador. Mantenerlo así.
+
+// Clave secreta a partir de SUPABASE_SECRET_KEYS ({"default": "sb_secret_…", …}) y, como
+// respaldo, SUPABASE_SERVICE_ROLE_KEY (legacy). -> { clave, fuente, invalido }: clave "" y
+// fuente "ninguna" si no hay ninguna; invalido = SUPABASE_SECRET_KEYS no era JSON.
+function elegirClaveSecreta(dicTexto: string, legacy: string) {
+  let invalido = false;
+  if (dicTexto) {
+    try {
+      const o = JSON.parse(dicTexto);
+      if (o && typeof o === "object" && !Array.isArray(o)) {
+        if (typeof o.default === "string" && o.default) return { clave: o.default, fuente: "default", invalido };
+        const primera = Object.values(o).find((v) => typeof v === "string" && v !== "");
+        if (typeof primera === "string") return { clave: primera, fuente: "primera", invalido };
+      }
+    } catch (_) {
+      invalido = true;
+    }
   }
+  return legacy ? { clave: legacy, fuente: "legacy", invalido } : { clave: "", fuente: "ninguna", invalido };
+}
+
+// Claims YA VERIFICADOS (firma) de un token de usuario: exige sub, role = authenticated y
+// exp vigente (ahora en segundos). Nunca se llama con claims sin verificar.
+// deno-lint-ignore no-explicit-any
+function claimsDeUsuarioValidos(c: any, ahora: number) {
+  return !!c && typeof c.sub === "string" && c.sub !== "" && c.role === "authenticated" &&
+    typeof c.exp === "number" && c.exp > ahora;
+}
+// </puro>
+
+// JWKS del proyecto que Supabase inyecta (SUPABASE_JWKS = {"keys": [...]}). Si no está o no
+// es JSON, getClaims los descarga del endpoint JWKS del proyecto.
+// deno-lint-ignore no-explicit-any
+function jwksDelProyecto(): { keys: any[] } | undefined {
+  try {
+    const j = JSON.parse(Deno.env.get("SUPABASE_JWKS") ?? "");
+    if (j && Array.isArray(j.keys) && j.keys.length) return { keys: j.keys };
+  } catch (_) { /* sin JWKS inyectado */ }
+  return undefined;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -88,9 +122,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = Deno.env.get("SUPABASE_URL");
-  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !serviceRole) {
-    console.error("[eliminar-cuenta] faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+  const sel = elegirClaveSecreta(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  if (sel.invalido) console.error("[eliminar-cuenta] SUPABASE_SECRET_KEYS no es JSON válido; se intenta el respaldo legacy");
+  if (!url || !sel.clave) {
+    console.error("[eliminar-cuenta] faltan SUPABASE_URL o la clave secreta (SUPABASE_SECRET_KEYS / SUPABASE_SERVICE_ROLE_KEY)");
     return responder(origen, 500, { ok: false, error: "configuracion_incompleta" });
   }
 
@@ -98,7 +133,7 @@ Deno.serve(async (req: Request) => {
   const jwt = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!jwt) return responder(origen, 401, { ok: false, error: "no_autenticado" });
 
-  const admin = createClient(url, serviceRole, {
+  const admin = createClient(url, sel.clave, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
@@ -109,13 +144,19 @@ Deno.serve(async (req: Request) => {
   if (!errUsuario && datosUsuario?.user?.id) {
     uid = datosUsuario.user.id;
   } else if (esUsuarioInexistente(errUsuario)) {
-    // Token con firma válida (Verify JWT) de un usuario que ya no existe: reintento idempotente.
-    const c = claimsDelToken(jwt);
-    const ahora = Math.floor(Date.now() / 1000);
-    if (!c || typeof c.sub !== "string" || c.role !== "authenticated" || typeof c.exp !== "number" || c.exp <= ahora) {
+    // Reintento idempotente: el usuario ya no existe. Sin gateway que verifique, la firma se
+    // verifica aquí (getClaims con el JWKS del proyecto) antes de confiar en el sub.
+    let claims: unknown = null;
+    try {
+      const { data: dc, error: errClaims } = await admin.auth.getClaims(jwt, jwksDelProyecto());
+      if (!errClaims && dc?.claims) claims = dc.claims;
+    } catch (_) {
+      claims = null;
+    }
+    if (!claimsDeUsuarioValidos(claims, Math.floor(Date.now() / 1000))) {
       return responder(origen, 401, { ok: false, error: "no_autenticado" });
     }
-    uid = c.sub;
+    uid = (claims as { sub: string }).sub;
     usuarioExiste = false;
   } else {
     return responder(origen, 401, { ok: false, error: "no_autenticado" });

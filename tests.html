@@ -2026,6 +2026,54 @@ async function runTests(){
     }
   }
 
+  // ==================== T2b — Edge Function: lógica pura de index.ts ====================
+  // Se lee el index.ts REAL (mismo origen, archivo local), se extrae el bloque // <puro> …
+  // // </puro>, se quitan las anotaciones «nombre: tipo» de los parámetros y se evalúa aquí.
+  {
+    let puro = null, detalleCarga = '';
+    try{
+      const txt = await (await fetch('supabase/functions/eliminar-cuenta/index.ts', { cache: 'no-store' })).text();
+      const m = txt.match(/\/\/ <puro>[\s\S]*?\n\/\/ <\/puro>/);
+      if(!m) throw new Error('no se encontró el bloque <puro>');
+      const js = m[0].replace(/(\w)\s*:\s*(?:any|number|string|boolean)(?=\s*[,)])/g, '$1');
+      puro = new Function(js + '\nreturn { elegirClaveSecreta, claimsDeUsuarioValidos };')();
+    }catch(e){ detalleCarga = e.message; }
+    assert(!!puro && typeof puro.elegirClaveSecreta === 'function' && typeof puro.claimsDeUsuarioValidos === 'function',
+      'T2b (k): el bloque «puro» de supabase/functions/eliminar-cuenta/index.ts se extrae y evalúa', detalleCarga);
+    if(puro){
+      const f = puro.elegirClaveSecreta;
+      const r = {
+        conDefault:   f('{"default":"sb_secret_A","otra":"sb_secret_B"}', 'LEGACY'),
+        sinDefault:   f('{"telora":"sb_secret_B","x":"sb_secret_C"}', 'LEGACY'),
+        defaultVacio: f('{"default":"","x":"sb_secret_C"}', ''),
+        vacio:        f('', 'LEGACY'),
+        objetoVacio:  f('{}', 'LEGACY'),
+        invalido:     f('{no es json', 'LEGACY'),
+        arreglo:      f('["sb_secret_Z"]', 'LEGACY'),
+        nada:         f('', '')
+      };
+      const ok =
+        r.conDefault.clave === 'sb_secret_A' && r.conDefault.fuente === 'default' &&
+        r.sinDefault.clave === 'sb_secret_B' && r.sinDefault.fuente === 'primera' &&
+        r.defaultVacio.clave === 'sb_secret_C' &&
+        r.vacio.clave === 'LEGACY' && r.vacio.fuente === 'legacy' && !r.vacio.invalido &&
+        r.objetoVacio.clave === 'LEGACY' &&
+        r.invalido.clave === 'LEGACY' && r.invalido.invalido === true &&
+        r.arreglo.clave === 'LEGACY' &&
+        r.nada.clave === '' && r.nada.fuente === 'ninguna';
+      assert(ok, 'T2b (k): elegirClaveSecreta — con "default", sin "default" (la primera), vacío, JSON inválido (respaldo legacy + aviso) y sin ninguna (-> configuracion_incompleta)',
+        JSON.stringify(r));
+      const v = puro.claimsDeUsuarioValidos, ahora = 1790000000;
+      const c = { sub: 'uid-x', role: 'authenticated', exp: ahora + 60 };
+      const rc = {
+        valido: v(c, ahora), anon: v({ ...c, role: 'anon' }, ahora), serviceRole: v({ ...c, role: 'service_role' }, ahora),
+        vencido: v({ ...c, exp: ahora }, ahora), sinSub: v({ ...c, sub: '' }, ahora), expTexto: v({ ...c, exp: String(ahora + 60) }, ahora), nulo: v(null, ahora)
+      };
+      assert(rc.valido && !rc.anon && !rc.serviceRole && !rc.vencido && !rc.sinSub && !rc.expTexto && !rc.nulo,
+        'T2b (k): claimsDeUsuarioValidos exige sub, role = authenticated y exp vigente', JSON.stringify(rc));
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
