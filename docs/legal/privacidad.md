@@ -78,7 +78,7 @@ Puedes ejercer en cualquier momento tus derechos de **acceso, rectificación, su
 
 - Responderemos en un plazo máximo de 30 días corridos, prorrogable por otros 30 si la solicitud lo justifica, con aviso previo.
 - Ejercer tus derechos es gratuito.
-- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo de datos), exportar a Excel y cerrar sesión.
+- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo de datos), exportar a Excel, cerrar sesión y eliminar tu cuenta desde Configuración → Cuenta de usuario.
 
 Si consideras que no se respetaron tus derechos, puedes reclamar ante la Agencia de Protección de Datos Personales.
 
