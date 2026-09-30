@@ -15291,6 +15291,16 @@ document.getElementById('btnEliminarCuentaConfirmar').onclick = async ()=>{
   closeSheet('sheetConfig');
   showToast('Tu cuenta fue eliminada', 'success');
 };
+// Otra pestaña borró los datos locales (eliminar cuenta con la casilla marcada): esta se
+// recarga para que su `state` en memoria no los vuelva a escribir. El evento storage nunca
+// llega a la pestaña que hizo el cambio, y una restauración escribe un valor (no null), así
+// que ninguna de las dos lo dispara.
+function debeRecargarPorBorradoLocal(e){
+  return !!e && e.key === 'misfinanzas_data' && e.newValue === null && e.oldValue !== null;
+}
+function recargarPorBorradoLocal(){ location.reload(); }
+window.addEventListener('storage', e => { if(debeRecargarPorBorradoLocal(e)) recargarPorBorradoLocal(); });
+
 // Toast pendiente de una recarga tras borrar los datos locales.
 try{
   const t = sessionStorage.getItem(CLAVE_TOAST_TRAS_RECARGA);
