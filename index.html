@@ -11445,6 +11445,8 @@ function xlTabla(ws, fila0, col0, cols, filas, anchos){
     anchos[col0 + j] = Math.max(anchos[col0 + j] || 0, c.header.length + 6);
   });
   filas.forEach((f, i)=>{
+    // null = fila separadora vacía (Detalle por mes: entre previos y reales).
+    if(f === null) return;
     const fila = ws.getRow(fila0 + 1 + i);
     // Proyectado y "Anterior al registro" (Detalle por mes) comparten el estilo atenuado.
     const proyectado = f.estado === 'Proyectado' || f.estado === 'Anterior al registro';
@@ -11684,17 +11686,21 @@ function construirLibroExcel(ExcelJS, datos, logo){
     ];
     // estado 'Anterior al registro' pinta la fila atenuada (mismo estilo que los proyectados).
     const filasMes = filasDetalle.map(m=> ({ ...m, estadoMes: m.estado }));
+    // Los meses previos van siempre antes que los reales. Si hay de ambos, una fila vacía
+    // los separa: así el SUM del total (solo filas reales) no tiene números justo encima y
+    // Excel no marca "la fórmula omite celdas adyacentes".
+    const nPrevios = filasDetalle.filter(m=> m.grupo === 'previo').length;
+    const conSeparador = nPrevios > 0 && R.hayReales;
+    if(conSeparador) filasMes.splice(nPrevios, 0, null);
     const rm = xlTabla(ws, f, 2, colsMes, filasMes, anchosR);
     // Los dos encabezados nuevos ocupan dos líneas: fila más alta y columnas H e I más
     // anchas (con 17 "Cuotas pendientes (no descontadas)" se partía en tres y se cortaba).
     ws.getRow(f).height = 32;
     ws.getColumn(8).width = 21;
     ws.getColumn(9).width = 21;
-    // Los meses previos van siempre antes que los reales: el total (SUM) cubre solo las
-    // filas reales, que son las últimas de la tabla.
-    const nPrevios = filasDetalle.filter(m=> m.grupo === 'previo').length;
+    // El total (SUM) cubre solo las filas reales, que son las últimas de la tabla.
     if(R.hayReales){
-      xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, { desde: rm.desde + nPrevios, hasta: rm.hasta },
+      xlFilaTotal(ws, rm.hasta + 1, 2, colsMes, { desde: rm.desde + nPrevios + (conSeparador ? 1 : 0), hasta: rm.hasta },
         { ingresos: R.ingresos, gastosContado: R.gastosContado, cuotas: R.cuotas, aportes: R.aportes, balance: R.balance,
           cuotasPendientes: R.cuotasPendientes, balanceSiPagan: R.balanceSiPagan }, nPrevios ? 'Total meses registrados' : 'Total', 'SUM');
       f = rm.hasta + 2;
@@ -11718,6 +11724,8 @@ function construirLibroExcel(ExcelJS, datos, logo){
       { key: 'total', header: 'Total comprometido', tipo: 'money' }
     ];
     const rq = xlTabla(ws, f, 2, colsComp, R.compromisos, anchosR);
+    // "Total comprometido" ocupa dos líneas: con el alto de 24 se cortaba la segunda.
+    ws.getRow(f).height = 32;
     xlFilaTotal(ws, rq.hasta + 1, 2, colsComp, rq, { total: R.compromisos.reduce((s,c)=> s + c.total, 0) }, 'Total', 'SUM');
     xlNota(ws, rq.hasta + 2, 2, 'Cuotas de compras a crédito que vencen en meses futuros y aún no están pagadas. No se proyectan ingresos: estos montos no entran en los totales.');
     f = rq.hasta + 4;
