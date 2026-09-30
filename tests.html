@@ -1997,6 +1997,33 @@ async function runTests(){
       win.leerDuenoConfirmado = origH.leerDuenoConfirmado; win.esPestanaLiderSync = origH.esPestanaLiderSync;
       win.limpiarEstadoSyncCuenta = origH.limpiarEstadoSyncCuenta; win.renderCuentaUsuario = origH.renderCuentaUsuario; win.showToast = origH.showToast;
     }
+
+    // ---- (j) Otra pestaña borró los datos locales -> esta se recarga; cualquier otro cambio -> nada ----
+    // Se despachan StorageEvent sintéticos sobre la ventana del iframe (no se toca localStorage)
+    // y recargarPorBorradoLocal se reemplaza por un contador.
+    {
+      const origJ = win.recargarPorBorradoLocal;
+      let recargas = 0;
+      win.recargarPorBorradoLocal = () => { recargas++; };
+      const evento = (key, oldValue, newValue) => {
+        const antes = recargas;
+        win.dispatchEvent(new win.StorageEvent('storage', { key, oldValue, newValue }));
+        return recargas - antes;
+      };
+      try{
+        const r = {
+          borrado: evento('misfinanzas_data', '{"expenses":[]}', null),
+          restauracion: evento('misfinanzas_data', '{"expenses":[]}', '{"expenses":[{"id":"x"}]}'),
+          primeraEscritura: evento('misfinanzas_data', null, '{"expenses":[]}'),
+          otraClave: evento('misfinanzas_build', 'abc', null)
+        };
+        assert(r.borrado === 1 && r.restauracion === 0 && r.primeraEscritura === 0 && r.otraClave === 0,
+          'T2b (j): evento storage con misfinanzas_data -> null (borrado en otra pestaña) recarga; con otro valor, al crearla o con otra clave, nada',
+          JSON.stringify(r));
+      }finally{
+        win.recargarPorBorradoLocal = origJ;
+      }
+    }
   }
 
   renderResultados();
