@@ -2226,6 +2226,292 @@ async function runTests(){
     }
   }
 
+  // ==================== T21 · L1 — Entrar con código por correo + ajustes ====================
+  // Sin red: signInWithOtp/verifyOtp se reemplazan en el cliente real (supa.auth) por stubs.
+  // El stub de verifyOtp hace lo mismo que la librería al verificar (2.117.1:
+  // _notifyAllSubscribers('SIGNED_IN', session)), con broadcast=false para no avisar a otras
+  // pestañas. intentarSubidaInicial se reemplaza por un registro: no toca la nube.
+  {
+    const d = win.document;
+    const tick = ms => new Promise(r => setTimeout(r, ms));
+    const $ = id => d.getElementById(id);
+
+    // (a) Validación de correo y limpieza del código.
+    {
+      const validos = ['ana@ejemplo.cl', ' ana.perez+x@sub.dominio.com ', 'a_b@correo.co'];
+      const invalidos = ['', 'ana', 'ana@', 'ana@cl', 'ana @x.cl', 'ana@x..cl', 'ana@.cl', 'a@b.c', 'a@b@c.cl'];
+      const rA = { validos: validos.filter(c => !win.correoValido(c)), invalidos: invalidos.filter(c => win.correoValido(c)),
+                   cod1: win.normalizarCodigoOtp('12 34-56'), cod2: win.normalizarCodigoOtp('1234567'), cod3: win.normalizarCodigoOtp(null) };
+      assert(rA.validos.length === 0 && rA.invalidos.length === 0 && rA.cod1 === '123456' && rA.cod2 === '123456' && rA.cod3 === '',
+        'T21 L1 (a): correoValido() acepta correos normales y rechaza los mal formados; normalizarCodigoOtp() deja solo 6 dígitos', JSON.stringify(rA));
+    }
+
+    // (b) Errores mapeados (sin revelar si el correo existe).
+    {
+      const err = (o) => Object.assign(new Error(o.message || ''), o);
+      const m = (e, opt) => win.mensajeErrorOtp(e, opt);
+      const r = {
+        incorrecto: m(err({ name:'AuthApiError', status:403, code:'otp_expired', message:'Token has expired or is invalid' }), { fase:'verificar', segDesdeEnvio:30 }),
+        vencido: m(err({ name:'AuthApiError', status:403, code:'otp_expired', message:'Token has expired or is invalid' }), { fase:'verificar', segDesdeEnvio:3600 }),
+        espera: m(err({ name:'AuthApiError', status:429, code:'over_email_send_rate_limit', message:'For security purposes, you can only request this after 42 seconds.' }), { fase:'enviar' }),
+        esperaSinDato: m(err({ name:'AuthApiError', status:429, code:'over_request_rate_limit', message:'Request rate limit reached' }), { fase:'verificar' }),
+        sinRed: m(err({ name:'AuthRetryableFetchError', status:0, message:'Failed to fetch' }), { fase:'enviar' }),
+        offline: m(null, { enLinea:false }),
+        otro: m(err({ name:'AuthApiError', status:422, code:'signup_disabled', message:'Signups not allowed for otp' }), { fase:'enviar' })
+      };
+      const textos = Object.values(r).map(x => x.texto).join(' | ');
+      assert(r.incorrecto.tipo === 'incorrecto' && r.vencido.tipo === 'vencido' && /Pide uno nuevo/.test(r.vencido.texto)
+        && r.espera.tipo === 'demasiados' && r.espera.esperaSeg === 42 && /42 segundos/.test(r.espera.texto)
+        && r.esperaSinDato.tipo === 'demasiados' && /unos minutos/.test(r.esperaSinDato.texto)
+        && r.sinRed.tipo === 'sin-conexion' && r.offline.tipo === 'sin-conexion' && r.otro.tipo === 'otro'
+        && !/existe|registrad|cuenta/i.test(textos),
+        'T21 L1 (b): mensajeErrorOtp() → incorrecto, vencido («Pide uno nuevo»), demasiados intentos (con la espera del servidor), sin conexión y genérico; ningún texto revela si el correo existe', JSON.stringify(r));
+    }
+
+    // (c) Estados del paso 2 (función pura, reloj explícito).
+    {
+      const T = 1_000_000;
+      const e = o => win.estadoLoginCorreo(Object.assign({ enviadoMs: T }, o));
+      const r = {
+        a10s: e({ ahoraMs: T + 10_000 }), a60s: e({ ahoraMs: T + 60_000 }),
+        ocupado: e({ ahoraMs: T + 70_000, ocupado: true }), offline: e({ ahoraMs: T + 70_000, enLinea: false }),
+        bloqEnvio: e({ ahoraMs: T + 70_000, bloqueoEnvioHastaMs: T + 100_000 }), bloqVerif: e({ ahoraMs: T + 70_000, bloqueoVerifHastaMs: T + 75_000 })
+      };
+      assert(r.a10s.reenviar.disabled && r.a10s.reenviar.texto === 'Reenviar código en 50 s' && r.a10s.cuentaRegresiva && !r.a10s.entrar.disabled
+        && !r.a60s.reenviar.disabled && r.a60s.reenviar.texto === 'Reenviar código' && !r.a60s.cuentaRegresiva
+        && r.ocupado.entrar.disabled && r.ocupado.entrar.texto === 'Verificando…' && r.ocupado.reenviar.disabled && r.ocupado.cambiar.disabled
+        && r.offline.enviar.disabled && r.offline.enviar.texto === 'Necesitas conexión para enviar el código'
+        && r.offline.entrar.disabled && r.offline.entrar.texto === 'Necesitas conexión para entrar' && r.offline.reenviar.disabled
+        && r.bloqEnvio.enviar.texto === 'Espera 30 s' && r.bloqEnvio.reenviar.texto === 'Reenviar código en 30 s'
+        && r.bloqVerif.entrar.disabled && r.bloqVerif.entrar.texto === 'Espera 5 s',
+        'T21 L1 (c): estadoLoginCorreo() → cuenta regresiva de 60 s para reenviar, «Verificando…», sin conexión (deshabilitados con texto) y esperas del servidor', JSON.stringify(r));
+    }
+
+    // (d) «Sin datos» (función pura) e (e) texto del aviso de instalar.
+    {
+      const base = fixtureBase();
+      const con = k => { const s = fixtureBase(); s[k] = [{ id: 'x' }]; return win.sinDatosFinancieros(s); };
+      const dosCuentas = fixtureBase(); dosCuentas.accounts.push({ id:'acc2', nombre:'Ahorro', orden:1, archivada:false });
+      const rD = { vacio: win.sinDatosFinancieros(base), nulo: win.sinDatosFinancieros(null), sinArrays: win.sinDatosFinancieros({}),
+                   conDatos: ['expenses','incomes','debts','goals','transfers'].filter(con), dosCuentas: win.sinDatosFinancieros(dosCuentas) };
+      assert(rD.vacio && rD.nulo && rD.sinArrays && rD.conDatos.length === 0 && !rD.dosCuentas,
+        'T21 C (d): sinDatosFinancieros() es verdadero solo sin gastos, ingresos, cuotas, metas ni transferencias y con a lo más la cuenta por defecto', JSON.stringify(rD));
+      const t = o => win.textoAvisoInstalar(o);
+      const rE = { pc: t({ ancho:1440, tactil:true }), sinTactil: t({ ancho:800, tactil:false }), movil: t({ ancho:375, tactil:true }),
+                   ios: t({ ios:true, ancho:375 }), ipad: t({ ios:true, ancho:1366, tactil:true }) };
+      const ESC = 'En Chrome o Edge: usa el ícono de instalar en la barra de direcciones.';
+      assert(rE.pc === ESC && rE.sinTactil === ESC && /^En Chrome: menú ⋮/.test(rE.movil) && /^En Safari/.test(rE.ios) && rE.ipad === rE.ios,
+        'T21 C (e): aviso «Instala Telora»: a ≥1024 px o sin pantalla táctil habla del ícono de la barra de direcciones; móvil e iOS sin cambios', JSON.stringify(rE));
+    }
+
+    // (f) Caso A de intentarSubidaInicial(): sin datos se asocia directo; con datos se pregunta.
+    {
+      const fns = ['subirDatosIniciales','marcarDuenoConfirmado','leerDuenoConfirmado','leerSubidaPendiente','getDeviceId','abrirCuandoLibre','openSheet'];
+      const orig = Object.fromEntries(fns.map(f => [f, win[f]]));
+      const supaOrig = win.eval('supa');
+      const stOrig = win.eval('JSON.stringify(state)');
+      const reg = [];
+      try{
+        const cadena = () => { const c = { select(){ return c; }, eq(){ return c; },
+          maybeSingle: async () => ({ data: null, error: null }),
+          then(ok, ko){ return Promise.resolve({ count: 0, error: null }).then(ok, ko); } }; return c; };
+        win.__l1SupaStub = { from: () => cadena(), auth: supaOrig.auth };
+        win.eval('supa = window.__l1SupaStub;');
+        win.subirDatosIniciales = async (u, dv) => { reg.push('subir:' + u + ':' + dv); };
+        win.marcarDuenoConfirmado = u => reg.push('dueno:' + u);
+        win.leerDuenoConfirmado = () => null;
+        win.leerSubidaPendiente = () => null;
+        win.getDeviceId = () => 'dev-l1';
+        win.abrirCuandoLibre = fn => fn();
+        win.openSheet = id => reg.push('sheet:' + id);
+        const sesion = { user: { id: 'u-l1', email: 'ana@ejemplo.cl' } };
+
+        setState(win, fixtureBase());
+        win.eval('__subidaInicialEvaluada = false;');
+        await win.intentarSubidaInicial(sesion);
+        const vacio = reg.splice(0);
+
+        const conGasto = fixtureBase(); conGasto.expenses.push({ id:'e1', date:'2026-03-10', amount:5000, tipo:'Casual', category:'Comida' });
+        setState(win, conGasto);
+        win.eval('__subidaInicialEvaluada = false;');
+        await win.intentarSubidaInicial(sesion);
+        const conDatos = reg.splice(0);
+        const correo = $('confirmarDuenoCorreo').textContent;
+        assert(vacio.join() === 'dueno:u-l1,subir:u-l1:dev-l1' && conDatos.join() === 'sheet:sheetConfirmarDueno' && correo === 'ana@ejemplo.cl',
+          'T21 C (f): sin datos locales no se pregunta «¿Estos datos son tuyos?» (se marca el dueño y se sube igual que al confirmar); con datos se pregunta', JSON.stringify({ vacio, conDatos, correo }));
+      }catch(e){
+        assert(false, 'T21 C (f): excepción', e && e.stack || String(e));
+      }finally{
+        Object.assign(win, orig);
+        win.__l1SupaOrig = supaOrig;
+        win.eval('supa = window.__l1SupaOrig; __subidaInicialEvaluada = false; subidaDuenoCtx = null; state = ' + stOrig + ';');
+        delete win.__l1SupaStub; delete win.__l1SupaOrig;
+      }
+    }
+
+    // (g)–(k) Flujo en la interfaz, con la hoja de Configuración abierta (iframe fuera de pantalla).
+    const auth = win.eval('supa').auth;
+    const origAuth = { signInWithOtp: auth.signInWithOtp, verifyOtp: auth.verifyOtp };
+    const origSubida = win.intentarSubidaInicial, origRender = win.renderCuentaUsuario;
+    const llamadas = [], eventos = [];
+    let respEnvio = { data: { user: null, session: null }, error: null }, respVerif = null;
+    const sesionDe = (email, meta) => ({ access_token: 'tok-' + email, user: { id: 'uid-' + email, email, user_metadata: meta || {} } });
+    const apiErr = o => Object.assign(new Error(o.message), o);
+    const anchoIframe = w => { iframe.style.cssText = `position:absolute; left:-10000px; top:0; width:${w}px; height:900px; border:0;`; void win.innerWidth; win.syncDeskLayout(); };
+    const visible = id => !$(id).hidden && $(id).offsetParent !== null;
+    const err1 = () => visible('loginCorreoError1') ? $('loginCorreoError1').textContent : '';
+    const err2 = () => visible('loginCorreoError2') ? $('loginCorreoError2').textContent : '';
+    try{
+      auth.signInWithOtp = async a => { llamadas.push(['otp', JSON.parse(JSON.stringify(a))]); return respEnvio; };
+      auth.verifyOtp = async a => {
+        llamadas.push(['verify', JSON.parse(JSON.stringify(a))]);
+        if(respVerif) return respVerif;
+        const session = sesionDe(a.email);
+        await auth._notifyAllSubscribers('SIGNED_IN', session, false);   // lo que hace la librería
+        return { data: { user: session.user, session }, error: null };
+      };
+      win.intentarSubidaInicial = s => { eventos.push(['subida', s && s.user && s.user.email]); };
+      win.renderCuentaUsuario = s => { eventos.push(['render', s && s.user && s.user.email || null]); return origRender(s); };
+
+      anchoIframe(375);
+      win.renderCuentaUsuario(null); eventos.length = 0;
+      win.eval('loginCorreo.bloqueoEnvioHastaMs = 0; loginCorreo.bloqueoVerifHastaMs = 0;');
+      win.reiniciarLoginCorreo();
+      $('btnConfig').click();
+      $('cuentaUsuarioSinSesion').closest('details.cfg-group').open = true;
+
+      // (g) Paso 1: estructura, validación y envío.
+      const inpC = $('inpLoginCorreo'), inpK = $('inpLoginCodigo');
+      const sinSesion = $('cuentaUsuarioSinSesion');
+      const hijos = [...sinSesion.children];
+      const iGoogle = hijos.indexOf($('btnLoginGoogle')), iSep = hijos.findIndex(n => n.classList.contains('login-sep')),
+            iP1 = hijos.indexOf($('loginCorreoPaso1')), iLegal = hijos.findIndex(n => /Al continuar aceptas/.test(n.textContent));
+      const estructura = { orden: iGoogle < iSep && iSep < iP1 && iP1 < iLegal, sep: hijos[iSep] && hijos[iSep].textContent.trim(),
+        tipo: inpC.type, autoc: inpC.getAttribute('autocomplete'), fuente: win.getComputedStyle(inpC).fontSize,
+        label: d.querySelector('label[for="inpLoginCorreo"]').textContent, boton: $('btnLoginEnviarCodigo').textContent,
+        alerta: $('loginCorreoError1').getAttribute('role'), paso2Oculto: $('loginCorreoPaso2').hidden };
+      inpC.value = 'ana@'; $('btnLoginEnviarCodigo').click(); await tick(10);
+      const invalido = { error: err1(), foco: d.activeElement === inpC, llamadas: llamadas.length };
+      inpC.value = '  ana@ejemplo.cl '; $('btnLoginEnviarCodigo').click(); await tick(10);
+      const envio = llamadas[0] && llamadas[0][1];
+      const tras = { paso1Oculto: $('loginCorreoPaso1').hidden, paso2: visible('loginCorreoPaso2'), destino: $('loginCorreoDestino').textContent,
+        foco: d.activeElement === inpK, reenviar: $('btnLoginReenviar').textContent, reenviarDis: $('btnLoginReenviar').disabled };
+      assert(estructura.orden && estructura.sep === 'o' && estructura.tipo === 'email' && estructura.autoc === 'email' && estructura.fuente === '16px'
+        && estructura.label === 'Entrar con tu correo' && estructura.boton === 'Enviarme un código' && estructura.alerta === 'alert' && estructura.paso2Oculto
+        && /nombre@correo\.cl/.test(invalido.error) && invalido.foco && invalido.llamadas === 0
+        && envio && envio.email === 'ana@ejemplo.cl' && envio.options && envio.options.shouldCreateUser === true && !('emailRedirectTo' in envio.options)
+        && tras.paso1Oculto && tras.paso2 && tras.destino === 'ana@ejemplo.cl' && tras.foco && tras.reenviarDis && tras.reenviar === 'Reenviar código en 60 s',
+        'T21 L1 (g): paso 1 bajo «Continuar con Google» y su «o» (texto legal debajo); correo inválido → error con role=alert y foco; válido → signInWithOtp(shouldCreateUser:true, sin emailRedirectTo), paso 2 con foco en el código y reenvío en 60 s',
+        JSON.stringify({ estructura, invalido, envio, tras }));
+
+      // (h) Paso 2: campo, error mapeado, pegado con autoverificación y reenvío al terminar la cuenta regresiva.
+      const campo = { im: inpK.getAttribute('inputmode'), ac: inpK.getAttribute('autocomplete'), max: inpK.maxLength, fuente: win.getComputedStyle(inpK).fontSize,
+                      alerta: $('loginCorreoError2').getAttribute('role') };
+      respVerif = { data: { user: null, session: null }, error: apiErr({ name:'AuthApiError', status:403, code:'otp_expired', message:'Token has expired or is invalid' }) };
+      const dt = new win.DataTransfer(); dt.setData('text', '123 456');
+      inpK.dispatchEvent(new win.ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await tick(10);
+      const verif = llamadas[1] && llamadas[1][1];
+      const errorIncorrecto = err2(), focoTrasError = d.activeElement === inpK;
+      inpK.dispatchEvent(new win.Event('input')); await tick(10);
+      const sinRepetir = llamadas.length;
+      respVerif = { data: { user: null, session: null }, error: apiErr({ name:'AuthApiError', status:429, code:'over_request_rate_limit', message:'For security purposes, you can only request this after 7 seconds.' }) };
+      inpK.value = '65432'; $('btnLoginVerificar').click(); await tick(10);
+      const incompleto = { error: err2(), llamadas: llamadas.length };
+      inpK.value = '654321'; inpK.dispatchEvent(new win.Event('input')); await tick(10);
+      const limite = { error: err2(), boton: $('btnLoginVerificar').textContent, dis: $('btnLoginVerificar').disabled };
+      win.eval('loginCorreo.bloqueoVerifHastaMs = 0; loginCorreo.enviadoMs -= 61000;'); win.pintarLoginCorreo();
+      const reenvioListo = { texto: $('btnLoginReenviar').textContent, dis: $('btnLoginReenviar').disabled };
+      $('btnLoginReenviar').click(); await tick(10);
+      const reenvio = { llamada: llamadas[llamadas.length - 1], aviso: $('loginCorreoAviso').textContent, aviso_rol: $('loginCorreoAviso').getAttribute('role'),
+                        texto: $('btnLoginReenviar').textContent, codigoLimpio: inpK.value === '', foco: d.activeElement === inpK };
+      assert(campo.im === 'numeric' && campo.ac === 'one-time-code' && campo.max === 6 && campo.fuente === '16px' && campo.alerta === 'alert'
+        && verif && verif.token === '123456' && verif.type === 'email' && verif.email === 'ana@ejemplo.cl'
+        && errorIncorrecto === 'El código no es correcto. Revísalo e inténtalo de nuevo.' && focoTrasError && sinRepetir === 2
+        && incompleto.error === 'Escribe los 6 dígitos del código.' && incompleto.llamadas === 2
+        && /7 segundos/.test(limite.error) && limite.dis && /^Espera \d s$/.test(limite.boton)
+        && reenvioListo.texto === 'Reenviar código' && !reenvioListo.dis
+        && reenvio.llamada[0] === 'otp' && reenvio.llamada[1].email === 'ana@ejemplo.cl' && reenvio.aviso === 'Te enviamos un código nuevo.' && reenvio.aviso_rol === 'status'
+        && reenvio.texto === 'Reenviar código en 60 s' && reenvio.codigoLimpio && reenvio.foco,
+        'T21 L1 (h): paso 2 (numeric, one-time-code, 6, 16 px); pegar «123 456» verifica solo con type email; incorrecto y límite del servidor con su espera; el mismo código no se reintenta; reenviar tras 60 s',
+        JSON.stringify({ campo, verif, errorIncorrecto, focoTrasError, sinRepetir, incompleto, limite, reenvioListo, reenvio }));
+
+      // (i) Sin conexión: botones deshabilitados con texto; Cambiar correo vuelve al paso 1 con el correo.
+      Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => false });
+      win.dispatchEvent(new win.Event('offline'));
+      const offline = { entrar: $('btnLoginVerificar').textContent, entrarDis: $('btnLoginVerificar').disabled, reenviarDis: $('btnLoginReenviar').disabled };
+      delete win.navigator.onLine;
+      win.dispatchEvent(new win.Event('online'));
+      const online = { entrar: $('btnLoginVerificar').textContent, entrarDis: $('btnLoginVerificar').disabled };
+      $('btnLoginCambiarCorreo').click();
+      const cambiar = { paso1: visible('loginCorreoPaso1'), paso2Oculto: $('loginCorreoPaso2').hidden, correo: inpC.value.trim(), foco: d.activeElement === inpC };
+      Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => false });
+      win.dispatchEvent(new win.Event('offline'));
+      const offline1 = { texto: $('btnLoginEnviarCodigo').textContent, dis: $('btnLoginEnviarCodigo').disabled };
+      delete win.navigator.onLine;
+      win.dispatchEvent(new win.Event('online'));
+      respEnvio = { data: { user: null, session: null }, error: apiErr({ name:'AuthApiError', status:429, code:'over_email_send_rate_limit', message:'For security purposes, you can only request this after 42 seconds.' }) };
+      $('btnLoginEnviarCodigo').click(); await tick(10);
+      const limiteEnvio = { error: err1(), boton: $('btnLoginEnviarCodigo').textContent, dis: $('btnLoginEnviarCodigo').disabled, paso1: visible('loginCorreoPaso1') };
+      assert(offline.entrar === 'Necesitas conexión para entrar' && offline.entrarDis && offline.reenviarDis && online.entrar === 'Entrar' && !online.entrarDis
+        && cambiar.paso1 && cambiar.paso2Oculto && cambiar.correo === 'ana@ejemplo.cl' && cambiar.foco
+        && offline1.texto === 'Necesitas conexión para enviar el código' && offline1.dis
+        && /42 segundos/.test(limiteEnvio.error) && /^Espera 4\d s$/.test(limiteEnvio.boton) && limiteEnvio.dis && limiteEnvio.paso1,
+        'T21 L1 (i): sin conexión los botones se deshabilitan con texto; «Cambiar correo» vuelve al paso 1 con el correo y el foco; límite de envío del servidor con cuenta regresiva',
+        JSON.stringify({ offline, online, cambiar, offline1, limiteEnvio }));
+
+      // (j) Éxito: la sesión por correo pasa por el MISMO onAuthStateChange que la de Google.
+      win.eval('loginCorreo.bloqueoEnvioHastaMs = 0;');
+      respEnvio = { data: { user: null, session: null }, error: null }; respVerif = null;
+      win.pintarLoginCorreo();
+      $('btnLoginEnviarCodigo').click(); await tick(10);
+      eventos.length = 0;
+      inpK.value = '111222'; inpK.dispatchEvent(new win.Event('input')); await tick(20);
+      const porCorreo = eventos.splice(0).map(e => e[0]);
+      const estadoCorreo = { con: visible('cuentaUsuarioConSesion'), email: $('cuentaUsuarioEmail').textContent, eliminar: visible('btnEliminarCuenta'),
+        sesionConocida: win.eval('sesionConocida && sesionConocida.userId'), foco: d.activeElement === $('cuentaUsuarioSesionTxt'),
+        formReiniciado: !$('loginCorreoPaso1').hidden && $('loginCorreoPaso2').hidden && inpK.value === '' };
+      win.eval('cierreSesionPropio = true;'); await auth._notifyAllSubscribers('SIGNED_OUT', null, false); win.eval('cierreSesionPropio = false;');
+      eventos.length = 0;
+      // Lo que llega al volver de Google: la librería emite SIGNED_IN por el mismo canal.
+      await auth._notifyAllSubscribers('SIGNED_IN', sesionDe('ana@gmail.com', { full_name: 'Ana Pérez' }), false);
+      const porGoogle = eventos.splice(0).map(e => e[0]);
+      const estadoGoogle = { con: visible('cuentaUsuarioConSesion'), email: $('cuentaUsuarioEmail').textContent, eliminar: visible('btnEliminarCuenta'),
+        sesionConocida: win.eval('sesionConocida && sesionConocida.userId') };
+      assert(porCorreo.join() === 'render,subida' && porCorreo.join() === porGoogle.join()
+        && estadoCorreo.con && estadoCorreo.email === 'ana@ejemplo.cl' && estadoCorreo.eliminar && estadoCorreo.sesionConocida === 'uid-ana@ejemplo.cl'
+        && estadoCorreo.foco && estadoCorreo.formReiniciado
+        && estadoGoogle.con && estadoGoogle.email === 'ana@gmail.com' && estadoGoogle.eliminar && estadoGoogle.sesionConocida === 'uid-ana@gmail.com',
+        'T21 L1 (j): al entrar con el código, verifyOtp → onAuthStateChange → renderCuentaUsuario + intentarSubidaInicial, igual que con Google; queda «Eliminar mi cuenta» y el foco pasa a «Sesión iniciada como…»',
+        JSON.stringify({ porCorreo, porGoogle, estadoCorreo, estadoGoogle }));
+
+      // (k) 1440 px: el bloque cabe sin desbordar y el paso 2 también a 375 px.
+      win.eval('cierreSesionPropio = true;'); await auth._notifyAllSubscribers('SIGNED_OUT', null, false); win.eval('cierreSesionPropio = false;');
+      const desborde = () => { const g = sinSesion.closest('.cfg-group-body'); return [...g.querySelectorAll('*')].filter(n => n.offsetParent !== null && n.getBoundingClientRect().right > g.getBoundingClientRect().right + 0.5).map(n => n.id || n.className || n.tagName); };
+      const a375p1 = desborde();
+      inpC.value = 'ana@ejemplo.cl'; $('btnLoginEnviarCodigo').click(); await tick(10);
+      const a375p2 = desborde();
+      anchoIframe(1440);
+      const a1440p2 = desborde(), nav = win.getComputedStyle($('deskNav')).display;
+      assert(a375p1.length === 0 && a375p2.length === 0 && a1440p2.length === 0 && nav !== 'none',
+        'T21 L1 (k): pasos 1 y 2 sin desbordes a 375 px y a 1440 px (con el menú lateral)', JSON.stringify({ a375p1, a375p2, a1440p2, nav }));
+    }catch(e){
+      assert(false, 'T21 L1: excepción durante las pruebas de login por correo', e && e.stack || String(e));
+    }finally{
+      try{ delete win.navigator.onLine; }catch(_){}
+      Object.assign(auth, origAuth);
+      win.intentarSubidaInicial = origSubida; win.renderCuentaUsuario = origRender;
+      try{
+        if(win.eval('sesionConocida')){ win.eval('cierreSesionPropio = true;'); await auth._notifyAllSubscribers('SIGNED_OUT', null, false); win.eval('cierreSesionPropio = false;'); }
+        win.eval('loginCorreo.bloqueoEnvioHastaMs = 0; loginCorreo.bloqueoVerifHastaMs = 0;');
+        win.reiniciarLoginCorreo(); win.renderCuentaUsuario(null);
+        [...d.querySelectorAll('.sheet-overlay.open')].map(o => o.id).filter(id => id !== 'sheetOnboarding').forEach(id => win.closeSheet(id));
+      }catch(_){}
+      iframe.style.cssText = 'display:none';
+      try{ win.syncDeskLayout(); }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
