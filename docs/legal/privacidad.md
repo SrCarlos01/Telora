@@ -1,6 +1,6 @@
 # Política de Privacidad de Telora
 
-**Vigente desde:** 30 de septiembre de 2026
+**Vigente desde:** 1 de octubre de 2026
 **Versión:** 1.2
 
 Telora es una aplicación de finanzas personales que te ayuda a registrar tus gastos, ingresos, compras en cuotas y metas de ahorro. Esta política explica qué datos personales trata Telora, para qué, dónde se guardan y cómo puedes ejercer tus derechos. Se rige por la Ley N° 19.628 sobre Protección de la Vida Privada y sus modificaciones, incluida la Ley N° 21.719.
