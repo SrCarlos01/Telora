@@ -1039,6 +1039,19 @@ button{font-family:inherit;}
 /* Enlaces a las páginas legales (cuenta de usuario y pie de Configuración). */
 .legal-link{color:var(--gold); text-decoration:underline; text-underline-offset:2px;}
 :root.hc .legal-link{color:var(--cream);}
+/* Tanda L1: entrar con código por correo (Configuración → Cuenta de usuario). */
+.login-sep{display:flex; align-items:center; gap:10px; margin:14px 0 10px; color:var(--cream-dim); font-size:12.5px;}
+.login-sep::before, .login-sep::after{content:""; flex:1; height:1px; background:var(--border);}
+.login-correo .field{margin-bottom:10px;}
+.login-correo .login-error{color:var(--danger); margin:0 0 10px;}
+.login-correo .login-aviso{margin:0 0 10px;}
+.login-correo .login-aviso:empty{display:none;}
+.field input.login-codigo{font-size:16px; letter-spacing:.35em; font-variant-numeric:tabular-nums;}
+.login-correo button:disabled{opacity:.45; cursor:default;}
+.login-acciones{display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin-top:8px;}
+.login-link{background:none; border:none; padding:8px 0; color:var(--gold); font-size:13.5px; font-family:inherit; cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
+.login-link:disabled{color:var(--cream-dim); text-decoration:none;}
+:root.hc .login-link{color:var(--cream);}
 
 .choice-row{display:flex; gap:12px; margin-bottom:6px;}
 .choice-card{
@@ -1052,7 +1065,7 @@ button{font-family:inherit;}
 
 .field{margin-bottom:14px;}
 .field label{display:block; font-size:13.5px; color:var(--gold-dim); margin-bottom:6px; font-weight:500;}
-.field input[type=text], .field input[type=number], .field input[type=date], .field select, .field textarea{
+.field input[type=text], .field input[type=number], .field input[type=date], .field input[type=email], .field select, .field textarea{
   width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:12px 12px; color:var(--cream); font-size:16px; font-family:inherit;
 }
@@ -2729,15 +2742,42 @@ button:active{ transform:scale(0.93); }
       <div class="cfg-group-body">
         <div id="cuentaUsuarioSinSesion">
           <p class="sheet-note" style="margin:0 0 12px;">
-            Inicia sesión con tu cuenta de Google para respaldar tus datos en la nube. Es opcional: sin iniciar sesión, tus datos se guardan solo en este dispositivo.
+            Inicia sesión con tu cuenta de Google o con tu correo para respaldar tus datos en la nube. Es opcional: sin iniciar sesión, tus datos se guardan solo en este dispositivo.
           </p>
           <button class="btn-ghost" id="btnLoginGoogle" style="margin-top:0;">Continuar con Google</button>
+          <!-- Tanda L1: entrar con un código de 6 dígitos por correo (OTP de Supabase, sin
+               enlace mágico: en iPhone el enlace abriría Safari y no la PWA instalada). La
+               sesión que devuelve verifyOtp() entra por el mismo onAuthStateChange que la
+               de Google. Estados y textos: estadoLoginCorreo() / mensajeErrorOtp(). -->
+          <div class="login-sep" aria-hidden="true"><span>o</span></div>
+          <form id="loginCorreoPaso1" class="login-correo" novalidate>
+            <div class="field">
+              <label for="inpLoginCorreo">Entrar con tu correo</label>
+              <input type="email" id="inpLoginCorreo" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="nombre@correo.cl" aria-describedby="loginCorreoError1">
+            </div>
+            <p class="sheet-note login-error" id="loginCorreoError1" role="alert" hidden></p>
+            <button type="submit" class="btn-ghost" id="btnLoginEnviarCodigo" style="margin-top:0;">Enviarme un código</button>
+          </form>
+          <form id="loginCorreoPaso2" class="login-correo" novalidate hidden>
+            <p class="sheet-note" style="margin:0 0 12px; overflow-wrap:anywhere;">Te enviamos un código a <strong id="loginCorreoDestino" style="color:var(--cream);"></strong></p>
+            <div class="field">
+              <label for="inpLoginCodigo">Código de 6 dígitos</label>
+              <input type="text" id="inpLoginCodigo" class="login-codigo" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" spellcheck="false" aria-describedby="loginCorreoError2">
+            </div>
+            <p class="sheet-note login-error" id="loginCorreoError2" role="alert" hidden></p>
+            <p class="sheet-note login-aviso" id="loginCorreoAviso" role="status"></p>
+            <button type="submit" class="btn-primary" id="btnLoginVerificar" style="margin-top:0;">Entrar</button>
+            <div class="login-acciones">
+              <button type="button" class="login-link" id="btnLoginCambiarCorreo">Cambiar correo</button>
+              <button type="button" class="login-link" id="btnLoginReenviar" disabled>Reenviar código</button>
+            </div>
+          </form>
           <p class="sheet-note" style="margin:10px 0 0; font-size:11.5px;">
             Al continuar aceptas los <a class="legal-link" href="terminos.html" target="_blank" rel="noopener">Términos de Uso</a> y la <a class="legal-link" href="privacidad.html" target="_blank" rel="noopener">Política de Privacidad</a>.
           </p>
         </div>
         <div id="cuentaUsuarioConSesion" style="display:none;">
-          <p class="sheet-note" style="margin:0 0 12px; overflow-wrap:anywhere;">
+          <p class="sheet-note" id="cuentaUsuarioSesionTxt" tabindex="-1" style="margin:0 0 12px; overflow-wrap:anywhere; outline:none;">
             Sesión iniciada como <strong id="cuentaUsuarioEmail" style="color:var(--cream);"></strong>
           </p>
           <button class="btn-ghost" id="btnLogout" style="margin-top:0;">Cerrar sesión</button>
@@ -15369,6 +15409,235 @@ document.getElementById('btnLoginGoogle').onclick = async ()=>{
     showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
   }
 };
+
+/* ==================== ENTRAR CON CÓDIGO POR CORREO (Tanda L1) ====================
+   signInWithOtp() SIN emailRedirectTo: Supabase manda un código de 6 dígitos (la plantilla
+   «Magic Link» del panel debe mostrar {{ .Token }}). verifyOtp({ type:'email' }) guarda la
+   sesión y emite SIGNED_IN, así que entra por el mismo onAuthStateChange que la de Google
+   (renderCuentaUsuario + intentarSubidaInicial → candado, escritor único, eliminar cuenta):
+   acá no hay lógica de sesión, solo el formulario. */
+const OTP_LARGO = 6;
+const OTP_REENVIO_SEG = 60;
+// Debe calzar con «Email OTP Expiration» del panel de Supabase (por defecto 3600 s). El
+// servidor responde lo mismo (otp_expired) a un código incorrecto y a uno vencido; este
+// plazo es lo único que permite decir cuál de los dos fue.
+const OTP_VIGENCIA_SEG = 3600;
+
+function correoValido(s){
+  const c = String(s == null ? '' : s).trim();
+  return c.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[^\s@.]{2,}$/.test(c);
+}
+
+function normalizarCodigoOtp(s){
+  return String(s == null ? '' : s).replace(/\D/g, '').slice(0, OTP_LARGO);
+}
+
+function textoEspera(seg){
+  if(seg < 60) return seg === 1 ? '1 segundo' : `${seg} segundos`;
+  const min = Math.ceil(seg / 60);
+  return min === 1 ? '1 minuto' : `${min} minutos`;
+}
+
+// Error de Supabase Auth → { tipo, texto, esperaSeg }. Ningún texto dice si el correo
+// tiene cuenta (con shouldCreateUser:true el servidor tampoco lo distingue).
+function mensajeErrorOtp(err, { fase = 'enviar', segDesdeEnvio = 0, enLinea = true } = {}){
+  const e = err || {};
+  const code = String(e.code || e.error_code || '');
+  const msg = String(e.message || '');
+  const status = Number(e.status) || 0;
+  if(!enLinea || (e.name === 'AuthRetryableFetchError' && !status) || (e.name === 'TypeError' && /fetch/i.test(msg))){
+    return { tipo: 'sin-conexion', texto: 'Sin conexión. Revisa tu internet e intenta de nuevo.', esperaSeg: 0 };
+  }
+  if(status === 429 || /^over_\w*rate_limit$/.test(code)){
+    const m = msg.match(/(\d+)\s*seconds?/i);
+    const esperaSeg = m ? parseInt(m[1], 10) : 0;
+    return { tipo: 'demasiados', esperaSeg,
+      texto: esperaSeg ? `Demasiados intentos. Espera ${textoEspera(esperaSeg)} y vuelve a intentarlo.`
+                       : 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.' };
+  }
+  if(fase === 'verificar' && (code === 'otp_expired' || status === 403 || /expired|invalid/i.test(msg))){
+    return segDesdeEnvio >= OTP_VIGENCIA_SEG
+      ? { tipo: 'vencido', texto: 'El código venció. Pide uno nuevo.', esperaSeg: 0 }
+      : { tipo: 'incorrecto', texto: 'El código no es correcto. Revísalo e inténtalo de nuevo.', esperaSeg: 0 };
+  }
+  if(fase === 'enviar' && (code === 'email_address_invalid' || code === 'validation_failed')){
+    return { tipo: 'correo-invalido', texto: 'Revisa el correo: no parece válido.', esperaSeg: 0 };
+  }
+  return { tipo: 'otro', esperaSeg: 0,
+    texto: fase === 'verificar' ? 'No se pudo verificar el código. Intenta de nuevo.'
+                                : 'No se pudo enviar el código. Intenta de nuevo en un momento.' };
+}
+
+// Botones de los dos pasos según el estado (función pura). ahoraMs explícito para probar
+// la cuenta regresiva sin esperar.
+function estadoLoginCorreo({ ocupado = false, enLinea = true, ahoraMs = 0, enviadoMs = 0,
+                             bloqueoEnvioHastaMs = 0, bloqueoVerifHastaMs = 0 } = {}){
+  const seg = hasta => Math.max(0, Math.ceil((hasta - ahoraMs) / 1000));
+  const bloqEnvio = seg(bloqueoEnvioHastaMs);
+  const bloqVerif = seg(bloqueoVerifHastaMs);
+  const reenvio = Math.max(seg(enviadoMs + OTP_REENVIO_SEG * 1000), bloqEnvio);
+  const enviar = !enLinea ? { disabled: true, texto: 'Necesitas conexión para enviar el código' }
+    : ocupado ? { disabled: true, texto: 'Enviando…' }
+    : bloqEnvio ? { disabled: true, texto: `Espera ${bloqEnvio} s` }
+    : { disabled: false, texto: 'Enviarme un código' };
+  const entrar = !enLinea ? { disabled: true, texto: 'Necesitas conexión para entrar' }
+    : ocupado ? { disabled: true, texto: 'Verificando…' }
+    : bloqVerif ? { disabled: true, texto: `Espera ${bloqVerif} s` }
+    : { disabled: false, texto: 'Entrar' };
+  const reenviar = !enLinea ? { disabled: true, texto: 'Reenviar código (sin conexión)' }
+    : ocupado ? { disabled: true, texto: 'Reenviar código' }
+    : reenvio ? { disabled: true, texto: `Reenviar código en ${reenvio} s` }
+    : { disabled: false, texto: 'Reenviar código' };
+  return { enviar, entrar, reenviar, cambiar: { disabled: ocupado },
+           cuentaRegresiva: enLinea && (reenvio > 0 || bloqVerif > 0) };
+}
+
+const loginCorreo = { paso: 1, correo: '', enviadoMs: 0, ocupado: false,
+                      bloqueoEnvioHastaMs: 0, bloqueoVerifHastaMs: 0, ultimoAuto: '' };
+let loginCorreoTimer = null;
+
+function pintarLoginCorreo(){
+  const est = estadoLoginCorreo(Object.assign({}, loginCorreo, { enLinea: navigator.onLine !== false, ahoraMs: Date.now() }));
+  document.getElementById('loginCorreoPaso1').hidden = loginCorreo.paso !== 1;
+  document.getElementById('loginCorreoPaso2').hidden = loginCorreo.paso !== 2;
+  const fija = (id, e) => { const b = document.getElementById(id); b.disabled = e.disabled; if(e.texto) b.textContent = e.texto; };
+  fija('btnLoginEnviarCodigo', est.enviar);
+  fija('btnLoginVerificar', est.entrar);
+  fija('btnLoginReenviar', est.reenviar);
+  fija('btnLoginCambiarCorreo', est.cambiar);
+  // Un solo intervalo para las cuentas regresivas (reenvío y esperas del servidor).
+  if(est.cuentaRegresiva && !loginCorreoTimer) loginCorreoTimer = setInterval(pintarLoginCorreo, 1000);
+  else if(!est.cuentaRegresiva && loginCorreoTimer){ clearInterval(loginCorreoTimer); loginCorreoTimer = null; }
+}
+
+function mostrarErrorLogin(paso, texto){
+  const el = document.getElementById(paso === 1 ? 'loginCorreoError1' : 'loginCorreoError2');
+  el.textContent = texto || '';
+  el.hidden = !texto;
+}
+function avisoLogin(texto){ document.getElementById('loginCorreoAviso').textContent = texto || ''; }
+
+function reiniciarLoginCorreo(){
+  Object.assign(loginCorreo, { paso: 1, correo: '', enviadoMs: 0, ocupado: false, ultimoAuto: '' });
+  document.getElementById('inpLoginCorreo').value = '';
+  document.getElementById('inpLoginCodigo').value = '';
+  mostrarErrorLogin(1, ''); mostrarErrorLogin(2, ''); avisoLogin('');
+  pintarLoginCorreo();
+}
+
+async function enviarCodigoLogin(esReenvio){
+  if(loginCorreo.ocupado) return;
+  const inpCorreo = document.getElementById('inpLoginCorreo');
+  const inpCodigo = document.getElementById('inpLoginCodigo');
+  const paso = esReenvio ? 2 : 1;
+  const correo = esReenvio ? loginCorreo.correo : inpCorreo.value.trim();
+  const foco = () => (paso === 1 ? inpCorreo : inpCodigo).focus();
+  mostrarErrorLogin(1, ''); mostrarErrorLogin(2, ''); avisoLogin('');
+  if(!esReenvio && !correoValido(correo)){
+    mostrarErrorLogin(1, correo ? 'Revisa el correo: debe tener la forma nombre@correo.cl.' : 'Escribe tu correo.');
+    foco();
+    return;
+  }
+  if(!supa || navigator.onLine === false){
+    mostrarErrorLogin(paso, mensajeErrorOtp(null, { enLinea: false }).texto);
+    pintarLoginCorreo(); foco();
+    return;
+  }
+  loginCorreo.ocupado = true; pintarLoginCorreo();
+  let res;
+  try{ res = await supa.auth.signInWithOtp({ email: correo, options: { shouldCreateUser: true } }); }
+  catch(e){ res = { error: e }; }
+  loginCorreo.ocupado = false;
+  if(!res || res.error){
+    console.warn('Cuenta de usuario: signInWithOtp', res && res.error);
+    const m = mensajeErrorOtp(res && res.error, { fase: 'enviar', enLinea: navigator.onLine !== false });
+    if(m.tipo === 'demasiados' && m.esperaSeg) loginCorreo.bloqueoEnvioHastaMs = Date.now() + m.esperaSeg * 1000;
+    mostrarErrorLogin(paso, m.texto);
+    pintarLoginCorreo(); foco();
+    return;
+  }
+  Object.assign(loginCorreo, { paso: 2, correo, enviadoMs: Date.now(), ultimoAuto: '' });
+  document.getElementById('loginCorreoDestino').textContent = correo;
+  inpCodigo.value = '';
+  if(esReenvio) avisoLogin('Te enviamos un código nuevo.');
+  pintarLoginCorreo();
+  inpCodigo.focus();
+}
+
+async function verificarCodigoLogin(){
+  if(loginCorreo.ocupado) return;
+  const inpCodigo = document.getElementById('inpLoginCodigo');
+  const token = normalizarCodigoOtp(inpCodigo.value);
+  mostrarErrorLogin(2, ''); avisoLogin('');
+  if(token.length !== OTP_LARGO){
+    mostrarErrorLogin(2, 'Escribe los 6 dígitos del código.');
+    inpCodigo.focus();
+    return;
+  }
+  if(!supa || navigator.onLine === false){
+    mostrarErrorLogin(2, mensajeErrorOtp(null, { enLinea: false }).texto);
+    pintarLoginCorreo();
+    return;
+  }
+  if(Date.now() < loginCorreo.bloqueoVerifHastaMs) return;
+  loginCorreo.ocupado = true; pintarLoginCorreo();
+  let res;
+  try{ res = await supa.auth.verifyOtp({ email: loginCorreo.correo, token, type: 'email' }); }
+  catch(e){ res = { error: e }; }
+  loginCorreo.ocupado = false;
+  if(!res || res.error){
+    console.warn('Cuenta de usuario: verifyOtp', res && res.error);
+    const m = mensajeErrorOtp(res && res.error, { fase: 'verificar', enLinea: navigator.onLine !== false,
+      segDesdeEnvio: Math.floor((Date.now() - loginCorreo.enviadoMs) / 1000) });
+    if(m.tipo === 'demasiados' && m.esperaSeg) loginCorreo.bloqueoVerifHastaMs = Date.now() + m.esperaSeg * 1000;
+    mostrarErrorLogin(2, m.texto);
+    pintarLoginCorreo();
+    inpCodigo.focus(); inpCodigo.select();
+    return;
+  }
+  // Éxito: verifyOtp() ya guardó la sesión y emitió SIGNED_IN → onAuthStateChange, igual
+  // que al volver de Google. Solo queda limpiar el formulario y llevar el foco al nuevo estado.
+  reiniciarLoginCorreo();
+  const txt = document.getElementById('cuentaUsuarioSesionTxt');
+  if(txt && txt.offsetParent) txt.focus();
+}
+
+document.getElementById('loginCorreoPaso1').addEventListener('submit', ev => { ev.preventDefault(); enviarCodigoLogin(false); });
+document.getElementById('loginCorreoPaso2').addEventListener('submit', ev => { ev.preventDefault(); verificarCodigoLogin(); });
+document.getElementById('btnLoginReenviar').onclick = ()=> enviarCodigoLogin(true);
+document.getElementById('btnLoginCambiarCorreo').onclick = ()=>{
+  if(loginCorreo.ocupado) return;
+  Object.assign(loginCorreo, { paso: 1, ultimoAuto: '' });
+  document.getElementById('inpLoginCodigo').value = '';
+  mostrarErrorLogin(1, ''); mostrarErrorLogin(2, ''); avisoLogin('');
+  pintarLoginCorreo();
+  const inp = document.getElementById('inpLoginCorreo');
+  inp.focus(); inp.select();
+};
+(()=>{
+  const inp = document.getElementById('inpLoginCodigo');
+  // Al completar los 6 dígitos (tecleados, pegados o desde el teclado del sistema) se
+  // verifica solo; un mismo código no se reintenta automáticamente.
+  inp.addEventListener('input', ()=>{
+    const v = normalizarCodigoOtp(inp.value);
+    if(inp.value !== v) inp.value = v;
+    if(v.length === OTP_LARGO && v !== loginCorreo.ultimoAuto && !loginCorreo.ocupado){
+      loginCorreo.ultimoAuto = v;
+      verificarCodigoLogin();
+    }
+  });
+  // maxlength corta lo pegado ANTES de limpiarlo («123 456» quedaría «123 45»).
+  inp.addEventListener('paste', ev=>{
+    const txt = ev.clipboardData && ev.clipboardData.getData('text');
+    if(txt == null) return;
+    ev.preventDefault();
+    inp.value = normalizarCodigoOtp(txt);
+    inp.dispatchEvent(new Event('input'));
+  });
+})();
+window.addEventListener('online', pintarLoginCorreo);
+window.addEventListener('offline', pintarLoginCorreo);
+pintarLoginCorreo();
 
 document.getElementById('btnLogout').onclick = async ()=>{
   if(!supa) return;
