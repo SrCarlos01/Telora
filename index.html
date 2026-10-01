@@ -1804,9 +1804,214 @@ button:active{ transform:scale(0.93); }
 :root.hc .racha-badge{color:var(--cream);}
 #rRachaRegistroRota:empty{display:none;}
 .racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:0 0 18px;}
+
+/* ---------- ESCRITORIO (Tanda E1): menú lateral + barra superior ---------- */
+/* Todo lo de escritorio vive bajo @media (min-width:1024px). Fuera de ella solo esta regla:
+   el menú lateral y el título de pantalla no existen en el móvil, que queda igual. */
+.desk-nav, .desk-title{display:none;}
+@media (min-width:1024px){
+  /* El desplazamiento va en <body> (no en #app): #app lleva el zoom de --font-scale y un
+     margen suyo se escalaría con él, descuadrándose del menú, que no se escala. */
+  body{padding-left:240px;}
+  .bottom-zone{display:none;}
+  #app{max-width:none; margin:0; padding-top:0;}
+
+  /* Menú lateral fijo; solo se desplaza el área de contenido (#app). Queda por debajo de
+     los sheets (z 50), del aviso bloqueante y de los toasts (120). */
+  .desk-nav{
+    display:flex; flex-direction:column; position:fixed; top:0; left:0; bottom:0; width:240px; z-index:30;
+    background:var(--surface); border-right:1px solid var(--border); padding:20px 14px 14px;
+  }
+  .desk-brand{display:flex; align-items:center; gap:10px; padding:2px 8px 22px;}
+  .desk-brand .mark-img{width:32px; height:32px; display:block; flex-shrink:0;}
+  .desk-brand-name{font-size:14.5px; letter-spacing:.14em; color:var(--gold); text-transform:uppercase;}
+  .desk-nav button:active{transform:none;}
+  .desk-nav :focus-visible{outline:2px solid var(--gold); outline-offset:2px; box-shadow:0 0 0 5px var(--focus-ring);}
+
+  .desk-add-wrap{position:relative; margin:0 0 18px;}
+  .desk-add{
+    position:relative; width:100%; height:44px; display:flex; align-items:center; gap:10px; padding:0 12px 0 14px;
+    background:var(--burgundy); color:var(--on-burgundy); border:none; border-radius:var(--radius-sm);
+    font-size:14.5px; font-weight:600; cursor:pointer; transition:background var(--dur-fast) var(--ease-out);
+  }
+  .desk-add:hover, .desk-add[aria-expanded="true"]{background:var(--burgundy-light);}
+  .desk-add .icon{width:18px; height:18px;}
+  .desk-add .desk-label{flex:1; text-align:left;}
+  .desk-add .desk-add-chev{width:15px; height:15px; transition:transform var(--dur-fast) var(--ease-out);}
+  .desk-add[aria-expanded="true"] .desk-add-chev{transform:rotate(180deg);}
+  .desk-add-menu{
+    position:absolute; top:52px; left:0; width:252px; z-index:2;
+    display:flex; flex-direction:column; gap:2px; padding:6px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:14px;
+    box-shadow:0 16px 40px rgba(0,0,0,0.45); animation:deskPop var(--dur-fast) var(--ease-out);
+  }
+  .desk-add-menu[hidden], .desk-add-item[hidden]{display:none;}
+  @keyframes deskPop{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;}}
+  .desk-add-item{
+    display:flex; align-items:center; gap:12px; width:100%; height:40px; padding:0 10px;
+    background:none; border:none; border-radius:9px; color:var(--cream); font-size:14px; text-align:left; cursor:pointer;
+  }
+  .desk-add-item:hover, .desk-add-item:focus-visible{background:var(--surface-3);}
+  .desk-add-item:focus-visible{outline-offset:-2px; box-shadow:none;}   /* dentro del menú el anillo no se sale de la caja */
+  .dai-ic{width:28px; height:28px; border-radius:8px; background:var(--surface-3); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .desk-add-item:hover .dai-ic, .desk-add-item:focus-visible .dai-ic{background:var(--surface-2);}
+  .dai-ic .icon{width:16px; height:16px;}
+  [data-add="gasto"] .dai-ic{color:var(--danger);}
+  [data-add="ingreso"] .dai-ic{color:var(--success);}
+  [data-add="cuota"] .dai-ic{color:var(--mv-cuota);}
+  [data-add="meta"] .dai-ic{color:var(--mv-aporte);}
+  [data-add="transferencia"] .dai-ic{color:var(--gold);}
+
+  /* Ítems del menú: rótulo en --cream (AA sobre --surface); el activo replica la barra
+     inferior (ícono --gold) con fondo --surface-3 y una marca dorada a la izquierda. */
+  .desk-nav-list{display:flex; flex-direction:column; gap:2px;}
+  .desk-nav-item{
+    position:relative; display:flex; align-items:center; gap:12px; width:100%; height:42px; padding:0 12px;
+    background:none; border:none; border-radius:var(--radius-sm); color:var(--cream); font-size:14.5px; text-align:left; cursor:pointer;
+    transition:background var(--dur-fast) var(--ease-out);
+  }
+  .desk-nav-item .icon{width:19px; height:19px; color:var(--cream-dim);}
+  .desk-nav-item:hover{background:var(--surface-2);}
+  .desk-nav-item.active{background:var(--surface-3); font-weight:600;}
+  .desk-nav-item.active .icon{color:var(--gold);}
+  .desk-nav-item.active::before{content:""; position:absolute; left:0; top:10px; bottom:10px; width:3px; border-radius:3px; background:var(--gold);}
+
+  .desk-nav-foot{margin-top:auto; display:flex; flex-direction:column; gap:10px;}
+  .desk-sep{height:1px; background:var(--border); margin:0 4px;}
+  .desk-cuenta{
+    position:relative; display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:6px 8px;
+    background:none; border:none; border-radius:var(--radius-sm); color:var(--cream); text-align:left; cursor:pointer;
+    transition:background var(--dur-fast) var(--ease-out);
+  }
+  .desk-cuenta:hover{background:var(--surface-2);}
+  .desk-avatar, .desk-login-ic{width:32px; height:32px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+  .desk-avatar{
+    display:none; background-color:var(--gold); background-size:cover; background-position:center;
+    color:var(--burgundy); font-size:12.5px; font-weight:700; letter-spacing:0.02em;
+  }
+  .desk-login-ic{background:var(--surface-3); color:var(--gold);}
+  .desk-login-ic .icon{width:16px; height:16px;}
+  .desk-cuenta.con-sesion .desk-avatar{display:flex;}
+  .desk-cuenta.con-sesion .desk-login-ic{display:none;}
+  .desk-cuenta-txt{display:flex; flex-direction:column; min-width:0;}
+  .desk-cuenta-nombre{font-size:13.5px; font-weight:500; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .desk-cuenta-email{font-size:12px; color:var(--cream-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .desk-cuenta-email:empty{display:none;}
+  .desk-tip{display:none;}
+
+  /* Barra superior: la misma .topbar, convertida en una franja fija de 72 px. El selector
+     de mes y el de cuenta se mueven dentro de ella por JS (syncDeskLayout): mismos
+     elementos, ids y manejadores. El logo, el avatar y Configuración pasan al menú lateral. */
+  .topbar{
+    position:sticky; top:0; z-index:6; flex-shrink:0; justify-content:flex-start; gap:14px;
+    height:72px; padding:0 40px; background:var(--bg); border-bottom:1px solid var(--border);
+  }
+  .topbar .brand, #btnConfig, .topbar .topbar-avatar.con-sesion{display:none;}
+  .desk-title{
+    display:block; margin:0 auto 0 0; font-size:26px; font-weight:500; color:var(--cream);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .topbar .month-select{padding:0; gap:4px; flex-shrink:0;}
+  .topbar .month-select button{
+    width:36px; height:36px; padding:0; border-radius:var(--radius-sm); font-size:18px; color:var(--cream-dim);
+    display:flex; align-items:center; justify-content:center;
+    transition:background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .topbar .month-select button:hover{background:var(--surface-2); color:var(--cream);}
+  .topbar .month-label{font-size:16px; min-width:150px;}
+  .topbar .account-select{padding:0; margin:0; flex-shrink:0;}
+  .topbar .account-select-btn{height:36px; padding:0 14px;}
+  .topbar .account-select-btn:hover{border-color:var(--gold-dim);}
+  .topbar .account-menu{left:auto; right:0; transform:none; top:calc(100% + 6px);}
+  .top-actions{align-items:center; gap:8px; flex-shrink:0;}
+  .top-actions::before{content:""; width:1px; height:24px; background:var(--border); margin-right:6px;}
+  .top-actions .icon-btn{
+    height:38px; min-width:38px; padding:0 9px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    font-size:18px; transition:background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+  .top-actions .icon-btn:hover{background:var(--surface-2); color:var(--cream);}
+  #btnExport{gap:8px; padding:0 12px; font-size:17px;}
+  #btnExport::after{content:"Exportar"; font-size:13.5px;}   /* rótulo visible; el nombre accesible sigue siendo su aria-label */
+  .topbar :focus-visible{outline:2px solid var(--gold); outline-offset:2px; box-shadow:0 0 0 5px var(--focus-ring);}
+
+  /* Área de contenido: en esta tanda cada pantalla queda en una columna de ≈720 px
+     centrada (el rediseño por pantalla es de E2–E4). */
+  #app > .screen{width:100%; max-width:720px; align-self:center; padding:24px 20px 48px;}
+  #app > .notice-bar, #app > .readonly-banner{width:calc(100% - 40px); max-width:680px; align-self:center; margin:16px 0 0;}
+  #app > .notice-bar + .notice-bar{margin-top:8px;}
+  /* Flotantes que en el móvil se centran sobre la barra inferior: aquí se alinean con el
+     área de contenido (a la derecha del menú) y bajan al borde inferior. */
+  .hist-ir-hoy-host{left:calc(50% + 120px); max-width:720px; bottom:24px;}
+  .hist-ir-hoy-host.pos-top{top:82px;}
+  .toast-host{left:240px; bottom:24px;}
+}
+
+/* 1024–1279 px: menú compacto de 72 px, solo íconos; el nombre sale en un tooltip al pasar
+   el cursor y al recibir foco por teclado. El rótulo sigue en el DOM (oculto a la vista)
+   como nombre accesible; el tooltip es aria-hidden para no duplicarlo. */
+@media (min-width:1024px) and (max-width:1279.98px){
+  body{padding-left:72px;}
+  .desk-nav{width:72px; padding:20px 0 14px; align-items:center;}
+  .desk-brand{padding:0 0 20px;}
+  .desk-brand-name, .desk-add-chev, .desk-sep{display:none;}
+  .desk-label, .desk-cuenta-txt{
+    position:absolute; width:1px; height:1px; margin:-1px; padding:0; border:0;
+    overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
+  }
+  .desk-add-wrap{margin:0 0 16px;}
+  .desk-add{width:44px; padding:0; justify-content:center;}
+  .desk-add .icon{width:20px; height:20px;}
+  .desk-add-menu{top:0; left:calc(100% + 10px);}
+  .desk-nav-list{align-items:center; gap:4px;}
+  .desk-nav-item{width:44px; height:44px; padding:0; justify-content:center;}
+  .desk-nav-item .icon{width:20px; height:20px;}
+  .desk-nav-item.active::before{display:none;}
+  .desk-nav-foot{align-items:center;}
+  .desk-cuenta{width:44px; padding:6px; justify-content:center;}
+  .desk-tip{
+    display:block; position:absolute; left:calc(100% + 12px); top:50%; z-index:3;
+    transform:translate(-4px,-50%); opacity:0; visibility:hidden; pointer-events:none;
+    white-space:nowrap; background:var(--surface-3); color:var(--cream); border:1px solid var(--border);
+    border-radius:8px; padding:6px 10px; font-size:12.5px; font-weight:400; line-height:1.3;
+    box-shadow:0 8px 20px rgba(0,0,0,0.4);
+    transition:opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast);
+  }
+  :hover > .desk-tip, :focus-visible > .desk-tip{opacity:1; visibility:visible; transform:translate(0,-50%);}
+  .desk-add[aria-expanded="true"] > .desk-tip{display:none;}
+  .hist-ir-hoy-host{left:calc(50% + 36px);}
+  .toast-host{left:72px;}
+}
 </style>
 </head>
 <body>
+<!-- Tanda E1 · ESCRITORIO (≥1024 px): menú lateral. Bajo 1024 px está oculto (display:none)
+     y la app es la móvil de siempre. Los ítems de pantalla usan la MISMA switchScreen() que la
+     barra inferior (data-screen) y comparten con ella el estado activo; «+ Agregar» abre los
+     mismos sheets que hoy; Configuración y el bloque de cuenta reutilizan #btnConfig. -->
+<nav class="desk-nav" id="deskNav" aria-label="Principal">
+  <div class="desk-brand"><img class="mark-img" src="icons/icon-192.png" alt="" width="32" height="32"><span class="desk-brand-name">Telora</span></div>
+  <div class="desk-add-wrap">
+    <button type="button" class="desk-add" id="deskAddBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="deskAddMenu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="desk-label">Agregar</span><svg class="icon desk-add-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg><span class="desk-tip" aria-hidden="true">Agregar</span></button>
+    <div class="desk-add-menu" id="deskAddMenu" role="menu" aria-label="Agregar" hidden>
+      <button type="button" class="desk-add-item" role="menuitem" data-add="gasto"><span class="dai-ic"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg></span>Gasto</button>
+      <button type="button" class="desk-add-item" role="menuitem" data-add="ingreso"><span class="dai-ic"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/></svg></span>Ingreso</button>
+      <button type="button" class="desk-add-item" role="menuitem" data-add="cuota"><span class="dai-ic"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>Cuota</button>
+      <button type="button" class="desk-add-item" role="menuitem" data-add="meta"><span class="dai-ic"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>Meta</button>
+      <button type="button" class="desk-add-item" role="menuitem" data-add="transferencia"><span class="dai-ic"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>Transferencia</button>
+    </div>
+  </div>
+  <div class="desk-nav-list">
+      <button type="button" class="desk-nav-item active" aria-current="page" data-screen="resumen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg><span class="desk-label">Resumen</span><span class="desk-tip" aria-hidden="true">Resumen</span></button>
+      <button type="button" class="desk-nav-item" data-screen="historial"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="desk-label">Historial</span><span class="desk-tip" aria-hidden="true">Historial</span></button>
+      <button type="button" class="desk-nav-item" data-screen="cuotas"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><span class="desk-label">Cuotas</span><span class="desk-tip" aria-hidden="true">Cuotas</span></button>
+      <button type="button" class="desk-nav-item" data-screen="metas"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span class="desk-label">Metas</span><span class="desk-tip" aria-hidden="true">Metas</span></button>
+  </div>
+  <div class="desk-nav-foot">
+    <button type="button" class="desk-nav-item" id="deskConfigBtn" aria-haspopup="dialog"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="desk-label">Configuración</span><span class="desk-tip" aria-hidden="true">Configuración</span></button>
+    <div class="desk-sep"></div>
+    <button type="button" class="desk-cuenta" id="deskCuentaBtn" aria-haspopup="dialog"><span class="desk-avatar" id="deskCuentaAvatar" aria-hidden="true"></span><span class="desk-login-ic" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span><span class="desk-cuenta-txt"><span class="desk-cuenta-nombre" id="deskCuentaNombre">Iniciar sesión</span><span class="desk-cuenta-email" id="deskCuentaEmail"></span></span><span class="desk-tip" aria-hidden="true" id="deskCuentaTip">Iniciar sesión</span></button>
+  </div>
+</nav>
 <div id="app">
 
   <div class="topbar">
@@ -1814,6 +2019,7 @@ button:active{ transform:scale(0.93); }
       <img class="mark-img" src="icons/icon-192.png" alt="" width="32" height="32">
       <span class="name">Telora</span>
     </div>
+    <h1 class="desk-title" id="deskTitle">Resumen</h1>   <!-- E1: título de pantalla, solo escritorio -->
     <div class="top-actions">
       <button class="topbar-avatar" id="btnCuentaAvatar" type="button"></button>
       <button class="icon-btn" id="btnResumenImg" aria-label="Guardar resumen como imagen"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></button>
@@ -4546,6 +4752,9 @@ function topGastoCategoria(refDate){
 
 /* ==================== NAVEGACIÓN ==================== */
 const SCREEN_ORDER = ['resumen','historial','cuotas','metas'];
+// Botones que cambian de pantalla: los de la barra inferior y los del menú lateral de
+// escritorio (Tanda E1). Todos llaman a switchScreen() con su data-screen.
+const NAV_SCREEN_SEL = '.nav-btn, .desk-nav-item[data-screen]';
 function switchScreen(id){
   if(!SCREEN_ORDER.includes(id)) return;
   const prevIdx = SCREEN_ORDER.indexOf(currentScreen);
@@ -4554,11 +4763,15 @@ function switchScreen(id){
   resetChartViews();   // Tanda Y · pto 1: la vista del gráfico no se recuerda al navegar
   // Al abrir el Resumen se re-dispara el conteo animado de los totales.
   if(id === 'resumen') lastResumenMonthKey = null;
-  document.querySelectorAll('.nav-btn').forEach(b=>{
+  // Tanda E1: barra inferior y menú lateral de escritorio comparten el estado activo.
+  document.querySelectorAll(NAV_SCREEN_SEL).forEach(b=>{
     const on = b.dataset.screen===id;
     b.classList.toggle('active', on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
+  // Título de la barra superior de escritorio: el mismo rótulo del ítem del menú lateral.
+  document.getElementById('deskTitle').textContent =
+    document.querySelector('.desk-nav-item[data-screen="'+id+'"] .desk-label').textContent;
   document.querySelectorAll('.screen').forEach(s=> s.classList.remove('active','scr-fwd','scr-back'));
   const scr = document.getElementById('screen-'+id);
   scr.classList.add('active');
@@ -4568,7 +4781,7 @@ function switchScreen(id){
   }
   renderAll();
 }
-document.querySelectorAll('.nav-btn').forEach(btn=>{
+document.querySelectorAll(NAV_SCREEN_SEL).forEach(btn=>{
   btn.addEventListener('click', ()=> switchScreen(btn.dataset.screen));
 });
 // Tanda E: con un rango de fechas activo en el Historial, la navegación mensual está
@@ -4578,6 +4791,121 @@ function prevMonth(){ if(hRango && currentScreen === 'historial') return; curren
 function nextMonth(){ if(hRango && currentScreen === 'historial') return; currentDate.setMonth(currentDate.getMonth()+1); resetChartViews(); renderAll(); }
 document.getElementById('prevMonth').onclick = prevMonth;
 document.getElementById('nextMonth').onclick = nextMonth;
+
+/* ==================== ESCRITORIO: menú lateral y barra superior (Tanda E1) ==================== */
+// Solo cambia la estructura a ≥1024 px; bajo ese ancho todo esto queda oculto por CSS y el
+// DOM vuelve a estar exactamente como en el móvil.
+const DESK_MQ = window.matchMedia('(min-width: 1024px)');
+// El selector de mes y el de cuenta se reutilizan tal cual (mismos id y manejadores): en
+// escritorio se mueven dentro de .topbar, antes de .top-actions, para que la barra superior
+// sea una sola franja fija y el orden de tabulación siga al visual (menú → barra → contenido).
+// Bajo 1024 px vuelven a su lugar original, justo antes de #screen-resumen.
+function syncDeskLayout(){
+  const topbar = document.querySelector('.topbar');
+  const acciones = topbar.querySelector('.top-actions');
+  const monthSel = document.querySelector('.month-select');
+  const accSel = document.getElementById('accountSelect');
+  if(DESK_MQ.matches){
+    if(monthSel.parentNode !== topbar){
+      topbar.insertBefore(monthSel, acciones);
+      topbar.insertBefore(accSel, acciones);
+    }
+  } else {
+    if(monthSel.parentNode === topbar){
+      const ancla = document.getElementById('screen-resumen');
+      ancla.parentNode.insertBefore(monthSel, ancla);
+      ancla.parentNode.insertBefore(accSel, ancla);
+    }
+    cerrarDeskAddMenu(false);
+  }
+}
+if(DESK_MQ.addEventListener) DESK_MQ.addEventListener('change', syncDeskLayout);
+else if(DESK_MQ.addListener) DESK_MQ.addListener(syncDeskLayout);   // Safari < 14
+syncDeskLayout();
+
+// «+ Agregar»: cada opción abre el MISMO sheet que hoy. Gasto/Ingreso = «¿Qué quieres
+// registrar?» del «+» central; Cuota = gasto en Crédito (como el Paso 5 del onboarding);
+// Meta = «+ Nueva meta»; Transferencia = «Transferir entre cuentas» del selector de cuenta.
+const DESK_ADD_ACCIONES = {
+  gasto: ()=> openGastoForm(null),
+  ingreso: ()=> openIngresoForm(null),
+  cuota: ()=> openCuotaForm(),
+  meta: ()=> openMetaForm(),
+  transferencia: ()=> openTransferForm(null)
+};
+function deskAddItems(){
+  return [...document.querySelectorAll('#deskAddMenu .desk-add-item')].filter(b=> !b.hidden);
+}
+function abrirDeskAddMenu(){
+  if(isReadOnly()){ blockReadOnly(); return; }   // mismo guard que el «+» de la barra inferior
+  const menu = document.getElementById('deskAddMenu');
+  // Mismas reglas de visibilidad que hoy: «+ Nueva meta» se oculta al llegar al límite de
+  // metas activas, y «Transferir entre cuentas» solo existe con ≥2 cuentas vivas.
+  menu.querySelector('[data-add="meta"]').hidden = activeGoalsCount() >= GOALS_FREE_LIMIT;
+  menu.querySelector('[data-add="transferencia"]').hidden = cuentasVivas().length < 2;
+  menu.hidden = false;
+  document.getElementById('deskAddBtn').setAttribute('aria-expanded', 'true');
+  deskAddItems()[0].focus();
+}
+function cerrarDeskAddMenu(devolverFoco){
+  const menu = document.getElementById('deskAddMenu');
+  if(menu.hidden) return;
+  menu.hidden = true;
+  const btn = document.getElementById('deskAddBtn');
+  btn.setAttribute('aria-expanded', 'false');
+  if(devolverFoco) btn.focus();
+}
+(function initDeskNav(){
+  const btn = document.getElementById('deskAddBtn');
+  const menu = document.getElementById('deskAddMenu');
+  btn.addEventListener('click', ()=>{
+    if(menu.hidden) abrirDeskAddMenu(); else cerrarDeskAddMenu(true);
+  });
+  btn.addEventListener('keydown', e=>{
+    if(e.key === 'ArrowDown' && menu.hidden){ e.preventDefault(); abrirDeskAddMenu(); }
+  });
+  menu.addEventListener('click', e=>{
+    const it = e.target.closest('.desk-add-item');
+    if(!it) return;
+    cerrarDeskAddMenu(false);   // el foco pasa al sheet que se abre
+    DESK_ADD_ACCIONES[it.dataset.add]();
+  });
+  // Teclado del menú: flechas/Inicio/Fin recorren las opciones; Esc cierra y devuelve el
+  // foco al botón; Tab cierra y deja que el foco siga su curso.
+  menu.addEventListener('keydown', e=>{
+    const items = deskAddItems();
+    const i = items.indexOf(document.activeElement);
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      const n = items.length;
+      items[(i + (e.key === 'ArrowDown' ? 1 : -1) + n) % n].focus();
+    } else if(e.key === 'Home' || e.key === 'End'){
+      e.preventDefault();
+      items[e.key === 'Home' ? 0 : items.length - 1].focus();
+    } else if(e.key === 'Escape'){
+      e.preventDefault();
+      cerrarDeskAddMenu(true);
+    } else if(e.key === 'Tab'){
+      cerrarDeskAddMenu(false);
+    }
+  });
+  // Clic fuera del menú (o del botón) lo cierra.
+  document.addEventListener('pointerdown', e=>{
+    if(!menu.hidden && !e.target.closest('.desk-add-wrap')) cerrarDeskAddMenu(false);
+  });
+  // Configuración: la misma hoja que el engranaje del encabezado.
+  document.getElementById('deskConfigBtn').addEventListener('click', ()=> document.getElementById('btnConfig').click());
+  // Bloque de cuenta: con sesión, igual que el avatar del encabezado (abre Configuración);
+  // sin sesión, «Iniciar sesión» lleva además directo al bloque «Cuenta de usuario».
+  document.getElementById('deskCuentaBtn').addEventListener('click', ()=>{
+    document.getElementById('btnConfig').click();
+    if(document.getElementById('deskCuentaBtn').classList.contains('con-sesion')) return;
+    const grupo = document.getElementById('cuentaUsuarioSinSesion').closest('details.cfg-group');
+    grupo.open = true;
+    grupo.scrollIntoView({ block:'start' });
+    grupo.querySelector('summary').focus({ preventScroll:true });
+  });
+})();
 
 /* ==================== GESTOS TÁCTILES (swipe) — Día 13 ==================== */
 // Alternativas adicionales a botones/flechas/tap-fuera, nunca los reemplazan.
@@ -4949,6 +5277,13 @@ function syncCuotaFields(){
   }
 }
 document.getElementById('gMetodo').addEventListener('change', syncCuotaFields);
+// Nueva cuota = formulario de gasto ya en «Crédito». Lo usan el Paso 5 del onboarding y
+// «+ Agregar → Cuota» del menú lateral de escritorio (Tanda E1).
+function openCuotaForm(){
+  openGastoForm(null);
+  fillSelect('gMetodo', state.config.metodos, 'Crédito');
+  syncCuotaFields();
+}
 
 // Toggle Fijo/Casual del formulario de ingreso (mismo comportamiento que en gastos).
 function syncIngresoRango(){
@@ -13516,11 +13851,7 @@ document.getElementById('obBody').addEventListener('click', e=>{
     onboardingAvanzarA(4);
   }
   else if(accion === 'continuar-fijos') onboardingContinuarFijos();
-  else if(accion === 'agregar-cuota'){
-    openGastoForm(null);
-    fillSelect('gMetodo', state.config.metodos, 'Crédito');
-    syncCuotaFields();
-  }
+  else if(accion === 'agregar-cuota') openCuotaForm();
   else if(accion === 'saltar-cuota') onboardingAvanzarA(6);
   else if(accion === 'elegir-meta'){
     const m = METAS_SUGERIDAS[parseInt(el.dataset.obIdx, 10)];
@@ -13618,6 +13949,7 @@ function renderTopbarAvatar(session){
     btn.textContent = '';
     btn.removeAttribute('aria-label');
     btn.removeAttribute('title');
+    renderDeskCuenta(null);
     return;
   }
   const um = session.user.user_metadata || {};
@@ -13631,13 +13963,30 @@ function renderTopbarAvatar(session){
   btn.classList.add('con-sesion');
   btn.style.backgroundImage = '';
   btn.textContent = inicialesDe(nombre || email);   // placeholder mientras carga o si no hay foto
+  renderDeskCuenta({ nombre, email, iniciales: inicialesDe(nombre || email) });
 
   if(avatarUrl){
     const img = new Image();
-    img.onload = ()=>{ btn.style.backgroundImage = `url("${avatarUrl}")`; btn.textContent = ''; };
+    img.onload = ()=>{ btn.style.backgroundImage = `url("${avatarUrl}")`; btn.textContent = ''; renderDeskCuenta({ nombre, email, foto: avatarUrl }); };
     img.onerror = ()=>{ btn.style.backgroundImage = ''; btn.textContent = inicialesDe(nombre || email); };
     img.src = avatarUrl;
   }
+}
+
+// Bloque de cuenta del menú lateral de escritorio (Tanda E1): mismo estado que el
+// distintivo del topbar, así que lo actualiza renderTopbarAvatar() (vía
+// renderCuentaUsuario()) al iniciar o cerrar sesión. d = null → «Iniciar sesión».
+function renderDeskCuenta(d){
+  const btn = document.getElementById('deskCuentaBtn');
+  if(!btn) return;
+  const av = document.getElementById('deskCuentaAvatar');
+  const etiqueta = d ? (d.nombre || d.email) : 'Iniciar sesión';
+  btn.classList.toggle('con-sesion', !!d);
+  document.getElementById('deskCuentaNombre').textContent = etiqueta;
+  document.getElementById('deskCuentaEmail').textContent = (d && d.nombre) ? d.email : '';
+  document.getElementById('deskCuentaTip').textContent = etiqueta;
+  av.style.backgroundImage = (d && d.foto) ? `url("${d.foto}")` : '';
+  av.textContent = (d && !d.foto) ? d.iniciales : '';
 }
 
 document.getElementById('btnCuentaAvatar').onclick = ()=>{
