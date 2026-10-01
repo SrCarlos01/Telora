@@ -51,13 +51,13 @@ Telora usa proveedores que tratan datos por cuenta del responsable, solo para pr
 | Supabase, Inc. | Base de datos y autenticación | Servidores en São Paulo, Brasil (región sa-east-1) |
 | Google LLC | Inicio de sesión con Google | Estados Unidos y otros países según las políticas de Google |
 | GitHub, Inc. | Alojamiento del sitio web telora.cl | Estados Unidos |
-| [RAZÓN SOCIAL DE RESEND] | Envío de los correos con el código de acceso | Estados Unidos |
+| Plus Five Five, Inc. (Resend) | Envío de los correos con el código de acceso | Brasil (región São Paulo) y Estados Unidos |
 
 No se comunican datos a otros terceros, salvo por requerimiento legal de una autoridad competente.
 
 ## 6. Transferencia internacional de datos
 
-Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase). Si entras con Google, tu autenticación se procesa en los servidores de Google; si entras con tu correo, el correo con tu código de acceso se envía a través de Resend, en Estados Unidos. Estas transferencias se realizan con proveedores que ofrecen garantías contractuales de protección de datos y medidas de seguridad adecuadas, conforme a lo que exige la ley chilena.
+Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase). Si entras con Google, tu autenticación se procesa en los servidores de Google; si entras con tu correo, el correo con tu código de acceso se envía a través de Plus Five Five, Inc. (Resend), en Brasil (región São Paulo) y Estados Unidos. Estas transferencias se realizan con proveedores que ofrecen garantías contractuales de protección de datos y medidas de seguridad adecuadas, conforme a lo que exige la ley chilena.
 
 ## 7. Cuánto tiempo conservamos tus datos
 
