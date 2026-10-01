@@ -15,7 +15,7 @@ Contacto para cualquier materia de privacidad: **privacidad@telora.cl**
 
 **Sin iniciar sesión.** Todo lo que registras (gastos, ingresos, cuotas, metas, cuentas y configuración) se guarda únicamente en el almacenamiento de tu navegador o dispositivo. Esos datos no se envían a ningún servidor y el responsable no tiene acceso a ellos. Si borras los datos del navegador o desinstalas la app sin un respaldo, se pierden.
 
-**Con sesión iniciada (opcional).** Si inicias sesión con tu cuenta de Google, Telora puede mantener un respaldo de tus datos en la nube para que no se pierdan. Por ahora, ese respaldo se hace desde un solo dispositivo por cuenta: el primero en activarlo o el que tú elijas cuando la app te lo pregunte. En los demás dispositivos donde inicies sesión, lo que registres en ellos sigue guardado solo en ese dispositivo. Desde que inicias sesión aplica lo que se describe a continuación.
+**Con sesión iniciada (opcional).** Si inicias sesión (con Google o con tu correo), Telora puede mantener un respaldo de tus datos en la nube para que no se pierdan. Por ahora, ese respaldo se hace desde un solo dispositivo por cuenta: el primero en activarlo o el que tú elijas cuando la app te lo pregunte. En los demás dispositivos donde inicies sesión, lo que registres en ellos sigue guardado solo en ese dispositivo. Desde que inicias sesión aplica lo que se describe a continuación.
 
 ## 3. Qué datos tratamos cuando inicias sesión
 
@@ -51,7 +51,7 @@ Telora usa proveedores que tratan datos por cuenta del responsable, solo para pr
 | Supabase, Inc. | Base de datos y autenticación | Servidores en São Paulo, Brasil (región sa-east-1) |
 | Google LLC | Inicio de sesión con Google | Estados Unidos y otros países según las políticas de Google |
 | GitHub, Inc. | Alojamiento del sitio web telora.cl | Estados Unidos |
-| Resend | Envío de los correos con el código de acceso | Estados Unidos |
+| [RAZÓN SOCIAL DE RESEND] | Envío de los correos con el código de acceso | Estados Unidos |
 
 No se comunican datos a otros terceros, salvo por requerimiento legal de una autoridad competente.
 
@@ -71,7 +71,7 @@ Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase).
 - Las claves de administración no están incluidas en la aplicación.
 - Si ocurre una vulneración de seguridad que afecte tus datos, la notificaremos a la autoridad y a los afectados en los plazos y formas que exige la ley.
 
-Ningún sistema es 100 % invulnerable. Te recomendamos mantener protegida tu cuenta de Google y tu dispositivo.
+Ningún sistema es 100 % invulnerable. Te recomendamos mantener protegida la cuenta con la que entras (Google o tu correo) y tu dispositivo.
 
 ## 9. Tus derechos
 
