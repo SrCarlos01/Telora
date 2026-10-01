@@ -23,6 +23,7 @@
 <div id="resultados">Cargando iframe…</div>
 <div id="resumen"></div>
 <div id="localStorageCheck"></div>
+<div id="relojPruebas" style="margin-top:8px; font-size:13px; color:#666;"></div>
 
 <iframe id="appFrame" src="index.html" style="display:none"></iframe>
 
@@ -103,9 +104,50 @@ function setState(win, fixture){
 // al iframe que no existe.
 function mk(d){ return d.getFullYear()*12 + d.getMonth(); }
 
+// ---- Reloj de las pruebas ----
+// «Hoy» fijo y determinista: 16-09-2026 a mediodía, salvo que la URL traiga ?hoy=AAAA-MM-DD
+// (para verificar que ninguna prueba dependa del día real). instalarRelojPruebas() cambia
+// el Date global DEL IFRAME por uno cuyo `new Date()`/`Date.now()` parten de ese día y
+// avanzan en tiempo real (los temporizadores y esperas relativas siguen funcionando);
+// `new Date(...)` con argumentos y el resto de Date quedan intactos. index.html lee «hoy»
+// solo por ahí (new Date(), Date.now(), mesActualReal()), así que no hay que tocarlo.
+// Las pruebas que dicen «mes actual» o «futuro» se arman con mesRel()/isoRel() relativos
+// a este día; los meses cerrados fijos (enero–junio 2026) valen para cualquier reloj
+// desde julio de 2026.
+const HOY_PRUEBAS = (()=>{
+  const q = new URLSearchParams(location.search).get('hoy');
+  const m = q && /^(\d{4})-(\d{2})-(\d{2})$/.exec(q);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0) : new Date(2026, 8, 16, 12, 0, 0);
+})();
+// Fecha del mes desplazado `off` meses respecto a HOY_PRUEBAS (día `dia`, 15 por defecto).
+function mesRel(off, dia = 15){ return new Date(HOY_PRUEBAS.getFullYear(), HOY_PRUEBAS.getMonth() + off, dia); }
+function isoRel(off, dia = 15){
+  const d = mesRel(off, dia);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function instalarRelojPruebas(win){
+  win.eval(`(function(T0){
+    const R = window.__DateReal || Date;
+    const inicio = R.now();
+    const ahora = () => T0 + (R.now() - inicio);
+    function RelojPruebas(...a){
+      if(!new.target) return new R(ahora()).toString();
+      return a.length ? new R(...a) : new R(ahora());
+    }
+    RelojPruebas.prototype = R.prototype;
+    RelojPruebas.now = ahora; RelojPruebas.parse = R.parse; RelojPruebas.UTC = R.UTC;
+    window.__DateReal = R;
+    window.Date = RelojPruebas;
+    currentDate = new Date();   // se fijó con el reloj real al cargar index.html
+  })(${HOY_PRUEBAS.getTime()});`);
+}
+
 async function runTests(){
   const iframe = document.getElementById('appFrame');
   const win = iframe.contentWindow;
+  instalarRelojPruebas(win);
+  document.getElementById('relojPruebas').textContent =
+    `Reloj de las pruebas: hoy = ${HOY_PRUEBAS.toLocaleDateString('es-CL')} (cambiar con ?hoy=AAAA-MM-DD).`;
 
   // Punto 1: confirmar que el iframe cargó y las funciones del motor existen.
   const funcionesEsperadas = [
@@ -317,17 +359,17 @@ async function runTests(){
   }
 
   // ---- Caso 4b: proyeccionFinDeMes (normal: mes FUTURO) ----
-  // Diciembre 2026 (futuro respecto a hoy): ningún gasto/ingreso "ya ocurrió" (mkRef >
+  // Tres meses después de HOY_PRUEBAS (futuro): ningún gasto/ingreso "ya ocurrió" (mkRef >
   // mkHoy siempre da yaOcurrio=false), así que el gasto conocido pasa entero a
   // fijosCuotasRestantes y el estimado variable es 0 (cero días transcurridos).
   // dispProyectado = 0 (arrastre) + 200.000 (ingreso) - 30.000 (gasto conocido) = 170.000.
   {
     const st = fixtureBase();
-    st.incomes.push({ id:'i4', date:'2026-12-05', amount:200000, tipo:'Casual' });
-    st.expenses.push({ id:'e4', date:'2026-12-10', amount:30000, tipo:'Casual', category:'Comida' });
+    st.incomes.push({ id:'i4', date: isoRel(3, 5), amount:200000, tipo:'Casual' });
+    st.expenses.push({ id:'e4', date: isoRel(3, 10), amount:30000, tipo:'Casual', category:'Comida' });
     setState(win, st);
     resetCaches(win);
-    const refDate = new Date(2026, 11, 15); // 15 diciembre 2026 (mes futuro)
+    const refDate = mesRel(3); // día 15, tres meses después de hoy (mes futuro)
     const resultado = win.proyeccionFinDeMes(refDate, 'total');
     const esperado = 170000;
     assert(resultado && resultado.dispProyectado === esperado && resultado.diasTranscurridos === 0,
@@ -419,8 +461,8 @@ async function runTests(){
   //   · Deuda "vencida sin confirmar": comprada 2025-12-01 (1 cuota/mes, 6 cuotas), su
   //     cuota 1 vence el 2026-01-01 -> en enero 2026 (mes cerrado hace mucho respecto a
   //     hoy) el día de vencimiento YA PASÓ y nadie la confirmó como pagada.
-  //   · Deuda "pagada antes de vencer": comprada 2026-11-01 (3 cuotas), su cuota 1 vence
-  //     el 2026-12-01 -> en diciembre 2026 (mes FUTURO respecto a hoy) el día de
+  //   · Deuda "pagada antes de vencer": comprada el día 1 de hoy+2 meses (3 cuotas), su
+  //     cuota 1 vence el día 1 de hoy+3 -> en ese mes (FUTURO respecto a hoy) el día de
   //     vencimiento AÚN NO llega, pero se confirma manualmente como pagada de todos modos
   //     (alguien pagó por adelantado).
   // El criterio correcto (post Tanda P, revertido el bug de Tanda I/J) es: SOLO la
@@ -428,14 +470,14 @@ async function runTests(){
   // (con aviso porConfirmar), y pagada-antes-de-vencer debe contar como "pagada" igual.
   {
     const refVencida = new Date(2026, 0, 15);   // 15 enero 2026
-    const refPagada = new Date(2026, 11, 15);   // 15 diciembre 2026
+    const refPagada = mesRel(3);                // día 15, hoy + 3 meses (futuro)
 
     const debtVencida = {
       id:'dVenc', purchaseDate:'2025-12-01', numCuotas:6, totalAmount:600000,
       manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
     };
     const debtPagadaAntes = {
-      id:'dPagAntes', purchaseDate:'2026-11-01', numCuotas:3, totalAmount:300000,
+      id:'dPagAntes', purchaseDate: isoRel(2, 1), numCuotas:3, totalAmount:300000,
       manualPaidMonthKeys: [ mk(refPagada) ], manualUnpaidMonthKeys: []
     };
 
@@ -659,21 +701,21 @@ async function runTests(){
   }
 
   // ---- desgloseDisponible (mes NO cerrado: clave 'cuotasPagadas' en vez de 'cuotasMes') ----
-  // Deuda comprada 2026-09-01 (un mes antes del refDate, mismo truco que el caso anterior
-  // para que el arrastre quede en 0), 1 cuota de 40.000 -> cuotaNum 1 en octubre 2026 (mes
-  // FUTURO respecto a "hoy"), confirmada manualmente como pagada. Ingreso 100.000 - cuota
+  // Deuda comprada el día 1 del mes de hoy (un mes antes del refDate, mismo truco que el caso
+  // anterior para que el arrastre quede en 0), 1 cuota de 40.000 -> cuotaNum 1 en el mes
+  // siguiente (FUTURO respecto a "hoy"), confirmada manualmente como pagada. Ingreso 100.000 - cuota
   // confirmada 40.000 (sin gasto) = disponible 60.000. Al no estar cerrado el mes, el
   // término de cuotas debe usar la clave 'cuotasPagadas' (no 'cuotasMes').
   {
     const debtFuturo = {
-      id:'dDesglose2', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:40000, category:'Transporte',
+      id:'dDesglose2', purchaseDate: isoRel(0, 1), numCuotas:1, totalAmount:40000, category:'Transporte',
       manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
     };
-    const refFuturo = new Date(2026, 9, 15); // 15 octubre 2026
+    const refFuturo = mesRel(1); // día 15 del mes siguiente a hoy
     debtFuturo.manualPaidMonthKeys = [ mk(refFuturo) ];
     const st = fixtureBase();
     st.debts.push(debtFuturo);
-    st.incomes.push({ id:'iD2', date:'2026-10-05', amount:100000, tipo:'Casual' });
+    st.incomes.push({ id:'iD2', date: isoRel(1, 5), amount:100000, tipo:'Casual' });
     setState(win, st);
     resetCaches(win);
     const resultado = win.desgloseDisponible(refFuturo, false, 'total');
@@ -707,12 +749,12 @@ async function runTests(){
   {
     const st = fixtureBase();
     st.debts.push({
-      id:'dCatNoConf', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:50000, category:'Transporte',
+      id:'dCatNoConf', purchaseDate: isoRel(0, 1), numCuotas:1, totalAmount:50000, category:'Transporte',
       manualPaidMonthKeys: [], manualUnpaidMonthKeys: []
     });
     setState(win, st);
     resetCaches(win);
-    const refDate = new Date(2026, 9, 15); // 15 octubre 2026 (futuro respecto a "hoy")
+    const refDate = mesRel(1); // día 15 del mes siguiente (futuro respecto a "hoy")
     const resultado = win.cuotasPorCategoriaGastoDelMes(refDate, 'total');
     assert(Object.keys(resultado).length === 0,
       `cuotasPorCategoriaGastoDelMes (mes no cerrado, cuota sin confirmar): no suma = {}`,
@@ -721,10 +763,10 @@ async function runTests(){
 
   // ---- cuotasPorCategoriaGastoDelMes (mes en curso/futuro, cuota SÍ confirmada: sí suma) ----
   {
-    const refDate = new Date(2026, 9, 15); // 15 octubre 2026 (futuro respecto a "hoy")
+    const refDate = mesRel(1); // día 15 del mes siguiente (futuro respecto a "hoy")
     const st = fixtureBase();
     st.debts.push({
-      id:'dCatConf', purchaseDate:'2026-09-01', numCuotas:1, totalAmount:50000, category:'Transporte',
+      id:'dCatConf', purchaseDate: isoRel(0, 1), numCuotas:1, totalAmount:50000, category:'Transporte',
       manualPaidMonthKeys: [ mk(refDate) ], manualUnpaidMonthKeys: []
     });
     setState(win, st);
@@ -901,13 +943,13 @@ async function runTests(){
 
   // ---- (b) disponible == resumenTotalesDelMes().dispLibre, mes abierto (actual) y mes cerrado ----
   {
-    // Mes abierto/actual: septiembre 2026 (hoy es 16-09-2026, así que este mes sigue abierto).
+    // Mes abierto/actual: el mes de HOY_PRUEBAS (sigue abierto).
     const st = fixtureBase();
-    st.incomes.push({ id:'iP2a', date:'2026-09-05', amount:150000, tipo:'Casual' });
-    st.expenses.push({ id:'eP2a', date:'2026-09-10', amount:40000, tipo:'Casual', category:'Comida' });
+    st.incomes.push({ id:'iP2a', date: isoRel(0, 5), amount:150000, tipo:'Casual' });
+    st.expenses.push({ id:'eP2a', date: isoRel(0, 10), amount:40000, tipo:'Casual', category:'Comida' });
     setState(win, st);
     resetCaches(win);
-    const refDate = new Date(2026, 8, 15); // 15 septiembre 2026
+    const refDate = mesRel(0); // día 15 del mes de hoy
     const T = win.resumenTotalesDelMes(refDate, 'total');
     const datos = win.prepararDatosResumenImagen(refDate, 'total');
     assert(T.cerrado === false && datos.disponible === T.dispLibre,
@@ -1509,11 +1551,11 @@ async function runTests(){
   // ==================== T22 — prepararDatosExport() (Excel con ExcelJS) ====================
   // Función pura que arma filas y totales del libro. Las fechas del fixture son RELATIVAS
   // a hoy (mes pasado, mes actual, mes siguiente) porque "Proyectado" depende de
-  // fechaHoyLocalISO() y de esMesCerrado(), que leen el reloj real.
+  // fechaHoyLocalISO() y de esMesCerrado(), que leen el reloj (el de las pruebas: HOY_PRUEBAS).
   {
     assert(typeof win.prepararDatosExport === 'function', 'iframe.contentWindow.prepararDatosExport existe y es function',
       `typeof = ${typeof win.prepararDatosExport}`);
-    const hoy = new Date();
+    const hoy = new Date(HOY_PRUEBAS);
     const Y = hoy.getFullYear(), M = hoy.getMonth();
     const iso = (y, m, d)=>{ const x = new Date(y, m, d); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
     const primero = off => new Date(Y, M + off, 1);
