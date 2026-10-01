@@ -15437,10 +15437,11 @@ document.getElementById('btnLoginGoogle').onclick = async ()=>{
    acá no hay lógica de sesión, solo el formulario. */
 const OTP_LARGO = 6;
 const OTP_REENVIO_SEG = 60;
-// Debe calzar con «Email OTP Expiration» del panel de Supabase (por defecto 3600 s). El
+// AMBOS VALORES DEBEN COINCIDIR: esta constante y «Email OTP Expiration» del panel de
+// Supabase (Authentication → Providers → Email), configurado en 600 s (10 min). El
 // servidor responde lo mismo (otp_expired) a un código incorrecto y a uno vencido; este
 // plazo es lo único que permite decir cuál de los dos fue.
-const OTP_VIGENCIA_SEG = 3600;
+const OTP_VIGENCIA_SEG = 600;
 
 function correoValido(s){
   const c = String(s == null ? '' : s).trim();
