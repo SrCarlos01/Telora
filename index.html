@@ -13389,6 +13389,14 @@ function isIOSDevice(){
   return /iphone|ipad|ipod/i.test(ua) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS se hace pasar por Mac
 }
+// Tanda L1: texto del aviso «Instala Telora» (función pura). iOS primero (un iPad apaisado
+// pasa de 1024 px y aun así instala desde Safari); en escritorio (≥1024 px o sin pantalla
+// táctil) Chrome y Edge ofrecen el ícono de instalar en la barra de direcciones.
+function textoAvisoInstalar({ ios = false, ancho = 0, tactil = true } = {}){
+  if(ios) return 'En Safari: toca Compartir y luego “Agregar a inicio”. Instalada, tus datos no se borran a los 7 días.';
+  if(ancho >= 1024 || !tactil) return 'En Chrome o Edge: usa el ícono de instalar en la barra de direcciones.';
+  return 'En Chrome: menú ⋮ y luego “Agregar a pantalla de inicio”. Instalarla protege tus datos.';
+}
 (function initDataShieldBanners(){
   // pto 4 · recordatorio de respaldo semanal
   const rem = document.getElementById('backupReminder');
@@ -13419,9 +13427,10 @@ function isIOSDevice(){
     let dismissedAt = 0;
     try{ dismissedAt = parseInt(localStorage.getItem('misfinanzas_install_dismissed') || '0', 10) || 0; }catch(_){}
     if((Date.now() - dismissedAt) > 7 * DIA_MS){
-      document.getElementById('installBannerHint').textContent = isIOSDevice()
-        ? 'En Safari: toca Compartir y luego “Agregar a inicio”. Instalada, tus datos no se borran a los 7 días.'
-        : 'En Chrome: menú ⋮ y luego “Agregar a pantalla de inicio”. Instalarla protege tus datos.';
+      document.getElementById('installBannerHint').textContent = textoAvisoInstalar({
+        ios: isIOSDevice(), ancho: window.innerWidth,
+        tactil: ('ontouchstart' in window) || navigator.maxTouchPoints > 0
+      });
       ib.hidden = false;
       document.getElementById('ibDismiss').onclick = ()=>{
         try{ localStorage.setItem('misfinanzas_install_dismissed', String(Date.now())); }catch(_){}
@@ -14377,11 +14386,14 @@ const ESCRITURA_CONTINUA_ACTIVA = true;
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
 // migrarEstadoCuentas() siempre crea una "Principal" en un dispositivo nuevo, así que
 // exigir 0 cuentas haría que ningún dispositivo calificara nunca.
-function localEstaVacio(){
-  const n = k => Array.isArray(state[k]) ? state[k].length : 0;
+// Tanda L1: función pura (recibe el estado) para probarla y reutilizarla en el caso A de
+// intentarSubidaInicial(); localEstaVacio() sigue siendo el mismo criterio sobre `state`.
+function sinDatosFinancieros(st){
+  const n = k => (st && Array.isArray(st[k])) ? st[k].length : 0;
   return n('expenses') === 0 && n('incomes') === 0 && n('debts') === 0
       && n('goals') === 0 && n('transfers') === 0 && n('accounts') <= 1;
 }
+function localEstaVacio(){ return sinDatosFinancieros(state); }
 
 // Marca local "este dispositivo quedó registrado pero su pull no terminó" (mismo criterio
 // que telora_subida_pendiente): registrarDispositivo() va antes del pull, así que sin esta
@@ -15279,7 +15291,14 @@ async function intentarSubidaInicial(session){
       }
       return;
     }
-    // Caso A: nadie ha confirmado todavía — se pregunta siempre, aunque no haya datos locales.
+    // Caso A: nadie ha confirmado todavía. Tanda L1: sin datos financieros locales no hay
+    // nada que atribuir, así que no se pregunta: se asocia el dispositivo directamente
+    // (mismo resultado que «Sí, son míos» con una base vacía). Con datos, se pregunta.
+    if(sinDatosFinancieros(state)){
+      marcarDuenoConfirmado(userId);
+      await subirDatosIniciales(userId, deviceId);
+      return;
+    }
     subidaDuenoCtx = { userId, deviceId };
     document.getElementById('confirmarDuenoCorreo').textContent = (session.user.email || 'con la que iniciaste sesión');
     abrirCuandoLibre(()=> openSheet('sheetConfirmarDueno', 'btnConfirmarDueno'));
