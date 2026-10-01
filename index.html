@@ -77,6 +77,15 @@
   --mv-gasto:var(--danger);
   --mv-cuota:#CE7C3A;
   --mv-aporte:#D9B24C;
+  /* Tanda E0 (escritorio): colores que hoy eran fijos en el CSS, ahora como tokens con
+     EXACTAMENTE el mismo valor. Todavía no están en PALETAS: todas las paletas heredan
+     este valor (cero cambio visual). Texto sobre burdeo (.balance-card, .btn-primary,
+     chips activos…), texto sobre --danger, fondo de los sheets y anillo de foco. */
+  --on-burgundy:#FBEFE9;
+  --on-burgundy-dim:#E7C3CB;
+  --on-danger:#fff;
+  --scrim:rgba(10,6,5,0.6);
+  --focus-ring:rgba(201,166,107,0.12);
   --radius:16px;
   --radius-sm:10px;
   --font-scale:1;   /* Tamaño de letra (accesibilidad): 1 / 1.15 / 1.3 — ver Configuración */
@@ -296,12 +305,12 @@ button{font-family:inherit;}
   background:linear-gradient(155deg, var(--burgundy) 0%, var(--burgundy-dim) 100%);
   border-radius:20px; padding:22px 20px; margin-bottom:22px;
 }
-.balance-card .label{font-size:14px; color:#E7C3CB; margin:0 0 6px; letter-spacing:.02em;}
+.balance-card .label{font-size:14px; color:var(--on-burgundy-dim); margin:0 0 6px; letter-spacing:.02em;}
 /* Tanda S · pto 4: red de seguridad para el caso extremo (8 cifras + font-scale 1.3,
    ver .balance-head-main más abajo) — si ni siquiera la fila completa (dona ya abajo)
    alcanza para la cifra, que baje a una 2ª línea propia en vez de salirse de la
    tarjeta. overflow-wrap:anywhere no cambia nada cuando el monto sí cabe. */
-.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:#FBEFE9; overflow-wrap:anywhere;}
+.balance-card .amount{font-family:ui-serif,Georgia,serif; font-size:38px; font-weight:500; margin:0 0 14px; color:var(--on-burgundy); overflow-wrap:anywhere;}
 .amount.neg{color:#F3D3CE;}
 /* ---------- TANDA R2 · líneas de contexto de la cifra grande (ptos 2 y 3) ----------
    "Saldo mes anterior" y "Cuotas pendientes" con sintaxis pareja: nombre · monto ·
@@ -313,12 +322,12 @@ button{font-family:inherit;}
    Tanda V · pto 2: el monto va JUNTO a su etiqueta (sin margin-left:auto que lo
    empujaba al borde derecho); la separación la da el gap de .bx-line. */
 .bx-line{display:flex; align-items:baseline; gap:6px; margin:0 0 3px; flex-wrap:wrap;}
-.bx-line .bx-k{font-size:12.5px; color:#E7C3CB; flex-shrink:0;}
+.bx-line .bx-k{font-size:12.5px; color:var(--on-burgundy-dim); flex-shrink:0;}
 .bx-line .bx-end{min-width:0; display:flex; flex-wrap:wrap;
   align-items:baseline; justify-content:flex-start; gap:4px 6px;}
-.bx-line .bx-v{font-size:14px; font-weight:600; color:#FBEFE9; white-space:nowrap;}
+.bx-line .bx-v{font-size:14px; font-weight:600; color:var(--on-burgundy); white-space:nowrap;}
 .bx-line .bx-v.neg{color:#F3D3CE;}
-.bx-tag{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:#E7C3CB;
+.bx-tag{font-size:9px; text-transform:uppercase; letter-spacing:.04em; color:var(--on-burgundy-dim);
   border:1px solid rgba(255,255,255,0.3); border-radius:6px; padding:1px 4px; white-space:nowrap;}
 :root.hc .bx-line .bx-k, :root.hc .bx-line .bx-v, :root.hc .bx-tag{color:#fff;}
 :root.hc .bx-line .bx-v.neg{color:#FFC9C0;}
@@ -328,18 +337,18 @@ button{font-family:inherit;}
    Disponible. var(--danger) sigue la paleta activa + su redefinición en alto contraste,
    sin variable nueva. El formato atenuado de mes CERRADO (Tanda R3, arriba) no se toca. */
 #rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:var(--danger); font-weight:800; font-size:16px;}
-#rDisponiblePendRow:not(.bx-cerrado) .bx-tag{background:var(--danger); color:#fff; border-color:var(--danger); font-weight:700;}
+#rDisponiblePendRow:not(.bx-cerrado) .bx-tag{background:var(--danger); color:var(--on-danger); border-color:var(--danger); font-weight:700;}
 :root.hc #rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:#fff;}
 /* Tanda R3 — en meses CERRADOS "Cuotas pendientes" es una nota informativa atenuada:
    esas cuotas ya cuentan como gasto del mes. Sin píldora, sin monto, sin rojo — el
    pto 2 pide respetar este formato y no devolverlo a alerta. */
 .bx-line.bx-cerrado{display:block; margin:0 0 3px;}
-.bx-line.bx-cerrado .bx-k{font-size:11px; font-weight:400; color:#E7C3CB; line-height:1.45;}
+.bx-line.bx-cerrado .bx-k{font-size:11px; font-weight:400; color:var(--on-burgundy-dim); line-height:1.45;}
 .bx-line.bx-cerrado .bx-end{display:none;}
 :root.hc .bx-line.bx-cerrado .bx-k{color:#fff;}
 /* Aviso discreto en meses ANTERIORES al "Mes de inicio de registro" (Tanda L): esos
    meses siguen navegables pero ya no arrastran saldo hacia el Disponible actual. */
-.balance-carry-note{font-size:11px; color:#E7C3CB; line-height:1.4; margin:-4px 0 14px;}
+.balance-carry-note{font-size:11px; color:var(--on-burgundy-dim); line-height:1.4; margin:-4px 0 14px;}
 :root.hc .balance-carry-note{color:#fff;}
 /* Tanda R4 · pto 3: separación del divisor superior (antes pegada) + labels más
    grandes y en negrita. Los montos (.v) no cambian — siguen siendo lo más prominente
@@ -354,12 +363,12 @@ button{font-family:inherit;}
    6px) NO se toca — ya está medido sin overflow y sigue igual. */
 .balance-row{display:flex; flex-wrap:wrap; gap:6px; row-gap:12px; align-items:flex-start; margin-top:14px;}
 .balance-item{flex:1; min-width:max-content;}
-.balance-item .k{font-size:12.5px; font-weight:700; letter-spacing:-0.2px; color:#E7C3CB; margin:0 0 3px;}
-.balance-item .v{font-size:15px; font-weight:600; color:#FBEFE9; margin:0; white-space:nowrap;}
+.balance-item .k{font-size:12.5px; font-weight:700; letter-spacing:-0.2px; color:var(--on-burgundy-dim); margin:0 0 3px;}
+.balance-item .v{font-size:15px; font-weight:600; color:var(--on-burgundy); margin:0; white-space:nowrap;}
 /* Desglose "Contado" bajo el mini-total "Gastos" (Tanda O · punto 4): "Gastos" pasa a
    incluir las cuotas del mes; esta línea chica muestra cuánto de ese total es gasto de
    contado (sin cuotas). Mismo patrón visual que .balance-carry-note. */
-.balance-item .v-sub{font-size:10px; font-weight:400; color:#E7C3CB; margin:2px 0 0; white-space:normal; line-height:1.25; overflow-wrap:anywhere;}
+.balance-item .v-sub{font-size:10px; font-weight:400; color:var(--on-burgundy-dim); margin:2px 0 0; white-space:normal; line-height:1.25; overflow-wrap:anywhere;}
 :root.hc .balance-item .v-sub{color:#fff;}
 /* Color por tipo de movimiento en los mini-totales del Resumen (Corrección Tanda I).
    Tonos aclarados para que se lean sobre el burdeos de la tarjeta. */
@@ -390,9 +399,9 @@ button{font-family:inherit;}
 .balance-dona{ flex-shrink:0; width:98px; text-align:center; margin-left:auto; }
 .balance-dona-svg{ width:98px; height:98px; }
 .balance-dona-svg svg{ display:block; width:100%; height:100%; overflow:visible; }
-.balance-dona-tip{ font-size:10px; line-height:1.35; color:#E7C3CB; margin:3px 0 0; min-height:27px; }
+.balance-dona-tip{ font-size:10px; line-height:1.35; color:var(--on-burgundy-dim); margin:3px 0 0; min-height:27px; }
 :root.hc .balance-dona-tip{ color:#fff; }
-.dona-centro-val{ font-family:ui-serif,Georgia,serif; font-size:12px; fill:#FBEFE9; }
+.dona-centro-val{ font-family:ui-serif,Georgia,serif; font-size:12px; fill:var(--on-burgundy); }
 .dona-seg{ cursor:pointer; transition:opacity .12s ease; }
 .dona-seg.dim{ opacity:.32; }
 /* Bloque de contexto de la cifra grande (Saldo mes anterior · Cuotas pendientes).
@@ -405,9 +414,9 @@ button{font-family:inherit;}
 /* Tanda R2 · pto 4 — enlace discreto bajo la cifra grande que abre la hoja
    "¿De dónde sale?" (auditoría, no acción principal: texto pequeño + subrayado). */
 .balance-origen-link{ display:inline-flex; align-items:center; gap:3px; background:none;
-  border:0; padding:0; margin:9px 0 0; font:inherit; font-size:11.5px; color:#E7C3CB;
+  border:0; padding:0; margin:9px 0 0; font:inherit; font-size:11.5px; color:var(--on-burgundy-dim);
   text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
-.balance-origen-link:active{ color:#FBEFE9; }
+.balance-origen-link:active{ color:var(--on-burgundy); }
 :root.hc .balance-origen-link{ color:#fff; }
 /* Hoja "¿De dónde sale?" (Tanda R2 · pto 4). Tabla de 3 columnas: nombre | signo | monto.
    Los signos comparten columna propia y los montos van a la derecha, para poder seguir
@@ -432,7 +441,7 @@ button{font-family:inherit;}
 .balance-detalle-btn{
   display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
   margin-top:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16);
-  color:#FBEFE9; border-radius:10px; padding:9px 12px; font-size:12.5px; font-family:inherit;
+  color:var(--on-burgundy); border-radius:10px; padding:9px 12px; font-size:12.5px; font-family:inherit;
   cursor:pointer; transition:background .15s ease, transform .12s ease;
 }
 .balance-detalle-btn:active{ transform:scale(0.935); }
@@ -444,15 +453,15 @@ button{font-family:inherit;}
 .bd-block{ background:rgba(0,0,0,0.16); border:1px solid rgba(255,255,255,0.12);
   border-radius:10px; padding:10px 12px; margin-bottom:8px; }
 .bd-block:last-child{ margin-bottom:0; }
-.bd-block-title{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#E7C3CB; margin:0 0 8px; }
+.bd-block-title{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--on-burgundy-dim); margin:0 0 8px; }
 :root.hc .bd-block-title{ color:#fff; }
-.bd-row{ display:flex; align-items:baseline; gap:8px; font-size:12px; color:#FBEFE9; padding:4px 0; }
+.bd-row{ display:flex; align-items:baseline; gap:8px; font-size:12px; color:var(--on-burgundy); padding:4px 0; }
 .bd-row + .bd-row{ border-top:1px solid rgba(255,255,255,0.08); }
 .bd-row .bd-name{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bd-row .bd-monto{ font-weight:600; white-space:nowrap; }
-.bd-row .bd-pct{ font-size:10.5px; color:#E7C3CB; white-space:nowrap; min-width:32px; text-align:right; }
+.bd-row .bd-pct{ font-size:10.5px; color:var(--on-burgundy-dim); white-space:nowrap; min-width:32px; text-align:right; }
 :root.hc .bd-row .bd-pct{ color:#fff; }
-.bd-empty{ font-size:11px; color:#E7C3CB; margin:0; }
+.bd-empty{ font-size:11px; color:var(--on-burgundy-dim); margin:0; }
 :root.hc .bd-empty{ color:#fff; }
 
 .section-title{
@@ -495,7 +504,7 @@ button{font-family:inherit;}
   flex:1; background:none; border:none; padding:11px 0; border-radius:9px; color:var(--cream-dim);
   font-size:14.5px; font-weight:500; cursor:pointer; transition:all .18s ease;
 }
-.segmented button.active{background:var(--burgundy); color:#FBEFE9;}
+.segmented button.active{background:var(--burgundy); color:var(--on-burgundy);}
 
 .list-item{
   position:relative;
@@ -692,7 +701,7 @@ button{font-family:inherit;}
 .hist-controls{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 14px;}
 .hist-controls .chart-toggle{margin:0;}
 .hist-controls-btns{display:flex; align-items:center; gap:8px; flex-shrink:0;}
-.chart-toggle.toggle-on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.chart-toggle.toggle-on{background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
 
 /* ---------- HISTORIAL: búsqueda + filtros ---------- */
 .hist-search{margin:0 0 14px;}
@@ -708,7 +717,7 @@ button{font-family:inherit;}
 }
 .hist-search-input input::placeholder{color:var(--cream-dim);}
 .hist-search-input input:focus{outline:none;}
-.hist-search-input:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-search-input:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .hist-search-count{font-size:11.5px; color:var(--gold-dim); white-space:nowrap; flex-shrink:0;}
 .hist-filter-btn{
   flex-shrink:0; width:40px; height:40px; border-radius:var(--radius-sm);
@@ -716,7 +725,7 @@ button{font-family:inherit;}
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s ease;
 }
 .hist-filter-btn:active{transform:scale(0.90);}
-.hist-filter-btn.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.hist-filter-btn.on{background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
 .hist-filter-btn .icon{width:17px; height:17px;}
 /* Filtro Cuotas / Gastos normales (Tanda L): a la izquierda del embudo. Mismo alto que
    el embudo y misma estética "on" (burdeos) cuando hay un filtro distinto de "Todos". */
@@ -730,9 +739,9 @@ button{font-family:inherit;}
   background-repeat:no-repeat; background-position:right 10px center;
   transition:background-color .15s ease, border-color .15s ease, color .15s ease;
 }
-.hist-kind-select:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-kind-select:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .hist-kind-select.on{
-  background-color:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;
+  background-color:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23FBEFE9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 
@@ -779,8 +788,8 @@ button{font-family:inherit;}
 }
 .hist-cat-chip .icon, .hist-cat-chip .cat-emoji{width:15px; height:15px; font-size:14px; color:var(--gold); flex-shrink:0;}
 .hist-cat-chip:active{transform:scale(0.92);}
-.hist-cat-chip.on{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
-.hist-cat-chip.on .icon, .hist-cat-chip.on .cat-emoji{color:#FBEFE9;}
+.hist-cat-chip.on{background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
+.hist-cat-chip.on .icon, .hist-cat-chip.on .cat-emoji{color:var(--on-burgundy);}
 .hist-filter-panel{
   margin-top:10px; background:var(--surface-2); border:1px solid var(--border);
   border-radius:var(--radius-sm); padding:12px 14px;
@@ -807,14 +816,14 @@ button{font-family:inherit;}
   border-radius:var(--radius-sm); color:var(--cream); font-family:inherit; font-size:16px;  /* 16px: evita el auto-zoom de iOS */
   padding:9px 10px; min-height:38px;
 }
-.hist-rango-field input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.hist-rango-field input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .hist-rango-err{margin:9px 0 0; font-size:12px; color:var(--danger); line-height:1.4;}
 .hist-rango-actions{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;}
 .hist-rango-apply, .hist-rango-clear{
   flex:1; min-width:120px; border-radius:var(--radius-sm); padding:9px 12px;
   font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s ease;
 }
-.hist-rango-apply{background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9;}
+.hist-rango-apply{background:var(--burgundy); border:1px solid var(--burgundy); color:var(--on-burgundy);}
 .hist-rango-apply:active{transform:scale(0.93);}
 .hist-rango-clear{background:var(--surface-2); border:1px solid var(--border); color:var(--cream);}
 .hist-rango-clear:active{transform:scale(0.93);}
@@ -822,14 +831,14 @@ button{font-family:inherit;}
 .hist-rango-chip{
   display:flex; align-items:center; gap:10px; margin:12px 0 4px;
   background:var(--burgundy); border:1px solid var(--burgundy); border-radius:var(--radius-sm);
-  padding:9px 10px 9px 13px; color:#FBEFE9; font-size:13px;
+  padding:9px 10px 9px 13px; color:var(--on-burgundy); font-size:13px;
 }
 .hist-rango-chip[hidden]{display:none;}
 .hist-rango-chip .hrc-txt{flex:1; min-width:0;}
 .hist-rango-chip .hrc-k{opacity:.8; text-transform:uppercase; font-size:10.5px; letter-spacing:.05em;}
 .hist-rango-chip .hrc-back{
   flex-shrink:0; background:rgba(251,239,233,0.16); border:1px solid rgba(251,239,233,0.28);
-  color:#FBEFE9; border-radius:14px; padding:5px 12px; font-family:inherit; font-size:12px;
+  color:var(--on-burgundy); border-radius:14px; padding:5px 12px; font-family:inherit; font-size:12px;
   font-weight:600; cursor:pointer;
 }
 .hist-rango-chip .hrc-back:active{transform:scale(0.92);}
@@ -853,7 +862,7 @@ button{font-family:inherit;}
 }
 #btnIrAHoy{
   pointer-events:auto; display:flex; align-items:center; gap:5px;
-  background:var(--burgundy); color:#FBEFE9; border:none;
+  background:var(--burgundy); color:var(--on-burgundy); border:none;
   border-radius:16px; padding:7px 14px 7px 11px; font-family:inherit; font-size:12.5px; font-weight:700;
   cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.4);
   opacity:0; transform:translateY(8px) scale(0.92);
@@ -973,7 +982,7 @@ button{font-family:inherit;}
 /* Botón + central, elevado sobre la barra */
 .nav-add{
   flex:0 0 auto; align-self:center; width:54px; height:54px; min-width:44px; border-radius:50%;
-  background:var(--burgundy); border:3px solid var(--surface); color:#FBEFE9; cursor:pointer;
+  background:var(--burgundy); border:3px solid var(--surface); color:var(--on-burgundy); cursor:pointer;
   display:flex; align-items:center; justify-content:center; margin:0 8px;
   transform:translateY(-16px);
   box-shadow:0 6px 16px rgba(92,31,46,0.45);
@@ -992,7 +1001,7 @@ button{font-family:inherit;}
 
 /* ---------- MODALS / SHEETS ---------- */
 .sheet-overlay{
-  position:fixed; inset:0; background:rgba(10,6,5,0.6); display:none; align-items:flex-end;
+  position:fixed; inset:0; background:var(--scrim); display:none; align-items:flex-end;
   z-index:50; backdrop-filter:blur(2px);
   /* Reserva la franja de la barra de estado / notch: aunque un sheet llegue a su
      alto máximo, el layout flex-end nunca lo mete debajo de ella. */
@@ -1051,7 +1060,7 @@ button{font-family:inherit;}
    stroke-linecap/linejoin round), para que no tenga esquinas más marcadas que el
    resto de chevrons de la app. */
 .field select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center;}
-.field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .field input.input-lg{font-size:19px; font-weight:600;}
 .field-row{display:flex; gap:10px;}
 .field-row .field{flex:1;}
@@ -1107,7 +1116,7 @@ button{font-family:inherit;}
   flex:1; text-align:center; padding:11px; border-radius:var(--radius-sm); background:var(--surface-2);
   border:1px solid var(--border); color:var(--cream-dim); font-size:15px; cursor:pointer; transition:all .15s ease;
 }
-.toggle-opt.active{background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.toggle-opt.active{background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
 .toggle-opt.ro-disabled{opacity:0.5; pointer-events:none;}
 .add-inline{
   display:flex; gap:8px; margin-top:10px; padding:8px; border-radius:var(--radius-sm);
@@ -1118,9 +1127,9 @@ button{font-family:inherit;}
   padding:11px 12px; color:var(--cream); font-size:16px; font-family:inherit;  /* 16px: evita el auto-zoom de iOS al enfocar */
 }
 .add-inline input::placeholder{color:var(--cream-dim);}
-.add-inline input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.add-inline input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .add-inline .small-btn{
-  background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9; font-weight:600;
+  background:var(--burgundy); border:1px solid var(--burgundy); color:var(--on-burgundy); font-weight:600;
   padding:0 18px; border-radius:8px; transition:transform .12s ease, background .15s ease;
 }
 .add-inline .small-btn:active{transform:scale(0.92); background:var(--burgundy-light);}
@@ -1207,7 +1216,7 @@ button{font-family:inherit;}
 }
 
 .btn-primary{
-  width:100%; background:var(--burgundy); color:#FBEFE9; border:none; border-radius:var(--radius-sm);
+  width:100%; background:var(--burgundy); color:var(--on-burgundy); border:none; border-radius:var(--radius-sm);
   padding:15px; font-size:16px; font-weight:600; cursor:pointer; margin-top:6px; transition:all .15s ease;
 }
 .btn-primary:active{transform:scale(0.935); background:var(--burgundy-light);}
@@ -1250,7 +1259,7 @@ button{font-family:inherit;}
   position:absolute; width:1px; height:1px; margin:-1px; padding:0; border:0;
   overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap;
 }
-.ob-chip:has(input:checked){background:var(--burgundy); border-color:var(--burgundy); color:#FBEFE9;}
+.ob-chip:has(input:checked){background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
 .ob-chip:has(input:focus-visible){outline:2px solid var(--gold); outline-offset:-4px;}   /* hacia adentro: .ob-chips recorta por overflow */
 .ob-chip:active{transform:scale(0.96);}
 
@@ -1332,7 +1341,7 @@ button{font-family:inherit;}
   display:flex; align-items:center; gap:4px;
   background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:0 10px;
 }
-.cfg-cat-tope-in:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.cfg-cat-tope-in:focus-within{border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .cfg-cat-tope-in > span{color:var(--cream-dim); font-size:14px;}
 .cfg-cat-tope-in input{
   flex:1; min-width:0; border:none; background:none; color:var(--cream);
@@ -1350,11 +1359,11 @@ button{font-family:inherit;}
   flex:1; min-width:0; padding:8px 10px; font-size:16px; font-family:inherit;
   background:var(--surface-2); border:1px solid var(--gold-dim); border-radius:8px; color:var(--cream);
 }
-.cfg-rename-edit .cfg-rename-input:focus{outline:none; box-shadow:0 0 0 3px rgba(201,166,107,0.12);}
+.cfg-rename-edit .cfg-rename-input:focus{outline:none; box-shadow:0 0 0 3px var(--focus-ring);}
 .config-item .cfg-rename-edit .cfg-rename-ok,
 .cat-editar-nombre .cfg-rename-edit .cfg-rename-ok{
   flex-shrink:0; padding:0 14px; font-size:13px; font-weight:600;
-  background:var(--burgundy); border:1px solid var(--burgundy); color:#FBEFE9; border-radius:8px;
+  background:var(--burgundy); border:1px solid var(--burgundy); color:var(--on-burgundy); border-radius:8px;
 }
 .config-item .cfg-rename-edit .cfg-rename-cancel{flex-shrink:0; color:var(--danger); padding:4px; font-size:15px;}
 
