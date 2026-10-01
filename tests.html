@@ -2074,6 +2074,158 @@ async function runTests(){
     }
   }
 
+  // ==================== T20 · E0 + E1 — Escritorio: tokens, menú lateral y barra superior ====================
+  // El iframe está oculto (display:none, sin viewport propio). Para las pruebas de escritorio
+  // se muestra FUERA de pantalla con un ancho fijo y al final vuelve a display:none. El evento
+  // `change` de matchMedia solo se despacha cuando la página pinta un cuadro (y esta pestaña
+  // puede estar en segundo plano), así que tras cada cambio de ancho se llama a
+  // syncDeskLayout() a mano: es exactamente lo que hace ese manejador.
+  {
+    const d = win.document;
+    const css = (sel, prop) => win.getComputedStyle(typeof sel === 'string' ? d.querySelector(sel) : sel).getPropertyValue(prop);
+    const anchoIframe = w => { iframe.style.cssText = `position:absolute; left:-10000px; top:0; width:${w}px; height:900px; border:0;`; void win.innerWidth; win.syncDeskLayout(); };
+    const abiertos = () => [...d.querySelectorAll('.sheet-overlay.open')].map(o => o.id).filter(id => id !== 'sheetOnboarding');
+    const cerrarSheets = () => abiertos().forEach(id => win.closeSheet(id));
+    const activos = sel => [...d.querySelectorAll(sel)].filter(b => b.classList.contains('active') && b.getAttribute('aria-current') === 'page').map(b => b.dataset.screen);
+    const ordenOriginal = () => {
+      const m = d.querySelector('.month-select'), a = d.getElementById('accountSelect');
+      return m.parentNode.id === 'app' && m.previousElementSibling.id === 'updateBanner' && m.nextElementSibling === a && a.nextElementSibling.id === 'screen-resumen';
+    };
+    const tecla = key => d.activeElement.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    try{
+      // (a) Tokens E0: existen con el valor que antes estaba fijo y todavía NO están en PALETAS.
+      const tok = { '--on-burgundy':'#FBEFE9', '--on-burgundy-dim':'#E7C3CB', '--on-danger':'#fff', '--scrim':'rgba(10,6,5,0.6)',
+                    '--focus-ring':'rgba(201,166,107,0.12)', '--mv-cuota':'#CE7C3A', '--mv-aporte':'#D9B24C' };
+      const obt = Object.fromEntries(Object.keys(tok).map(k => [k, css(d.documentElement, k).trim()]));
+      const enPaletas = Object.values(win.eval('PALETAS')).some(p => ['--on-burgundy','--on-burgundy-dim','--on-danger','--scrim','--focus-ring'].some(k => k in p.vars));
+      assert(Object.keys(tok).every(k => obt[k] === tok[k]) && !enPaletas,
+        'T20 E0 (a): los tokens nuevos existen en :root con el valor que antes estaba fijo (y aún no están en PALETAS)', JSON.stringify(obt));
+      const usos = { btnPrimary: css('.btn-primary', 'color'), overlay: css('#sheetGasto', 'background-color'), balanceLabel: css('.balance-card .label', 'color') };
+      assert(usos.btnPrimary === 'rgb(251, 239, 233)' && usos.overlay === 'rgba(10, 6, 5, 0.6)' && usos.balanceLabel === 'rgb(231, 195, 203)',
+        'T20 E0 (b): los usos reemplazados resuelven al mismo color de antes', JSON.stringify(usos));
+
+      // Fixture: 2 cuentas (para que exista «Transferencia») y ninguna meta.
+      const st = fixtureBase();
+      st.accounts.push({ id:'acc2', nombre:'Ahorro', orden:1, archivada:false });
+      setState(win, st);
+      resetCaches(win);
+      win.renderAll();
+
+      // (c) 1440 px: menú lateral visible, barra inferior oculta, selectores reutilizados en la barra superior.
+      anchoIframe(1440);
+      const topbar = d.querySelector('.topbar'), mesSel = d.querySelector('.month-select'), ctaSel = d.getElementById('accountSelect');
+      const rC = { mq: win.matchMedia('(min-width: 1024px)').matches, nav: css('#deskNav', 'display'), bottom: css('.bottom-zone', 'display'),
+                   enBarra: mesSel.parentNode === topbar && mesSel.nextElementSibling === ctaSel && ctaSel.nextElementSibling === topbar.querySelector('.top-actions'),
+                   idsUnicos: d.querySelectorAll('#prevMonth, #nextMonth, #monthLabel, #accountSelect, #btnResumenImg, #btnExport').length };
+      assert(rC.mq && rC.nav === 'flex' && rC.bottom === 'none' && rC.enBarra && rC.idsUnicos === 6,
+        'T20 E1 (c): a 1440 px hay menú lateral, la barra inferior se oculta y el selector de mes/cuenta (mismos nodos, ids únicos) va en la barra superior', JSON.stringify(rC));
+
+      // (d) Misma pantalla activa en ambos sentidos (clase + aria-current) y título de la barra superior.
+      d.querySelector('.desk-nav-item[data-screen="cuotas"]').click();
+      const r1 = { lateral: activos('.desk-nav-item[data-screen]'), inferior: activos('.nav-btn'), pantalla: d.querySelector('.screen.active').id, titulo: d.getElementById('deskTitle').textContent };
+      assert(JSON.stringify(r1) === JSON.stringify({ lateral:['cuotas'], inferior:['cuotas'], pantalla:'screen-cuotas', titulo:'Cuotas' }),
+        'T20 E1 (d1): «Cuotas» en el menú lateral → la barra inferior marca la misma pantalla', JSON.stringify(r1));
+      d.querySelector('.nav-btn[data-screen="metas"]').click();
+      const r2 = { lateral: activos('.desk-nav-item[data-screen]'), inferior: activos('.nav-btn'), pantalla: d.querySelector('.screen.active').id, titulo: d.getElementById('deskTitle').textContent };
+      assert(JSON.stringify(r2) === JSON.stringify({ lateral:['metas'], inferior:['metas'], pantalla:'screen-metas', titulo:'Metas' }),
+        'T20 E1 (d2): «Metas» en la barra inferior → el menú lateral marca la misma pantalla', JSON.stringify(r2));
+
+      // (e) Bajo 1024 px los selectores vuelven a su lugar original y la barra inferior sigue en Metas.
+      anchoIframe(800);
+      const rE = { orden: ordenOriginal(), bottom: css('.bottom-zone', 'display'), nav: css('#deskNav', 'display'), titulo: css('#deskTitle', 'display'), inferior: activos('.nav-btn') };
+      anchoIframe(1440);
+      rE.vuelveABarra = d.querySelector('.month-select').parentNode === topbar;
+      assert(rE.orden && rE.bottom === 'block' && rE.nav === 'none' && rE.titulo === 'none' && rE.inferior.join() === 'metas' && rE.vuelveABarra,
+        'T20 E1 (e): a 800 px el DOM vuelve al orden móvil (mes y cuenta antes de #screen-resumen) y la barra inferior marca Metas; a 1440 vuelven a la barra superior', JSON.stringify(rE));
+
+      // (f) «+ Agregar»: abre el menú con 5 opciones y foco en la primera; flechas recorren; Esc cierra y devuelve el foco.
+      const btn = d.getElementById('deskAddBtn'), menu = d.getElementById('deskAddMenu');
+      btn.click();
+      const visibles = () => [...menu.querySelectorAll('.desk-add-item')].filter(b => !b.hidden).map(b => b.dataset.add);
+      const rF = { abierto: !menu.hidden, expanded: btn.getAttribute('aria-expanded'), opciones: visibles().join(), foco: d.activeElement.dataset.add };
+      tecla('ArrowDown'); rF.trasAbajo = d.activeElement.dataset.add;
+      tecla('ArrowUp'); tecla('ArrowUp'); rF.trasArribaX2 = d.activeElement.dataset.add;
+      tecla('Escape');
+      rF.trasEsc = { cerrado: menu.hidden, expanded: btn.getAttribute('aria-expanded'), focoEnBoton: d.activeElement === btn };
+      assert(rF.abierto && rF.expanded === 'true' && rF.opciones === 'gasto,ingreso,cuota,meta,transferencia' && rF.foco === 'gasto'
+        && rF.trasAbajo === 'ingreso' && rF.trasArribaX2 === 'transferencia' && rF.trasEsc.cerrado && rF.trasEsc.expanded === 'false' && rF.trasEsc.focoEnBoton,
+        'T20 E1 (f): «+ Agregar» abre el menú (5 opciones, foco en Gasto), las flechas lo recorren y Esc lo cierra devolviendo el foco', JSON.stringify(rF));
+
+      // (g) Cada opción abre el MISMO sheet que el camino de hoy.
+      const viaDesk = key => { cerrarSheets(); btn.click(); menu.querySelector(`[data-add="${key}"]`).click(); const r = abiertos(); r.menuCerrado = menu.hidden; return r; };
+      cerrarSheets(); d.getElementById('btnAdd').click(); d.getElementById('choiceGasto').click(); const refGasto = abiertos().join();
+      cerrarSheets(); d.getElementById('btnAdd').click(); d.getElementById('choiceIngreso').click(); const refIngreso = abiertos().join();
+      cerrarSheets(); d.getElementById('btnNuevaMeta').click(); const refMeta = abiertos().join();
+      cerrarSheets(); const itTransf = d.querySelector('#accountMenu [data-acc="__transfer"]'); if(itTransf) itTransf.click(); const refTransf = abiertos().join();
+      const g = viaDesk('gasto'), gTitulo = d.getElementById('gastoTitle').textContent, gMetodo = d.getElementById('gMetodo').value;
+      const i = viaDesk('ingreso');
+      const c = viaDesk('cuota'), cMetodo = d.getElementById('gMetodo').value, cCuotas = d.getElementById('cuotaFields').classList.contains('open');
+      const m = viaDesk('meta');
+      const t = viaDesk('transferencia');
+      cerrarSheets();
+      const rG = { refGasto, refIngreso, refMeta, refTransf, gasto: g.join(), gTitulo, gMetodo, ingreso: i.join(), cuota: c.join(), cMetodo, cCuotas, meta: m.join(), transf: t.join(),
+                   menuCerrado: [g, i, c, m, t].every(x => x.menuCerrado) };
+      assert(refGasto === 'sheetGasto' && rG.gasto === refGasto && gTitulo === 'Nuevo gasto' && gMetodo !== 'Crédito'
+        && refIngreso === 'sheetIngreso' && rG.ingreso === refIngreso
+        && rG.cuota === 'sheetGasto' && cMetodo === 'Crédito' && cCuotas
+        && refMeta === 'sheetMeta' && rG.meta === refMeta
+        && refTransf === 'sheetTransferir' && rG.transf === refTransf && rG.menuCerrado,
+        'T20 E1 (g): Gasto, Ingreso, Cuota (gasto en Crédito), Meta y Transferencia abren los mismos sheets que hoy y cierran el menú', JSON.stringify(rG));
+
+      // (h) Mismas reglas de hoy: sin Transferencia con 1 cuenta, sin Meta en el límite, y nada en solo lectura.
+      const st1 = fixtureBase();
+      st1.goals = [1, 2, 3].map(n => ({ id:'gl' + n, name:'Meta ' + n, indefinida:true, montoObjetivo:0, aportes:[], goalEndMonthKey:null }));
+      setState(win, st1); resetCaches(win);
+      btn.click(); const opcionesLimite = visibles().join(); win.cerrarDeskAddMenu(false);
+      const st2 = fixtureBase(); st2.config.readOnly = true;
+      setState(win, st2); resetCaches(win);
+      btn.click(); const rH = { opcionesLimite, soloLecturaAbre: !menu.hidden };
+      win.cerrarDeskAddMenu(false);
+      assert(rH.opcionesLimite === 'gasto,ingreso,cuota' && !rH.soloLecturaAbre,
+        'T20 E1 (h): con 1 cuenta no hay Transferencia, con 3 metas activas no hay Meta y en solo lectura el menú no se abre', JSON.stringify(rH));
+      setState(win, st); resetCaches(win);
+
+      // (i) Configuración y bloque de cuenta (sin y con sesión), reutilizando renderCuentaUsuario().
+      cerrarSheets(); d.getElementById('deskConfigBtn').click(); const cfg = abiertos().join();
+      cerrarSheets(); win.renderCuentaUsuario(null);
+      const cta = d.getElementById('deskCuentaBtn');
+      const sinSesion = { con: cta.classList.contains('con-sesion'), nombre: d.getElementById('deskCuentaNombre').textContent };
+      cta.click();
+      const grupoCuenta = d.getElementById('cuentaUsuarioSinSesion').closest('details.cfg-group');
+      sinSesion.sheets = abiertos().join(); sinSesion.cuentaAbierta = grupoCuenta.open;
+      cerrarSheets();
+      win.renderCuentaUsuario({ user: { email:'ana@ejemplo.cl', user_metadata: { full_name:'Ana Pérez' } } });
+      const conSesion = { con: cta.classList.contains('con-sesion'), nombre: d.getElementById('deskCuentaNombre').textContent, email: d.getElementById('deskCuentaEmail').textContent,
+                          avatar: d.getElementById('deskCuentaAvatar').textContent, tip: d.getElementById('deskCuentaTip').textContent };
+      win.renderCuentaUsuario(null);
+      const rI = { cfg, sinSesion, conSesion, trasCerrar: d.getElementById('deskCuentaNombre').textContent };
+      assert(cfg === 'sheetConfig' && !sinSesion.con && sinSesion.nombre === 'Iniciar sesión' && sinSesion.sheets === 'sheetConfig' && sinSesion.cuentaAbierta
+        && conSesion.con && conSesion.nombre === 'Ana Pérez' && conSesion.email === 'ana@ejemplo.cl' && conSesion.avatar === 'AP' && conSesion.tip === 'Ana Pérez'
+        && rI.trasCerrar === 'Iniciar sesión',
+        'T20 E1 (i): Configuración abre su hoja; el bloque de cuenta sigue a renderCuentaUsuario() y «Iniciar sesión» lleva a Cuenta de usuario', JSON.stringify(rI));
+
+      // (j) 1100 px: menú compacto de 72 px; el rótulo sigue como nombre accesible y el tooltip es aria-hidden.
+      anchoIframe(1100);
+      const itH = d.querySelector('.desk-nav-item[data-screen="historial"]');
+      const rJ = { ancho: css('#deskNav', 'width'), rotulo: itH.querySelector('.desk-label').textContent, rotuloAncho: css(itH.querySelector('.desk-label'), 'width'),
+                   tip: css(itH.querySelector('.desk-tip'), 'display'), tipOculto: itH.querySelector('.desk-tip').getAttribute('aria-hidden'), padding: css(d.body, 'padding-left') };
+      assert(rJ.ancho === '72px' && rJ.rotulo === 'Historial' && rJ.rotuloAncho === '1px' && rJ.tip === 'block' && rJ.tipOculto === 'true' && rJ.padding === '72px',
+        'T20 E1 (j): entre 1024 y 1279 px el menú es compacto (72 px), con rótulo accesible y tooltip', JSON.stringify(rJ));
+
+      // (k) 375 px: nada de escritorio a la vista y el DOM en el orden móvil.
+      anchoIframe(375);
+      const rK = { nav: css('#deskNav', 'display'), titulo: css('#deskTitle', 'display'), bottom: css('.bottom-zone', 'display'), orden: ordenOriginal(), padding: css(d.body, 'padding-left') };
+      assert(rK.nav === 'none' && rK.titulo === 'none' && rK.bottom === 'block' && rK.orden && rK.padding === '0px',
+        'T20 E1 (k): a 375 px no se ve nada de escritorio y el DOM queda en el orden móvil', JSON.stringify(rK));
+    }catch(e){
+      assert(false, 'T20 E0/E1: excepción durante las pruebas de escritorio', e && e.stack || String(e));
+    }finally{
+      try{ cerrarSheets(); win.cerrarDeskAddMenu(false); win.switchScreen('resumen'); }catch(_){}
+      iframe.style.cssText = 'display:none';
+      try{ win.syncDeskLayout(); }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
