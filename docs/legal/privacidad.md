@@ -1,7 +1,7 @@
 # Política de Privacidad de Telora
 
 **Vigente desde:** 30 de septiembre de 2026
-**Versión:** 1.1
+**Versión:** 1.2
 
 Telora es una aplicación de finanzas personales que te ayuda a registrar tus gastos, ingresos, compras en cuotas y metas de ahorro. Esta política explica qué datos personales trata Telora, para qué, dónde se guardan y cómo puedes ejercer tus derechos. Se rige por la Ley N° 19.628 sobre Protección de la Vida Privada y sus modificaciones, incluida la Ley N° 21.719.
 
@@ -21,7 +21,7 @@ Contacto para cualquier materia de privacidad: **privacidad@telora.cl**
 
 | Categoría | Datos | Origen |
 | --- | --- | --- |
-| Identificación | Correo electrónico, nombre y foto de perfil de tu cuenta de Google; un identificador interno de usuario | Google, al iniciar sesión |
+| Identificación | Correo electrónico; si entras con Google, también el nombre y la foto de perfil de tu cuenta de Google; un identificador interno de usuario | Google, al iniciar sesión con Google, o tú, al ingresar tu correo para recibir un código de acceso |
 | Datos financieros que tú registras | Gastos, ingresos, compras en cuotas, gastos fijos, metas y aportes, transferencias entre cuentas, nombres de cuentas, categorías, métodos de pago y fuentes de ingreso, con sus montos, fechas y descripciones | Tú |
 | Datos del dispositivo | Un identificador aleatorio del dispositivo generado por Telora (no es el número de serie ni el identificador publicitario) y preferencias de visualización | Telora |
 | Datos técnicos | Fechas de creación y modificación de cada registro | Telora |
@@ -51,12 +51,13 @@ Telora usa proveedores que tratan datos por cuenta del responsable, solo para pr
 | Supabase, Inc. | Base de datos y autenticación | Servidores en São Paulo, Brasil (región sa-east-1) |
 | Google LLC | Inicio de sesión con Google | Estados Unidos y otros países según las políticas de Google |
 | GitHub, Inc. | Alojamiento del sitio web telora.cl | Estados Unidos |
+| Resend | Envío de los correos con el código de acceso | Estados Unidos |
 
 No se comunican datos a otros terceros, salvo por requerimiento legal de una autoridad competente.
 
 ## 6. Transferencia internacional de datos
 
-Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase), y tu autenticación se procesa en los servidores de Google. Estas transferencias se realizan con proveedores que ofrecen garantías contractuales de protección de datos y medidas de seguridad adecuadas, conforme a lo que exige la ley chilena.
+Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase). Si entras con Google, tu autenticación se procesa en los servidores de Google; si entras con tu correo, el correo con tu código de acceso se envía a través de Resend, en Estados Unidos. Estas transferencias se realizan con proveedores que ofrecen garantías contractuales de protección de datos y medidas de seguridad adecuadas, conforme a lo que exige la ley chilena.
 
 ## 7. Cuánto tiempo conservamos tus datos
 
