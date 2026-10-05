@@ -13,3 +13,5 @@ desktop.ini
 # Grafo de Graphify: derivado local con rutas de esta máquina y resúmenes de
 # documentos internos. El repositorio es público: nunca se versiona.
 graphify-out/
+# Instrucciones locales de Claude Code generadas por graphify claude install
+CLAUDE.md
