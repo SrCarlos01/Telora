@@ -7,9 +7,9 @@
 Thumbs.db
 desktop.ini
 
-# El prototipo index2.html solo se versiona desde la raíz,
-# nunca las copias dentro de las carpetas de snapshots diarios.
-Dia */index2.html
-
 # Configuración local de Claude Code
 .claude/
+
+# Grafo de Graphify: derivado local con rutas de esta máquina y resúmenes de
+# documentos internos. El repositorio es público: nunca se versiona.
+graphify-out/
