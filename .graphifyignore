@@ -1,0 +1,6 @@
+# Graphify: archivos excluidos del grafo
+# Librerías de terceros minificadas: no aportan estructura y elevan el costo.
+exceljs.min.js
+supabase.min.js
+# Imágenes: se analizarían con un modelo de lenguaje (costo de tokens) y no sirven para desarrollar.
+icons/*.png
