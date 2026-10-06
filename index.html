@@ -14086,9 +14086,11 @@ function msAIsoONull(v){ return (typeof v === 'number' && isFinite(v) && v > 0) 
 // es la fila que marca "este dispositivo ya se sincronizó" (punto 2).
 // `cfg` opcional (Tanda 4a): el núcleo de sincronización pasa el config del estado que
 // está fotografiando; sin él se usa state.config, como hasta ahora.
-function filaConfigDispositivo(userId, deviceId, cfg){
+// `nombreDispositivo` opcional (S1 · T7, D6): solo en modo varios escritores; sin él la fila es
+// idéntica a la de siempre.
+function filaConfigDispositivo(userId, deviceId, cfg, nombreDispositivo){
   const c = (cfg !== undefined ? cfg : state.config) || {};
-  return {
+  const fila = {
     user_id: userId,
     device_id: deviceId,
     paleta: c.paleta ?? null,
@@ -14103,6 +14105,8 @@ function filaConfigDispositivo(userId, deviceId, cfg){
     respaldo_snooze: msAIsoONull(c.respaldoSnooze),
     persist_concedido: (c.persistConcedido === true || c.persistConcedido === false) ? c.persistConcedido : null
   };
+  if(nombreDispositivo !== undefined) fila.nombre_dispositivo = nombreDispositivo;
+  return fila;
 }
 
 function filaConfigCompartida(userId, cfg){
@@ -14382,6 +14386,22 @@ const PULL_INICIAL_ACTIVO = false;
 // Tanda 4a: escritura continua a la nube (un dispositivo). Con false no hay ninguna
 // petición nueva a la red ni ninguna clave telora_sync_* en localStorage.
 const ESCRITURA_CONTINUA_ACTIVA = true;
+// S1 · T7: varios escritores (compare-and-set por RPC, puesta al día por cursor, tombstones).
+// false en producción: la activación es por cuenta (sync_activar_multi) y, para probar, se puede
+// forzar con ?multi=1 SOLO en localhost / 127.0.0.1 (queda en sessionStorage de esa pestaña para
+// sobrevivir la vuelta del login). Con false todo se comporta exactamente como el escritor único.
+const SYNC_MULTI_ESCRITOR_ACTIVA = false;
+const SYNC_MULTI_OVERRIDE = (()=>{
+  try{
+    if(!esHostLocalSync(location.hostname)) return false;
+    if(permiteOverrideMulti(location.hostname, location.search)){
+      try{ sessionStorage.setItem('telora_multi_override', '1'); }catch(_){}
+      return true;
+    }
+    return sessionStorage.getItem('telora_multi_override') === '1';
+  }catch(_){ return false; }
+})();
+function multiActiva(){ return SYNC_MULTI_ESCRITOR_ACTIVA || SYNC_MULTI_OVERRIDE; }
 
 // "Vacío" = sin gastos, ingresos, deudas, metas ni transferencias, y a lo más una cuenta:
 // migrarEstadoCuentas() siempre crea una "Principal" en un dispositivo nuevo, así que
@@ -14422,8 +14442,11 @@ async function leerTablaCompleta(tabla, userId){
 // `state`. Si cualquier lectura falla, lanza y el estado local queda intacto.
 async function leerNubeCompleta(userId){
   const tablas = ['cuentas_financieras','transfers','expenses','incomes','debts','goals','goal_aportes'];
+  // S1 · T7: las filas con tombstone (deleted_at) están borradas: no se traen. Se filtra aquí y
+  // no en la consulta, para que funcione igual con o sin la columna.
+  const vivas = filas => filas.filter(r => r.deleted_at == null);
   const [cuentas, transfers, expenses, incomes, debts, goals, aportes] =
-    await Promise.all(tablas.map(t => leerTablaCompleta(t, userId)));
+    (await Promise.all(tablas.map(t => leerTablaCompleta(t, userId)))).map(vivas);
   const { data: cfg, error: errCfg } = await supa.from('config_compartida').select('*').eq('user_id', userId).maybeSingle();
   if(errCfg) throw new Error('config_compartida: ' + (errCfg.message || 'error desconocido'));
 
@@ -14493,8 +14516,9 @@ function registrarEventoRealtime(p){
   if(realtimeEventos.length > 200) realtimeEventos.shift();
   console.info('[Realtime] ' + p.eventType + ' ' + p.table, (fila && (fila.id || fila.device_id || fila.user_id)) || '', p);
   // Tanda 4a.1: si otro dispositivo pasó a ser el escritor, este deja de escribir al tiro.
+  // S1 · T7: en modo varios escritores, solo si la cuenta deja de estar en 'multi:v2'.
   if(p.table === 'config_compartida' && p.eventType === 'UPDATE' && syncCtx
-     && escritorCambioAOtro(p.new, syncCtx.deviceId)){
+     && escritorDejaDeSerEste(p.new, syncCtx)){
     console.info('[Sync] el rol de escritor pasó a otro dispositivo (' + p.new.dispositivo_escritor + '): este sigue solo con sus datos locales.');
     detenerEscrituraContinua();
   }
@@ -14610,7 +14634,8 @@ function asegurarIds(st, genId){
 // mismas filaX de la subida inicial (ninguna incluye updated_at, que pone el servidor).
 // clave = id en las 7 tablas de datos, user_id en config_compartida y device_id en
 // config_dispositivo (solo la fila de ESTE dispositivo). Exige ids: correr asegurarIds antes.
-function construirSnapshot(st, userId, deviceId){
+// opciones.nombreDispositivo (S1 · T7): solo en modo varios escritores.
+function construirSnapshot(st, userId, deviceId, opciones){
   const snap = {};
   SYNC_TABLAS.forEach(t => { snap[t] = {}; });
   const lista = k => Array.isArray(st[k]) ? st[k] : [];
@@ -14630,7 +14655,8 @@ function construirSnapshot(st, userId, deviceId){
     filasAportes(g, userId, goalId).forEach(f => { snap.goal_aportes[f.id] = jsonCanonico(f); });
   });
   snap.config_compartida[userId] = jsonCanonico(filaConfigCompartida(userId, st.config || {}));
-  snap.config_dispositivo[deviceId] = jsonCanonico(filaConfigDispositivo(userId, deviceId, st.config || {}));
+  snap.config_dispositivo[deviceId] = jsonCanonico(filaConfigDispositivo(userId, deviceId, st.config || {},
+    opciones && opciones.nombreDispositivo !== undefined ? opciones.nombreDispositivo : undefined));
   return snap;
 }
 
@@ -14750,6 +14776,331 @@ function textoConteosLegado(n){
   return partes.slice(0, -1).join(', ') + ' y ' + partes[partes.length - 1];
 }
 
+/* ---- a') Núcleo puro · VARIOS ESCRITORES (S1 · T7) ----
+   Detrás de SYNC_MULTI_ESCRITOR_ACTIVA. La versión de cada fila es el rev del SERVIDOR (secuencia
+   de M1), nunca el reloj del cliente. Formas:
+     revs:   { tabla: { clave: rev } }                         (clave = id; user_id en config_compartida)
+     nube:   { tabla: { clave: { json, rev, borrada, fila } } } (indexarNube; json = mismo JSON canónico
+                                                               que la foto local, null si es tombstone)
+     acción: { accion, tabla, clave, rev, json, fila, borrada, motivo }
+       accion = ignorar | diferir | adoptarRev | aplicar | aplicarBorrado | choque
+   config_dispositivo no participa: cada dispositivo escribe solo su propia fila. */
+const ESCRITOR_MULTI = 'multi:v2';
+const SYNC_TABLAS_MULTI = SYNC_TABLAS.filter(t => t !== 'config_dispositivo');
+
+// ?multi=1 solo fuerza el modo en localhost / 127.0.0.1 (nunca en telora.cl).
+function esHostLocalSync(hostname){ return hostname === 'localhost' || hostname === '127.0.0.1'; }
+function permiteOverrideMulti(hostname, search){
+  if(!esHostLocalSync(hostname)) return false;
+  try{ return new URLSearchParams(search || '').get('multi') === '1'; }catch(_){ return false; }
+}
+
+// «Chrome en Windows», «Safari en iPhone»… (config_dispositivo.nombre_dispositivo, D6).
+function nombreDispositivoDesdeUA(ua){
+  const s = String(ua || '');
+  const nav = /Edg(e|A|iOS)?\//.test(s) ? 'Edge' : /OPR\/|Opera/.test(s) ? 'Opera'
+    : /Firefox\/|FxiOS\//.test(s) ? 'Firefox' : /Chrome\/|CriOS\//.test(s) ? 'Chrome'
+    : /Safari\//.test(s) ? 'Safari' : 'Navegador';
+  const so = /iPhone/.test(s) ? 'iPhone' : /iPad/.test(s) ? 'iPad' : /Android/.test(s) ? 'Android'
+    : /Windows/.test(s) ? 'Windows' : /Mac OS X|Macintosh/.test(s) ? 'macOS' : /Linux/.test(s) ? 'Linux' : 'otro sistema';
+  return nav + ' en ' + so;
+}
+
+// Fila tal como la devuelve el servidor -> el MISMO JSON canónico que construirSnapshot arma
+// desde `state` (ida localX -> vuelta filaX). Así «igual a lo local» se compara texto con texto.
+// N1: en config_compartida, dispositivo_escritor y los metadatos (rev, txid, modificado_por,
+// updated_at) quedan fuera porque filaConfigCompartida no los incluye: sync_activar_multi no
+// produce un choque falso.
+function canonicoFilaNube(tabla, r, userId){
+  switch(tabla){
+    case 'cuentas_financieras': return jsonCanonico(filaCuenta(localCuenta(r), userId));
+    case 'transfers':           return jsonCanonico(filaTransfer(localTransfer(r), userId));
+    case 'expenses':            return jsonCanonico(filaExpense(localExpense(r), userId));
+    case 'incomes':             return jsonCanonico(filaIncome(localIncome(r), userId));
+    case 'debts':               return jsonCanonico(filaDebt(localDebt(r), userId));
+    case 'goals':               return jsonCanonico(filaGoal(localGoal(r, []), userId));
+    case 'goal_aportes':        return jsonCanonico(filasAportes({ aportes: [localAporte(r)] }, userId, r.goal_id)[0]);
+    case 'config_compartida':   return jsonCanonico(filaConfigCompartida(userId, localConfigCompartida(r)));
+  }
+  return null;
+}
+
+// filas: { tabla: [fila del servidor] } (sync_cambios_desde / sync_lectura_completa).
+function indexarNube(filas, userId){
+  const nube = {};
+  SYNC_TABLAS_MULTI.forEach(t => {
+    nube[t] = {};
+    ((filas && filas[t]) || []).forEach(r => {
+      const clave = (t === 'config_compartida') ? r.user_id : r.id;
+      if(clave == null) return;
+      const borrada = r.deleted_at != null;
+      nube[t][clave] = { rev: Number(r.rev), borrada, json: borrada ? null : canonicoFilaNube(t, r, userId), fila: r };
+    });
+  });
+  return nube;
+}
+// Base = lo que la nube tiene vivo (mismo JSON canónico que la foto). Tras reemplazar lo local por
+// la nube, lo que migrateBackup haya agregado o normalizado sale en el próximo diff.
+function baseDesdeNube(nube){
+  const b = {};
+  SYNC_TABLAS.forEach(t => {
+    b[t] = {};
+    Object.keys((nube && nube[t]) || {}).forEach(k => { if(!nube[t][k].borrada) b[t][k] = nube[t][k].json; });
+  });
+  return b;
+}
+function revsDeNube(nube){
+  const v = {};
+  SYNC_TABLAS_MULTI.forEach(t => {
+    v[t] = {};
+    Object.keys((nube && nube[t]) || {}).forEach(k => { v[t][k] = nube[t][k].rev; });
+  });
+  return v;
+}
+
+// Decisión para UNA fila remota. L = JSON local (undefined = no está), B = JSON de la base
+// (lo último encolado), R = entrada de indexarNube. pendiente = hay op en la cola para la clave;
+// enVuelo = la op de esa clave se está enviando ahora mismo.
+function decidirFilaRemota(x){
+  const L = x.L, B = x.B, R = x.R;
+  if(x.conocido != null && R.rev <= x.conocido) return { accion: 'ignorar' };   // ya conocida (eco, solapamiento del cursor)
+  if(x.enVuelo) return { accion: 'diferir' };
+  if(R.borrada){
+    if(L === undefined) return { accion: 'adoptarRev' };                        // también se borró acá
+    if(!x.pendiente && L === B) return { accion: 'aplicarBorrado' };            // sin cambio local: se borra acá, sin op
+    return { accion: 'choque', motivo: 'eliminado' };                            // edición local contra borrado remoto
+  }
+  if(L === R.json) return { accion: 'adoptarRev' };                              // mismo contenido
+  if(!x.pendiente && L === B) return { accion: 'aplicar' };                      // solo cambió la nube (o es nueva)
+  if(B !== undefined && R.json === B) return { accion: 'adoptarRev' };           // solo cambió lo local: sale con este rev
+  return { accion: 'choque', motivo: 'version' };
+}
+
+// Puesta al día. completa = la respuesta trae TODAS las filas (lectura completa): lo que la base
+// conoce y la nube ya no tiene fue borrado físicamente (cliente viejo, purga).
+function planPuestaAlDia(p){
+  const acciones = [];
+  const local = p.local || {}, base = p.base || {}, revs = p.revs || {}, nube = p.nube || {};
+  const pend = p.pendientes || new Set(), vuelo = p.enVuelo || new Set();
+  SYNC_TABLAS_MULTI.forEach(t => {
+    const L = local[t] || {}, B = base[t] || {}, N = nube[t] || {}, V = revs[t] || {};
+    Object.keys(N).forEach(k => {
+      const R = N[k], ck = t + '|' + k;
+      const d = decidirFilaRemota({ L: L[k], B: B[k], R, pendiente: pend.has(ck), conocido: V[k], enVuelo: vuelo.has(ck) });
+      acciones.push({ ...d, tabla: t, clave: k, rev: R.rev, json: R.json, fila: R.fila, borrada: R.borrada });
+    });
+    if(!p.completa || t === 'config_compartida') return;   // config sin fila no es un borrado
+    Object.keys(B).forEach(k => {
+      if(tieneClave(N, k)) return;
+      const ck = t + '|' + k;
+      let d;
+      if(vuelo.has(ck)) d = { accion: 'diferir' };
+      else if(L[k] === undefined) d = { accion: 'adoptarRev' };
+      else if(!pend.has(ck) && L[k] === B[k]) d = { accion: 'aplicarBorrado' };
+      else d = { accion: 'choque', motivo: 'no_existe' };
+      acciones.push({ ...d, tabla: t, clave: k, rev: null, json: null, fila: null, borrada: true });
+    });
+  });
+  return acciones;
+}
+
+// Cola del escritor único al pasar a varios escritores: sus ops no tienen base_rev. Upsert: si
+// el contenido de la base (= lo encolado) es igual al del servidor, se adopta su rev; si no, es
+// un choque. Delete: si la nube ya no la tiene viva, la op sobra; si sigue viva, choque.
+function adoptarColaPendiente(cola, base, nube){
+  const acciones = [], quitar = [];
+  (cola || []).forEach(op => {
+    if(op.tabla === 'config_dispositivo') return;
+    const R = ((nube || {})[op.tabla] || {})[op.clave];
+    const B = ((base || {})[op.tabla] || {})[op.clave];
+    const a = { tabla: op.tabla, clave: op.clave, rev: R ? R.rev : null, json: R ? R.json : null,
+                fila: R ? R.fila : null, borrada: R ? R.borrada : false };
+    if(op.tipo === 'delete'){
+      if(!R || R.borrada){ quitar.push(op); if(R) acciones.push({ ...a, accion: 'adoptarRev' }); }
+      else acciones.push({ ...a, accion: 'choque', motivo: 'version' });
+      return;
+    }
+    if(!R) return;   // nueva: sale con base_rev null
+    if(R.borrada) acciones.push({ ...a, accion: 'choque', motivo: 'eliminado' });
+    else if(R.json === B) acciones.push({ ...a, accion: 'adoptarRev' });
+    else acciones.push({ ...a, accion: 'choque', motivo: 'version' });
+  });
+  return { acciones, quitar };
+}
+
+// Primera sincronización de este dispositivo en modo varios escritores (D2). NUNCA genera ops
+// hacia la nube: lo local nuevo o editado lo sube después el diff normal (con su base_rev), y
+// pasa por la guarda contra borrado masivo como siempre.
+//   sin base: 'adoptar' si lo local ya es igual a la nube; si no, 'reemplazar' (el motor hace un
+//             respaldo JSON y reemplaza lo local por la nube).
+//   con base: 'tres_vias' = adoptarColaPendiente para las claves con op en la cola +
+//             planPuestaAlDia (completa) para el resto.
+function fusionInicial(p){
+  const local = p.local || {}, nube = p.nube || {};
+  if(!p.base){
+    const igual = SYNC_TABLAS_MULTI.every(t => {
+      const L = local[t] || {}, N = nube[t] || {};
+      const vivas = Object.keys(N).filter(k => !N[k].borrada);
+      return vivas.length === Object.keys(L).length && vivas.every(k => L[k] === N[k].json);
+    });
+    return { modo: igual ? 'adoptar' : 'reemplazar', acciones: [], quitar: [] };
+  }
+  const pendientes = new Set((p.cola || []).filter(o => o.tabla !== 'config_dispositivo').map(claveOpSync));
+  const adop = adoptarColaPendiente(p.cola, p.base, nube);
+  const resto = planPuestaAlDia({ local, base: p.base, revs: {}, nube, completa: true })
+    .filter(a => !pendientes.has(a.tabla + '|' + a.clave));
+  return { modo: 'tres_vias', acciones: adop.acciones.concat(resto), quitar: adop.quitar };
+}
+
+// Estado nuevo con las filas remotas aplicadas (vía localX). No muta `st`. Devuelve también las
+// acciones que no se pudieron aplicar (un aporte cuya meta no está acá): el motor no avanza ni
+// la base ni el cursor por ellas.
+const SYNC_TABLA_A_ESTADO = {
+  cuentas_financieras: ['accounts', r => localCuenta(r)], transfers: ['transfers', r => localTransfer(r)],
+  expenses: ['expenses', r => localExpense(r)], incomes: ['incomes', r => localIncome(r)], debts: ['debts', r => localDebt(r)]
+};
+function aplicarFilasAEstado(st, acciones){
+  const nuevo = { ...st, config: { ...((st && st.config) || {}) } };
+  const copiadas = {};
+  const lista = k => {
+    if(!copiadas[k]){ nuevo[k] = Array.isArray(st && st[k]) ? st[k].slice() : []; copiadas[k] = true; }
+    return nuevo[k];
+  };
+  const metaCopiada = (metas, i) => {
+    const g = { ...metas[i], aportes: Array.isArray(metas[i].aportes) ? metas[i].aportes.slice() : [] };
+    metas[i] = g;
+    return g;
+  };
+  const idx = t => SYNC_TABLAS.indexOf(t);
+  const omitidas = [];
+  (acciones || []).filter(a => a.accion === 'aplicar').sort((x, y) => idx(x.tabla) - idx(y.tabla)).forEach(a => {
+    const m = SYNC_TABLA_A_ESTADO[a.tabla];
+    if(m){
+      const arr = lista(m[0]), i = arr.findIndex(x => x && x.id === a.clave), obj = m[1](a.fila);
+      if(i >= 0) arr[i] = obj; else arr.push(obj);
+    } else if(a.tabla === 'goals'){
+      const arr = lista('goals'), i = arr.findIndex(g => g && g.id === a.clave);
+      const g = localGoal(a.fila, []);
+      g.aportes = (i >= 0 && Array.isArray(arr[i].aportes)) ? arr[i].aportes.slice() : [];
+      if(i >= 0) arr[i] = g; else arr.push(g);
+    } else if(a.tabla === 'goal_aportes'){
+      const arr = lista('goals');
+      const iDestino = arr.findIndex(g => g && g.id === a.fila.goal_id);
+      if(iDestino < 0){ omitidas.push(a); return; }
+      const iActual = arr.findIndex(g => g && Array.isArray(g.aportes) && g.aportes.some(x => x && x.id === a.clave));
+      if(iActual >= 0 && iActual !== iDestino){ const g = metaCopiada(arr, iActual); g.aportes = g.aportes.filter(x => !(x && x.id === a.clave)); }
+      const destino = metaCopiada(arr, iDestino);
+      const j = destino.aportes.findIndex(x => x && x.id === a.clave);
+      if(j >= 0) destino.aportes[j] = localAporte(a.fila); else destino.aportes.push(localAporte(a.fila));
+    } else if(a.tabla === 'config_compartida'){
+      delete nuevo.config.mesInicioRegistro;   // la nube manda: ausente allá = ausente acá
+      Object.assign(nuevo.config, localConfigCompartida(a.fila));
+    }
+  });
+  (acciones || []).filter(a => a.accion === 'aplicarBorrado').sort((x, y) => idx(y.tabla) - idx(x.tabla)).forEach(a => {
+    const m = SYNC_TABLA_A_ESTADO[a.tabla];
+    if(m){
+      const arr = lista(m[0]), i = arr.findIndex(x => x && x.id === a.clave);
+      if(i >= 0) arr.splice(i, 1);
+    } else if(a.tabla === 'goals'){
+      const arr = lista('goals'), i = arr.findIndex(g => g && g.id === a.clave);
+      if(i >= 0) arr.splice(i, 1);
+    } else if(a.tabla === 'goal_aportes'){
+      const arr = lista('goals');
+      const i = arr.findIndex(g => g && Array.isArray(g.aportes) && g.aportes.some(x => x && x.id === a.clave));
+      if(i >= 0){ const g = metaCopiada(arr, i); g.aportes = g.aportes.filter(x => !(x && x.id === a.clave)); }
+    }
+  });
+  return { estado: nuevo, omitidas };
+}
+
+// Base y revs después de aplicar las acciones: la base de una fila aplicada queda IGUAL a lo que
+// construirSnapshot sacará del estado nuevo, así que aplicar lo remoto no genera ningún diff.
+function actualizarBaseYRevs(base, revs, acciones){
+  const b = JSON.parse(JSON.stringify(base || {})), v = JSON.parse(JSON.stringify(revs || {}));
+  (acciones || []).forEach(a => {
+    if(a.accion !== 'aplicar' && a.accion !== 'aplicarBorrado' && a.accion !== 'adoptarRev') return;
+    b[a.tabla] = b[a.tabla] || {};
+    v[a.tabla] = v[a.tabla] || {};
+    if(a.accion === 'aplicarBorrado' || a.borrada) delete b[a.tabla][a.clave];
+    else b[a.tabla][a.clave] = a.json;
+    if(a.rev != null) v[a.tabla][a.clave] = a.rev; else delete v[a.tabla][a.clave];
+  });
+  return { base: b, revs: v };
+}
+
+// Estado completo a partir de la nube (filas vivas), conservando las preferencias del
+// dispositivo. Mismo criterio que traerDatosIniciales, ordenado por id como leerNubeCompleta.
+function estadoDesdeNube(st, nube){
+  const porId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const vivas = t => Object.values((nube && nube[t]) || {}).filter(x => !x.borrada).map(x => x.fila);
+  const aportesPorMeta = {};
+  vivas('goal_aportes').sort(porId).forEach(a => { (aportesPorMeta[a.goal_id] = aportesPorMeta[a.goal_id] || []).push(a); });
+  const config = { ...((st && st.config) || {}) };
+  const cfg = vivas('config_compartida')[0];
+  if(cfg){ delete config.mesInicioRegistro; Object.assign(config, localConfigCompartida(cfg)); }
+  return {
+    ...st, config,
+    accounts: vivas('cuentas_financieras').sort(porId).map(localCuenta),
+    transfers: vivas('transfers').sort(porId).map(localTransfer),
+    expenses: vivas('expenses').sort(porId).map(localExpense),
+    incomes: vivas('incomes').sort(porId).map(localIncome),
+    debts: vivas('debts').sort(porId).map(localDebt),
+    goals: vivas('goals').sort(porId).map(g => localGoal(g, aportesPorMeta[g.id]))
+  };
+}
+
+// Ops de la cola -> ops del RPC, con el base_rev adjunto AL ENVIAR (no al encolar: entre medio
+// pudo llegar la respuesta de otro lote con un rev nuevo). Sin rev conocido = fila nueva.
+function adjuntarBaseRev(lote, revs){
+  return (lote || []).map(o => ({
+    tabla: o.tabla, id: o.clave, tipo: o.tipo,
+    base_rev: (revs && revs[o.tabla] && revs[o.tabla][o.clave] != null) ? revs[o.tabla][o.clave] : null,
+    fila: o.fila
+  }));
+}
+
+// Respuesta de sync_aplicar_lote (o de sync_aplicar_config, con i = 0) -> qué hacer con cada op.
+// ya_aplicado cuenta como ok. Una op sin respuesta que calce se reintenta.
+// N2: un INSERT concurrente de la misma PK (otra pestaña o un reintento que se cruza) no llega
+// aquí como choque: el unique_violation (23505) aborta la llamada entera y PostgREST responde
+// 409; clasificarRespuestaSync lo trata como permanente y vaciarColaSync reenvía de a una op.
+// En ese reenvío la fila ya existe y el compare-and-set responde ya_aplicado o choque.
+function clasificarResultadosLote(lote, resultados){
+  const r = { ok: [], choques: [], invalidas: [], reintentar: [] };
+  const porI = new Map();
+  (Array.isArray(resultados) ? resultados : []).forEach((x, j) => { if(x) porI.set(typeof x.i === 'number' ? x.i : j, x); });
+  (lote || []).forEach((op, i) => {
+    const x = porI.get(i);
+    if(!x || (x.clave != null && x.clave !== op.clave)){ r.reintentar.push({ op }); return; }
+    if(x.estado === 'ok') r.ok.push({ op, rev: x.rev == null ? null : Number(x.rev), yaAplicado: !!x.ya_aplicado });
+    else if(x.estado === 'choque') r.choques.push({ op, motivo: x.motivo || 'version', servidor: x.servidor || null });
+    else if(x.estado === 'invalida') r.invalidas.push({ op, motivo: x.motivo || 'invalida' });
+    else r.reintentar.push({ op });
+  });
+  return r;
+}
+
+// Choques guardados: uno por (tabla, clave); el más nuevo reemplaza al anterior.
+function combinarChoques(actuales, nuevos, ahoraIso){
+  const m = new Map();
+  (actuales || []).forEach(c => m.set(c.tabla + '|' + c.clave, c));
+  (nuevos || []).forEach(c => { m.delete(c.tabla + '|' + c.clave); m.set(c.tabla + '|' + c.clave, { ...c, detectado: ahoraIso }); });
+  return Array.from(m.values());
+}
+// Las filas en choque quedan en pausa: sus ops siguen en la cola, pero no se envían.
+function opsNoPausadas(ops, choques){
+  const pausadas = new Set((choques || []).map(c => c.tabla + '|' + c.clave));
+  return (ops || []).filter(o => !pausadas.has(claveOpSync(o)));
+}
+// Realtime: ¿este dispositivo debe dejar de escribir? En modo varios escritores solo si la
+// cuenta dejó de estar en 'multi:v2' (vuelta atrás); si no, la regla del escritor único.
+function escritorDejaDeSerEste(fila, ctx){
+  if(!ctx || !tieneClave(fila, 'dispositivo_escritor')) return false;
+  return ctx.multi ? fila.dispositivo_escritor !== ESCRITOR_MULTI : escritorCambioAOtro(fila, ctx.deviceId);
+}
+function sinConfigDispositivo(snap){ return { ...(snap || {}), config_dispositivo: {} }; }
+
 /* ---- b) Adaptador de almacenamiento (localStorage; claves atadas al user_id) ---- */
 const syncAlmacen = {
   _leer(prefijo, userId){
@@ -14766,7 +15117,15 @@ const syncAlmacen = {
   guardarCola(userId, cola){ return this._escribir('telora_sync_cola:', userId, cola); },
   leerFallidas(userId){ return this._leer('telora_sync_fallidas:', userId) || []; },
   guardarFallidas(userId, lista){ return this._escribir('telora_sync_fallidas:', userId, lista); },
-  claveCola(userId){ return 'telora_sync_cola:' + userId; }
+  claveCola(userId){ return 'telora_sync_cola:' + userId; },
+  // S1 · T7 (solo en modo varios escritores). revs null = este dispositivo todavía no hizo su
+  // sincronización inicial en ese modo.
+  leerRevs(userId){ return this._leer('telora_sync_revs:', userId); },
+  guardarRevs(userId, revs){ return this._escribir('telora_sync_revs:', userId, revs); },
+  leerCursor(userId){ return this._leer('telora_sync_cursor:', userId); },
+  guardarCursor(userId, cursor){ return this._escribir('telora_sync_cursor:', userId, cursor); },
+  leerChoques(userId){ return this._leer('telora_sync_choques:', userId) || []; },
+  guardarChoques(userId, lista){ return this._escribir('telora_sync_choques:', userId, lista); }
 };
 
 /* ---- c) Adaptador de transporte (supabase-js) ---- */
@@ -14820,7 +15179,17 @@ const syncTransporte = {
     const r = resultadoReclamoEscritor(res, deviceId);
     if(r === 'error') console.warn('[Sync] no se pudo reclamar el rol de escritor', res && res.error);
     return r;
-  }
+  },
+  // S1 · T7: RPC de M2 -> { data, error, status } (status 0 = sin red).
+  async _rpc(nombre, args){
+    try{ const { data, error, status } = await supa.rpc(nombre, args); return { data, error, status }; }
+    catch(e){ return { data: null, error: e, status: 0 }; }
+  },
+  aplicarLote(deviceId, ops){ return this._rpc('sync_aplicar_lote', { p_device: deviceId, p_ops: ops }); },
+  aplicarConfig(deviceId, baseRev, fila){ return this._rpc('sync_aplicar_config', { p_device: deviceId, p_base_rev: baseRev, p_fila: fila }); },
+  cambiosDesde(cursor){ return this._rpc('sync_cambios_desde', { p_cursor: cursor, p_limite: 1000 }); },
+  lecturaCompleta(){ return this._rpc('sync_lectura_completa', {}); },
+  activarMulti(){ return this._rpc('sync_activar_multi', {}); }
 };
 
 /* ---- Motor: disparo, gating, vaciado ---- */
@@ -14841,14 +15210,18 @@ let legadoCtx = null;             // { userId, deviceId } mientras el sheet de d
 // candado del dispositivo confirmado para ESA cuenta y (Tanda 4a.1) este device confirmado
 // como escritor en config_compartida. La fila de config_dispositivo se garantiza porque
 // activarEscrituraContinua() solo se llama cuando ya existe.
+// S1 · T7: en modo varios escritores no se exige ser el escritor (syncCtx.multi).
 function syncHabilitada(){
-  return ESCRITURA_CONTINUA_ACTIVA && !!supa && !!syncCtx && syncCtx.esEscritor === true
+  return ESCRITURA_CONTINUA_ACTIVA && !!supa && !!syncCtx && (syncCtx.esEscritor === true || syncCtx.multi === true)
     && leerDuenoConfirmado() === syncCtx.userId;
 }
 
 // Tanda 4a.1: lee dispositivo_escritor; si está vacío lo reclama (atómico). true solo si
 // este device queda como escritor. Nunca pisa a otro.
+// S1 · T7: en modo varios escritores no hay rol que reclamar: la cuenta pasa (o ya está) en
+// 'multi:v2', lo que además detiene a los clientes de escritor único.
 async function confirmarEscritorSync(userId, deviceId){
+  if(multiActiva()) return confirmarModoMultiSync(userId);
   const esc = await syncTransporte.leerEscritor(userId);
   if(esc.error){ console.warn('[Sync] no se pudo leer el dispositivo escritor', esc.error); return false; }
   if(!esc.existe){ console.info('[Sync] la cuenta no tiene config_compartida en la nube: no hay rol de escritor que tomar.'); return false; }
@@ -14856,6 +15229,16 @@ async function confirmarEscritorSync(userId, deviceId){
   if(esc.escritor == null && await syncTransporte.reclamarEscritor(userId, deviceId) === 'gano') return true;
   console.info('[Sync] otro dispositivo mantiene el respaldo de esta cuenta: este sigue solo con sus datos locales.');
   return false;
+}
+async function confirmarModoMultiSync(userId){
+  const esc = await syncTransporte.leerEscritor(userId);
+  if(esc.error){ console.warn('[Sync] no se pudo leer el dispositivo escritor', esc.error); return false; }
+  if(!esc.existe){ console.info('[Sync] la cuenta no tiene config_compartida en la nube: no se puede activar el modo varios escritores.'); return false; }
+  if(esc.escritor === ESCRITOR_MULTI) return true;
+  const r = await syncTransporte.activarMulti();
+  if(r.error || !r.data || !r.data.ok){ console.warn('[Sync] no se pudo activar el modo varios escritores', r.error || r.data); return false; }
+  console.info('[Sync] cuenta activada en modo varios escritores (escritor anterior: ' + (r.data.escritor_anterior || 'ninguno') + ').');
+  return true;
 }
 
 // Pestaña que hereda el liderazgo (Web Lock): vuelve a leer el escritor antes de vaciar.
@@ -14865,7 +15248,7 @@ async function reconfirmarEscritorYVaciarSync(){
   const esc = await syncTransporte.leerEscritor(ctx.userId);
   if(gen !== syncGeneracion || syncCtx !== ctx) return;
   if(esc.error){ console.warn('[Sync] no se pudo releer el dispositivo escritor', esc.error); return; }
-  if(esc.escritor !== ctx.deviceId){
+  if(ctx.multi ? esc.escritor !== ESCRITOR_MULTI : esc.escritor !== ctx.deviceId){
     console.info('[Sync] esta pestaña ya no es del dispositivo escritor: se detiene la escritura continua.');
     detenerEscrituraContinua();
     return;
@@ -14895,14 +15278,15 @@ async function activarEscrituraContinua(userId, deviceId){
   if(syncActivando) return;
   syncActivando = true;
   const gen = syncGeneracion;
+  const multi = multiActiva();
   let esEscritor = false;
   try{ esEscritor = await confirmarEscritorSync(userId, deviceId); }
   finally{ syncActivando = false; }
   if(!esEscritor || gen !== syncGeneracion) return;   // otro escritor, error, o sesión cerrada mientras tanto
-  syncCtx = { userId, deviceId, esEscritor: true };
+  syncCtx = multi ? { userId, deviceId, esEscritor: false, multi: true } : { userId, deviceId, esEscritor: true };
   syncPausada = false;
   syncBorradoPendiente = null;
-  console.info('[Sync] escritura continua activa.');
+  console.info(multi ? '[Sync] escritura continua activa (varios escritores).' : '[Sync] escritura continua activa.');
   adelantarReintentosSync(userId);
   procesarCambiosSync();   // al abrir la app: lo que cambió desde la última base (o el resync) + vaciado
 }
@@ -14933,16 +15317,20 @@ async function procesarCambiosSync(){
   vaciarColaSync();
 }
 
+// Punto 2: ids estables, asignados en state una sola vez y persistidos. false = no se pudo guardar.
+function asegurarIdsSync(){
+  const asignados = asegurarIds(state, uid);
+  if(!asignados) return true;
+  console.info('[Sync] ids asignados a registros que no tenían: ' + asignados);
+  syncGuardandoIds = true;
+  try{ return saveStateQuiet(); } finally { syncGuardandoIds = false; }
+}
+
 async function calcularYEncolarSync(){
   const ctx = syncCtx;
   if(!syncHabilitada() || syncPausada) return;
-  // Punto 2: ids estables, asignados en state una sola vez y persistidos.
-  const asignados = asegurarIds(state, uid);
-  if(asignados){
-    console.info('[Sync] ids asignados a registros que no tenían: ' + asignados);
-    syncGuardandoIds = true;
-    try{ if(!saveStateQuiet()) return; } finally { syncGuardandoIds = false; }
-  }
+  if(ctx.multi) return conCandadoSync(() => calcularYEncolarSyncMulti(ctx));
+  if(!asegurarIdsSync()) return;
   const base = syncAlmacen.leerBase(ctx.userId);
   let ops, conteos, actual;
   if(base){
@@ -14977,6 +15365,191 @@ function encolarYFijarBaseSync(ctx, ops, actual){
   const cola = coalescerOps(syncAlmacen.leerCola(ctx.userId), nuevas);
   if(!syncAlmacen.guardarCola(ctx.userId, cola)) return false;
   syncAlmacen.guardarBase(ctx.userId, actual);
+  return true;
+}
+
+/* ---- Motor · VARIOS ESCRITORES (S1 · T7; solo con syncCtx.multi) ----
+   Candado único: aplicar lo remoto (puesta al día, sincronización inicial) y calcular el diff +
+   fijar la base nunca corren a la vez. El envío no toca la base, solo la cola y los revs. */
+let syncCandado = Promise.resolve();
+function conCandadoSync(fn){
+  const p = syncCandado.then(fn, fn);
+  syncCandado = p.catch(() => {});
+  return p;
+}
+let syncFallosPuesta = 0;
+
+function opcionesSnapshotSync(ctx){
+  if(!ctx || !ctx.multi) return undefined;
+  try{ return { nombreDispositivo: nombreDispositivoDesdeUA(navigator.userAgent) }; }catch(_){ return undefined; }
+}
+
+async function calcularYEncolarSyncMulti(ctx){
+  if(syncCtx !== ctx || !syncHabilitada() || syncPausada) return;
+  if(!asegurarIdsSync()) return;
+  const base = syncAlmacen.leerBase(ctx.userId);
+  if(!base || !syncAlmacen.leerRevs(ctx.userId)){
+    // Primera vez en este modo: sincronización inicial (D2) en vez del resync con DELETE.
+    if(!(await sincronizacionInicialMulti(ctx, base))) return;
+    if(syncCtx !== ctx) return;
+  }
+  const baseActual = syncAlmacen.leerBase(ctx.userId) || {};
+  const actual = construirSnapshot(state, ctx.userId, ctx.deviceId, opcionesSnapshotSync(ctx));
+  const ops = diffSnapshots(baseActual, actual);
+  if(!ops.length) return;
+  const masivo = evaluarBorradoMasivo(contarFilasSnapshot(baseActual), ops);
+  if(masivo.length){ pausarPorBorradoMasivoSync(ctx, ops, actual, masivo); return; }
+  encolarYFijarBaseSync(ctx, ops, actual);
+}
+
+// D2. true si quedó inicializado (base + revs + cursor). Nunca envía nada a la nube.
+async function sincronizacionInicialMulti(ctx, base){
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  const res = await syncTransporte.lecturaCompleta();
+  if(syncCtx !== ctx) return false;
+  if(res.error || !res.data){ console.warn('[Sync] varios escritores: no se pudo leer la nube completa', res.error); return false; }
+  const nube = indexarNube(res.data.filas, ctx.userId);
+  const cursor = res.data.cursor;
+  const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
+  const cola = syncAlmacen.leerCola(ctx.userId);
+  const f = fusionInicial({ local: actual, base, nube, cola });
+  if(f.modo === 'adoptar'){
+    // Lo local ya es igual a la nube (p. ej. recién subido): solo se adoptan las versiones. La
+    // base va sin config_dispositivo para que el próximo diff mande la fila de este dispositivo.
+    syncAlmacen.guardarBase(ctx.userId, sinConfigDispositivo(actual));
+    syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+    syncAlmacen.guardarCursor(ctx.userId, cursor);
+    console.info('[Sync] varios escritores: lo local ya coincide con la nube; se adoptan las versiones.');
+    return true;
+  }
+  if(f.modo === 'reemplazar') return reemplazarLocalConNube(ctx, nube, cursor);
+  const ok = aplicarAccionesSync(ctx, f.acciones, base, {}, cursor);
+  if(ok && f.quitar.length) quitarDeColaSync(ctx.userId, f.quitar);
+  const n = contarAcciones(f.acciones);
+  console.info('[Sync] varios escritores: fusión inicial de 3 vías · aplicadas ' + n.aplicar + ' · borradas ' + n.aplicarBorrado
+    + ' · versiones adoptadas ' + n.adoptarRev + ' · choques ' + n.choque + ' · ops de la cola que sobraban ' + f.quitar.length + '.');
+  return ok;
+}
+
+// D2 sin base (dispositivo que nunca escribió): respaldo JSON de lo local, luego lo local se
+// reemplaza por la nube. El respaldo se ofrece en el aviso (si había datos financieros).
+let respaldoPrevioMulti = null;
+function reemplazarLocalConNube(ctx, nube, cursor){
+  const teniaDatos = !sinDatosFinancieros(state);
+  if(teniaDatos){
+    try{ respaldoPrevioMulti = buildBackupFile(); }
+    catch(e){ console.warn('[Sync] varios escritores: no se pudo armar el respaldo; no se reemplaza nada.', e); return false; }
+  }
+  const previo = state;
+  state = migrateBackup(estadoDesdeNube(state, nube));
+  sembrarUltimoDoneVistoSiFalta();
+  asegurarIds(state, uid);
+  if(!saveStateQuiet()){ state = previo; return false; }
+  syncAlmacen.guardarBase(ctx.userId, baseDesdeNube(nube));
+  syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+  syncAlmacen.guardarCursor(ctx.userId, cursor);
+  try{ renderAll(); }catch(_){}
+  console.info('[Sync] varios escritores: lo local se reemplazó por la nube' + (teniaDatos ? ' (con respaldo previo).' : '.'));
+  if(teniaDatos){
+    showToast('Este dispositivo ahora muestra los datos de tu cuenta. Guardamos un respaldo de lo que había antes.', 'success', 20000,
+      { label: 'Descargar respaldo', onClick: () => triggerBackupDownload(respaldoPrevioMulti) });
+  } else {
+    showToast('Tus datos de la nube ya están en este dispositivo.', 'success');
+  }
+  return true;
+}
+
+function contarAcciones(acciones){
+  const n = { ignorar: 0, diferir: 0, adoptarRev: 0, aplicar: 0, aplicarBorrado: 0, choque: 0 };
+  (acciones || []).forEach(a => { n[a.accion] = (n[a.accion] || 0) + 1; });
+  return n;
+}
+
+// Aplica las acciones al estado y, recién si el estado se guardó, fija base, revs, choques y
+// cursor. El cursor no avanza si algo quedó sin aplicar (diferido u omitido): se relee después.
+function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
+  const aplicables = acciones.filter(a => a.accion === 'aplicar' || a.accion === 'aplicarBorrado');
+  const r = aplicarFilasAEstado(state, aplicables);
+  const omitidas = new Set(r.omitidas.map(a => a.tabla + '|' + a.clave));
+  const efectivas = acciones.filter(a => !omitidas.has(a.tabla + '|' + a.clave));
+  if(efectivas.some(a => a.accion === 'aplicar' || a.accion === 'aplicarBorrado')){
+    const previo = state;
+    state = r.estado;
+    if(!saveStateQuiet()){ state = previo; console.warn('[Sync] no se pudo guardar el estado con los cambios remotos'); return false; }
+    try{ renderAll(); }catch(_){}
+  }
+  const nb = actualizarBaseYRevs(base, revs, efectivas);
+  syncAlmacen.guardarBase(ctx.userId, nb.base);
+  syncAlmacen.guardarRevs(ctx.userId, nb.revs);
+  const choques = efectivas.filter(a => a.accion === 'choque');
+  if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia' })));
+  if(r.omitidas.length) console.info('[Sync] ' + r.omitidas.length + ' fila(s) remota(s) sin aplicar todavía (aporte sin su meta): se releen después.');
+  if(cursor != null && !r.omitidas.length && !acciones.some(a => a.accion === 'diferir')) syncAlmacen.guardarCursor(ctx.userId, cursor);
+  return true;
+}
+
+// Puesta al día ANTES de enviar: cambios desde el cursor, o lectura completa si no hay cursor o
+// la respuesta vino truncada (D1). true = se puede enviar.
+async function puestaAlDiaSync(ctx){
+  if(syncCtx !== ctx) return false;
+  if(!asegurarIdsSync()) return false;
+  const cursor = syncAlmacen.leerCursor(ctx.userId);
+  let res = null, completa = false;
+  if(cursor){
+    res = await syncTransporte.cambiosDesde(cursor);
+    if(syncCtx !== ctx) return false;
+    if(res.error || !res.data){ console.warn('[Sync] puesta al día: no se pudo leer la nube', res.error); return false; }
+    if(res.data.truncado){ console.info('[Sync] puesta al día truncada (' + res.data.tabla + '): se hace una lectura completa.'); res = null; }
+  }
+  if(!res){
+    completa = true;
+    res = await syncTransporte.lecturaCompleta();
+    if(syncCtx !== ctx) return false;
+    if(res.error || !res.data){ console.warn('[Sync] puesta al día: no se pudo leer la nube completa', res.error); return false; }
+  }
+  const nube = indexarNube(res.data.filas, ctx.userId);
+  const base = syncAlmacen.leerBase(ctx.userId) || {};
+  const revs = syncAlmacen.leerRevs(ctx.userId) || {};
+  const pendientes = new Set(syncAlmacen.leerCola(ctx.userId).map(claveOpSync));
+  const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
+  const acciones = planPuestaAlDia({ local: actual, base, revs, nube, pendientes, completa });
+  const n = contarAcciones(acciones);
+  // N3: cuántas filas ya conocidas llegan en cada puesta al día. Si este número crece sin parar,
+  // el xmin del servidor está congelado (una transacción abierta) y el cursor no avanza.
+  console.info('[Sync] puesta al día (' + (completa ? 'completa' : 'incremental') + '): ' + acciones.length + ' fila(s) · ya conocidas ' + n.ignorar
+    + ' · aplicadas ' + n.aplicar + ' · borradas ' + n.aplicarBorrado + ' · versiones adoptadas ' + n.adoptarRev + ' · choques ' + n.choque
+    + (n.diferir ? ' · diferidas ' + n.diferir : '') + ' · cursor ' + (cursor || '—') + ' -> ' + res.data.cursor + '.');
+  return aplicarAccionesSync(ctx, acciones, base, revs, res.data.cursor);
+}
+
+function registrarChoquesSync(userId, nuevos){
+  syncAlmacen.guardarChoques(userId, combinarChoques(syncAlmacen.leerChoques(userId), nuevos, new Date().toISOString()));
+  nuevos.forEach(c => console.warn('[Sync] choque (' + c.motivo + ') en ' + c.tabla + ' ' + c.clave
+    + ': la fila queda en pausa hasta resolverlo. Choques pendientes: ' + syncAlmacen.leerChoques(userId).length + '.'));
+}
+// Contador consultable (la interfaz de choques es de T11): contarChoquesSync() en la consola.
+function contarChoquesSync(){ return syncCtx ? syncAlmacen.leerChoques(syncCtx.userId).length : 0; }
+
+// Respuesta OK de un RPC -> revs, cola, fallidas y choques. false = hay ops para reintentar.
+function procesarResultadoMultiSync(ctx, lote, res){
+  if(lote[0].tabla === 'config_dispositivo'){ quitarDeColaSync(ctx.userId, lote); return true; }
+  const datos = Array.isArray(res.data) ? res.data : (res.data ? [{ ...res.data, i: 0 }] : []);
+  const c = clasificarResultadosLote(lote, datos);
+  if(c.ok.length){
+    const revs = syncAlmacen.leerRevs(ctx.userId) || {};
+    c.ok.forEach(x => {
+      const t = x.op.tabla;
+      revs[t] = revs[t] || {};
+      if(x.rev != null) revs[t][x.op.clave] = x.rev; else delete revs[t][x.op.clave];
+    });
+    syncAlmacen.guardarRevs(ctx.userId, revs);
+    quitarDeColaSync(ctx.userId, c.ok.map(x => x.op));
+  }
+  c.invalidas.forEach(x => moverAFallidasSync(ctx.userId, x.op, { status: 0, error: { message: 'op inválida (' + x.motivo + ')' } }));
+  if(c.choques.length) registrarChoquesSync(ctx.userId, c.choques.map(x => ({
+    tabla: x.op.tabla, clave: x.op.clave, motivo: x.motivo, servidor: x.servidor,
+    rev: (x.servidor && x.servidor.rev != null) ? Number(x.servidor.rev) : null, origen: 'envio' })));
+  if(c.reintentar.length){ reintentarLuegoSync(ctx.userId, c.reintentar.map(x => x.op)); return false; }
   return true;
 }
 
@@ -15035,8 +15608,19 @@ function tomarLoteSync(ordenadas, ahora){
   return lote;
 }
 
+// S1 · T7: en modo varios escritores las 8 tablas compartidas van por RPC (compare-and-set,
+// base_rev adjunto AL ENVIAR); config_dispositivo sigue por upsert directo (solo la escribe su
+// propio dispositivo). config_compartida tiene una sola clave, así que su lote es de una op.
 function enviarLoteSync(ctx, lote){
   const { tabla, tipo } = lote[0];
+  if(ctx.multi && tabla !== 'config_dispositivo'){
+    const revs = syncAlmacen.leerRevs(ctx.userId) || {};
+    if(tabla === 'config_compartida'){
+      const base = adjuntarBaseRev([lote[0]], revs)[0];
+      return syncTransporte.aplicarConfig(ctx.deviceId, base.base_rev, base.fila);
+    }
+    return syncTransporte.aplicarLote(ctx.deviceId, adjuntarBaseRev(lote, revs));
+  }
   if(tipo === 'upsert') return syncTransporte.upsert(tabla, lote.map(o => o.fila));
   return syncTransporte.borrar(tabla, ctx.userId, lote.map(o => o.fila));
 }
@@ -15077,7 +15661,9 @@ function adelantarReintentosSync(userId){
 }
 function programarReintentoSync(userId){
   clearTimeout(syncTimerReintento);
-  const cola = syncAlmacen.leerCola(userId);
+  let cola = syncAlmacen.leerCola(userId);
+  // Las filas en choque no cuentan: con proximo 0 dispararían un vaciado inmediato sin fin.
+  if(syncCtx && syncCtx.multi) cola = opsNoPausadas(cola, syncAlmacen.leerChoques(userId));
   if(!cola.length) return;
   const cuando = Math.min(...cola.map(o => o.proximo || 0));
   syncTimerReintento = setTimeout(vaciarColaSync, Math.max(0, cuando - Date.now()));
@@ -15096,8 +15682,22 @@ async function vaciarColaSync(){
   try{
     const { data } = await supa.auth.getSession();
     if(!data || !data.session || !data.session.user || data.session.user.id !== ctx.userId) return;
+    // S1 · T7: nada sale antes de conocer los cambios remotos. Sin revs todavía falta la
+    // sincronización inicial (la hace calcularYEncolarSync al activar).
+    if(ctx.multi){
+      if(!syncAlmacen.leerRevs(ctx.userId)) return;
+      const puesta = await conCandadoSync(() => puestaAlDiaSync(ctx));
+      if(syncCtx !== ctx) return;
+      if(!puesta){
+        clearTimeout(syncTimerReintento);
+        syncTimerReintento = setTimeout(vaciarColaSync, retrasoReintentoSync(++syncFallosPuesta));
+        return;
+      }
+      syncFallosPuesta = 0;
+    }
     while(syncCtx === ctx && syncHabilitada()){
-      const ordenadas = ordenarOps(syncAlmacen.leerCola(ctx.userId));
+      const cola = syncAlmacen.leerCola(ctx.userId);
+      const ordenadas = ordenarOps(ctx.multi ? opsNoPausadas(cola, syncAlmacen.leerChoques(ctx.userId)) : cola);
       if(!ordenadas.length) return;
       const lote = tomarLoteSync(ordenadas, Date.now());
       if(!lote.length){ programarReintentoSync(ctx.userId); return; }
@@ -15106,7 +15706,11 @@ async function vaciarColaSync(){
       // T2b: la cuenta fue eliminada (desde otro dispositivo u otra pestaña): no se reintenta.
       if(esErrorCuentaEliminada(res)){ manejarCuentaEliminadaEnServidor(ctx.userId); return; }
       const tipo = clasificarRespuestaSync(res);
-      if(tipo === 'ok'){ quitarDeColaSync(ctx.userId, lote); continue; }
+      if(tipo === 'ok'){
+        if(!ctx.multi) quitarDeColaSync(ctx.userId, lote);
+        else if(!procesarResultadoMultiSync(ctx, lote, res)){ programarReintentoSync(ctx.userId); return; }
+        continue;
+      }
       if(tipo === 'red'){
         console.info('[Sync] sin conexión o error transitorio (' + (res.status || 0) + '); se reintenta luego.', res.error);
         reintentarLuegoSync(ctx.userId, lote);
@@ -15120,7 +15724,10 @@ async function vaciarColaSync(){
         if(syncCtx !== ctx) return;
         if(esErrorCuentaEliminada(r)){ manejarCuentaEliminadaEnServidor(ctx.userId); return; }
         const t = clasificarRespuestaSync(r);
-        if(t === 'ok') quitarDeColaSync(ctx.userId, [op]);
+        if(t === 'ok'){
+          if(!ctx.multi) quitarDeColaSync(ctx.userId, [op]);
+          else if(!procesarResultadoMultiSync(ctx, [op], r)){ programarReintentoSync(ctx.userId); return; }
+        }
         else if(t === 'permanente') moverAFallidasSync(ctx.userId, op, r);
         else { reintentarLuegoSync(ctx.userId, [op]); programarReintentoSync(ctx.userId); return; }
       }
@@ -15233,6 +15840,10 @@ async function intentarSubidaInicial(session){
       }
       activarRealtime(userId);
       if(leerDuenoConfirmado() === userId) activarEscrituraContinua(userId, deviceId);   // Tanda 4a (+ escritor, 4a.1)
+      else if(leerDuenoConfirmado() === null && entraSinDatosAMulti()){   // S1 · T7
+        marcarDuenoConfirmado(userId);
+        activarEscrituraContinua(userId, deviceId);
+      }
       else if(leerDuenoConfirmado() === null) await ofrecerDispositivoLegado(userId, deviceId);   // Tanda 4a.1
       return;
     }
@@ -15261,6 +15872,15 @@ async function intentarSubidaInicial(session){
         await registrarDispositivo(userId, deviceId);
         await traerDatosIniciales(userId);
         activarRealtime(userId);
+        return;
+      }
+      // S1 · T7: con varios escritores, un dispositivo sin datos financieros propios no tiene nada
+      // que atribuir (mismo criterio que el caso A): se asocia y se pone al día con la nube.
+      if(entraSinDatosAMulti() && (leerDuenoConfirmado() === null || leerDuenoConfirmado() === userId)){
+        marcarDuenoConfirmado(userId);
+        await registrarDispositivo(userId, deviceId);
+        activarRealtime(userId);
+        activarEscrituraContinua(userId, deviceId);
         return;
       }
       await registrarDispositivo(userId, deviceId);
@@ -15306,6 +15926,10 @@ async function intentarSubidaInicial(session){
     console.warn('Subida inicial: error inesperado', e);
   }
 }
+
+// S1 · T7: dispositivo sin datos financieros que entra a una cuenta con datos en modo varios
+// escritores. Con datos locales y sin candado sigue el camino de siempre (pregunta de T11).
+function entraSinDatosAMulti(){ return multiActiva() && sinDatosFinancieros(state); }
 
 let subidaDuenoCtx = null;   // { userId, deviceId }
 document.getElementById('btnConfirmarDueno').onclick = async ()=>{
@@ -15684,7 +16308,8 @@ document.getElementById('btnLogout').onclick = async ()=>{
 const TEXTO_CONFIRMAR_ELIMINAR = 'ELIMINAR';
 const MSG_CUENTA_ELIMINADA_SERVIDOR = 'Tu cuenta de Telora fue eliminada. Tus datos siguen en este dispositivo.';
 const CLAVE_TOAST_TRAS_RECARGA = 'telora_toast_tras_recarga';   // sessionStorage, no localStorage
-const PREFIJOS_SYNC_CUENTA = ['telora_sync_base:', 'telora_sync_cola:', 'telora_sync_fallidas:'];
+const PREFIJOS_SYNC_CUENTA = ['telora_sync_base:', 'telora_sync_cola:', 'telora_sync_fallidas:',
+  'telora_sync_revs:', 'telora_sync_cursor:', 'telora_sync_choques:'];   // las 3 últimas: S1 · T7
 
 function confirmacionEliminarValida(texto){ return String(texto == null ? '' : texto).trim() === TEXTO_CONFIRMAR_ELIMINAR; }
 function estadoBotonEliminarCuenta(enLinea){

@@ -1472,6 +1472,267 @@ async function runTests(){
         'sync: backoff 1s, 2s, 4s, 8s… con tope 60s', JSON.stringify(r));
     }
 
+    // ---- S1 · T7: varios escritores (núcleo puro: sin red, sin storage, sin `state` global) ----
+    {
+      const meta = (fila, rev, extra) => ({ ...fila, rev, txid: '900', deleted_at: null, modificado_por: 'dev-B',
+        updated_at: '2026-10-07T12:00:00+00:00', ...(extra || {}) });
+      // Filas «del servidor» a partir de un estado: la foto local + los metadatos que agrega la nube.
+      const filasNube = (st, rev0) => {
+        const s = snap(st), filas = {};
+        let rev = rev0 || 100;
+        Object.keys(s).filter(t => t !== 'config_dispositivo').forEach(t => {
+          filas[t] = Object.values(s[t]).map(j => meta(JSON.parse(j), rev++, t === 'config_compartida' ? { dispositivo_escritor: 'multi:v2' } : null));
+        });
+        return filas;
+      };
+      const nubeDe = filas => win.indexarNube(filas, USER);
+      const acc = (lista, t, k) => lista.find(a => a.tabla === t && a.clave === k) || {};
+      const resAcc = lista => lista.map(a => `${a.accion}${a.motivo ? '/' + a.motivo : ''} ${a.tabla} ${a.clave}`).join(' | ') || '(sin acciones)';
+      const TOMB = '2026-10-07T13:00:00+00:00';
+
+      // Bandera y override
+      {
+        const flag = win.eval('SYNC_MULTI_ESCRITOR_ACTIVA');
+        const ov = win.permiteOverrideMulti;
+        assert(flag === false && win.multiActiva() === false
+          && ov('localhost', '?multi=1') && ov('127.0.0.1', '?x=2&multi=1')
+          && !ov('telora.cl', '?multi=1') && !ov('www.telora.cl', '?multi=1') && !ov('localhost', '') && !ov('localhost', '?multi=0'),
+          'T7: SYNC_MULTI_ESCRITOR_ACTIVA = false (y multiActiva() = false acá); ?multi=1 solo fuerza el modo en localhost / 127.0.0.1',
+          `flag=${flag} · multiActiva=${win.multiActiva()}`);
+      }
+      // Nombre del dispositivo (D6)
+      {
+        const n = win.nombreDispositivoDesdeUA;
+        const casos = [
+          ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36', 'Chrome en Windows'],
+          ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36 Edg/129.0', 'Edge en Windows'],
+          ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', 'Safari en iPhone'],
+          ['Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0', 'Firefox en Android'],
+          ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', 'Safari en macOS']
+        ];
+        const malos = casos.filter(([ua, esp]) => n(ua) !== esp).map(([ua, esp]) => `${esp} -> ${n(ua)}`);
+        const fila = JSON.parse(win.construirSnapshot(fx(), USER, DEV, { nombreDispositivo: 'Chrome en Windows' }).config_dispositivo[DEV]);
+        const filaSin = JSON.parse(snap(fx()).config_dispositivo[DEV]);
+        assert(malos.length === 0 && fila.nombre_dispositivo === 'Chrome en Windows' && !('nombre_dispositivo' in filaSin),
+          'T7 (D6): nombre del dispositivo desde el user agent; solo va en config_dispositivo si se pide (con la bandera en false la fila no cambia)',
+          malos.join(' · ') || 'ok');
+      }
+      // JSON canónico de la nube = JSON de la foto local
+      {
+        const st = fx(), s = snap(st), nube = nubeDe(filasNube(st));
+        const malas = [];
+        let total = 0;
+        Object.keys(nube).forEach(t => Object.keys(nube[t]).forEach(k => { total++; if(nube[t][k].json !== s[t][k]) malas.push(t + ' ' + k); }));
+        assert(malas.length === 0 && total === 6,
+          'T7: canonicoFilaNube da el MISMO JSON que la foto local en las 8 tablas (rev, txid, updated_at, modificado_por y dispositivo_escritor no cuentan)',
+          `filas=${total} · distintas: ${malas.join(', ') || 'ninguna'}`);
+      }
+      // Resurrección SIN edición local
+      {
+        const st = fx(), base = snap(st), filas = filasNube(st), revs0 = win.revsDeNube(nubeDe(filas));
+        const remota = nubeDe({ expenses: [{ ...filas.expenses[0], rev: 500, deleted_at: TOMB }] });
+        const plan = win.planPuestaAlDia({ local: base, base, revs: revs0, nube: remota });
+        const r = win.aplicarFilasAEstado(st, plan);
+        const nb = win.actualizarBaseYRevs(base, revs0, plan);
+        const ops = win.diffSnapshots(nb.base, snap(r.estado));
+        assert(acc(plan, 'expenses', 'e1').accion === 'aplicarBorrado' && r.estado.expenses.length === 0 && st.expenses.length === 1
+          && ops.length === 0 && nb.revs.expenses.e1 === 500 && !('e1' in nb.base.expenses),
+          'T7 resurrección (sin edición local): A borró X -> B lo borra acá, sin ninguna op hacia la nube (X no reaparece)',
+          `${resAcc(plan)} · ops después=${ops.length} · rev=${nb.revs.expenses.e1}`);
+      }
+      // Resurrección CON edición local
+      {
+        const st = fx(), base = snap(st), filas = filasNube(st), revs0 = win.revsDeNube(nubeDe(filas));
+        const remota = nubeDe({ expenses: [{ ...filas.expenses[0], rev: 500, deleted_at: TOMB }] });
+        const editado = clon(st); editado.expenses[0].amount = 9999;
+        const plan = win.planPuestaAlDia({ local: snap(editado), base, revs: revs0, nube: remota });
+        const op = win.diffSnapshots(base, snap(editado))[0];
+        const enviada = win.adjuntarBaseRev([op], revs0)[0];
+        const cl = win.clasificarResultadosLote([op], [{ i: 0, tabla: 'expenses', clave: 'e1', estado: 'choque', motivo: 'eliminado', servidor: { ...filas.expenses[0], rev: 500, deleted_at: TOMB } }]);
+        const nb = win.actualizarBaseYRevs(base, revs0, plan);
+        assert(acc(plan, 'expenses', 'e1').accion === 'choque' && acc(plan, 'expenses', 'e1').motivo === 'eliminado'
+          && enviada.base_rev === revs0.expenses.e1 && enviada.id === 'e1' && cl.choques.length === 1 && cl.ok.length === 0
+          && nb.base.expenses.e1 === base.expenses.e1 && nb.revs.expenses.e1 === revs0.expenses.e1,
+          'T7 resurrección (con edición local): borrado remoto contra edición local -> choque «eliminado» (en la puesta al día y si la op ya salió con su base_rev viejo); el choque no toca base ni revs',
+          `${resAcc(plan)} · base_rev enviado=${enviada.base_rev} · choques del lote=${cl.choques.length}`);
+      }
+      // fusionInicial SIN base (dispositivo que nunca escribió)
+      {
+        const stB = fixtureBase(); stB.accounts = [{ id: 'accB', nombre: 'Principal', orden: 0, archivada: false }]; stB.config.paleta = 'mar';
+        const filasA = filasNube(fx());
+        filasA.expenses.push(meta({ ...JSON.parse(snap(fx()).expenses.e1), id: 'eBorrado' }, 300, { deleted_at: TOMB }));
+        const nubeA = nubeDe(filasA);
+        const f = win.fusionInicial({ local: snap(stB), base: null, nube: nubeA, cola: [] });
+        const fIgual = win.fusionInicial({ local: snap(fx()), base: null, nube: nubeDe(filasNube(fx())), cola: [] });
+        const nuevo = win.estadoDesdeNube(stB, nubeA);
+        const ops = win.diffSnapshots(win.baseDesdeNube(nubeA), snap(nuevo));
+        assert(f.modo === 'reemplazar' && fIgual.modo === 'adoptar' && f.acciones.length === 0 && f.quitar.length === 0
+          && nuevo.expenses.length === 1 && nuevo.expenses[0].id === 'e1' && nuevo.goals[0].aportes.length === 1
+          && nuevo.accounts.length === 1 && nuevo.accounts[0].id === 'acc1' && nuevo.config.paleta === 'mar'
+          && ops.every(o => o.tipo === 'upsert') && ops.every(o => o.tabla === 'config_dispositivo'),
+          'T7 fusionInicial sin base: «reemplazar» (o «adoptar» si ya es igual), sin acciones ni ops; el estado nuevo es la nube sin tombstones (preferencias del dispositivo intactas) y el diff siguiente NO trae deletes',
+          `modo=${f.modo} / ${fIgual.modo} · gastos=${nuevo.expenses.map(e => e.id)} · ops siguientes: ${resumen(ops)}`);
+      }
+      // fusionInicial de 3 vías (con base)
+      {
+        const baseSt = fx(); baseSt.expenses.push({ ...baseSt.expenses[0], id: 'e2', amount: 222 });
+        const base3 = snap(baseSt);
+        const loc = clon(baseSt);
+        loc.expenses.push({ ...loc.expenses[0], id: 'e3', amount: 333 });   // nuevo local
+        loc.goals[0].name = 'Viaje local';                                 // editado acá…
+        const nubeSt = clon(baseSt);
+        nubeSt.expenses = nubeSt.expenses.filter(e => e.id !== 'e2');      // en la base y no en la nube
+        nubeSt.expenses.push({ ...nubeSt.expenses[0], id: 'e4', amount: 444 });   // solo en la nube
+        nubeSt.incomes[0].amount = 950000;                                 // solo cambió la nube
+        nubeSt.goals[0].name = 'Viaje nube';                               // …y distinto allá
+        const f = win.fusionInicial({ local: snap(loc), base: base3, nube: nubeDe(filasNube(nubeSt)), cola: [] });
+        const r = win.aplicarFilasAEstado(loc, f.acciones);
+        const nb = win.actualizarBaseYRevs(base3, {}, f.acciones);
+        const ops = win.diffSnapshots(nb.base, snap(r.estado));
+        const libres = win.opsNoPausadas(ops, [{ tabla: 'goals', clave: 'g1' }]);
+        assert(f.modo === 'tres_vias'
+          && acc(f.acciones, 'expenses', 'e2').accion === 'aplicarBorrado' && acc(f.acciones, 'expenses', 'e4').accion === 'aplicar'
+          && acc(f.acciones, 'incomes', 'i1').accion === 'aplicar' && acc(f.acciones, 'goals', 'g1').accion === 'choque'
+          && acc(f.acciones, 'expenses', 'e1').accion === 'adoptarRev' && !f.acciones.some(a => a.clave === 'e3')
+          && JSON.stringify(r.estado.expenses.map(e => e.id)) === JSON.stringify(['e1', 'e3', 'e4']) && r.estado.incomes[0].amount === 950000
+          && r.estado.goals[0].name === 'Viaje local' && ops.every(o => o.tipo === 'upsert')
+          && libres.length === 1 && libres[0].clave === 'e3',
+          'T7 fusionInicial de 3 vías: base y no nube -> borrado local · solo local -> se sube · solo nube -> se trae · solo cambió uno -> gana ese · cambiaron los dos -> choque (en pausa); ningún delete',
+          `${resAcc(f.acciones.filter(a => a.accion !== 'adoptarRev'))} · ops siguientes: ${resumen(ops)} · sin pausa: ${resumen(libres)}`);
+      }
+      // Fila ya conocida que vuelve a llegar (solapamiento del cursor / eco)
+      {
+        const st = fx(), base = snap(st);
+        const e1 = JSON.parse(base.expenses.e1);
+        const plan = win.planPuestaAlDia({ local: base, base, revs: { expenses: { e1: 7 }, incomes: { i1: 9 } },
+          nube: nubeDe({ expenses: [meta({ ...e1, amount: 1 }, 7)], incomes: [meta(JSON.parse(base.incomes.i1), 6)] }) });
+        const r = win.aplicarFilasAEstado(st, plan);
+        assert(acc(plan, 'expenses', 'e1').accion === 'ignorar' && acc(plan, 'incomes', 'i1').accion === 'ignorar' && r.estado.expenses[0].amount === 2000,
+          'T7: fila que reaparece con rev igual o menor al conocido -> ignorar (no se aplica aunque el contenido difiera)', resAcc(plan));
+      }
+      // ya_aplicado = ok · lote con 'invalida'
+      {
+        const op = (k, tipo) => ({ tabla: 'expenses', clave: k, tipo: tipo || 'upsert', fila: { id: k, user_id: USER }, v: 'x' });
+        const lote = [op('a'), op('b'), op('c'), op('d', 'delete'), op('e')];
+        const cl = win.clasificarResultadosLote(lote, [
+          { i: 0, tabla: 'expenses', clave: 'a', estado: 'ok', rev: 9, ya_aplicado: true },
+          { i: 1, tabla: 'expenses', clave: 'b', estado: 'invalida', motivo: 'sin_columnas' },
+          { i: 2, tabla: 'expenses', clave: 'c', estado: 'choque', motivo: 'version', servidor: { id: 'c', rev: 4 } },
+          { i: 3, tabla: 'expenses', clave: 'd', estado: 'ok', rev: null, ya_aplicado: true }
+        ]);
+        assert(cl.ok.length === 2 && cl.ok[0].rev === 9 && cl.ok[0].yaAplicado && cl.ok[1].rev === null
+          && cl.invalidas.length === 1 && cl.invalidas[0].op.clave === 'b' && cl.choques.length === 1 && cl.choques[0].servidor.rev === 4
+          && cl.reintentar.length === 1 && cl.reintentar[0].op.clave === 'e',
+          'T7: resultado del RPC -> ya_aplicado cuenta como ok · «invalida» se aparta sin frenar el lote · choque con la fila del servidor · op sin respuesta se reintenta',
+          JSON.stringify({ ok: cl.ok.map(x => x.op.clave), invalidas: cl.invalidas.map(x => x.op.clave), choques: cl.choques.map(x => x.op.clave), reintentar: cl.reintentar.map(x => x.op.clave) }));
+      }
+      // Aplicar lo remoto no genera diff
+      {
+        const stL = fx(), baseL = snap(stL), revsL = win.revsDeNube(nubeDe(filasNube(stL, 100)));
+        const rem = clon(stL);
+        rem.expenses[0].amount = 2100;
+        rem.incomes.push({ ...rem.incomes[0], id: 'i2', amount: 5000 });
+        rem.goals[0].name = 'Viaje 2';
+        rem.goals[0].aportes.push({ id: 'ap9', fecha: '2026-09-15', monto: 3000, tipo: 'manual' });
+        rem.config.categorias = rem.config.categorias.concat(['Mascotas']);
+        rem.transfers.push({ id: 't1', origen: 'acc1', destino: 'acc1', monto: 10, fecha: '2026-09-02', nombre: '' });
+        const filasR = filasNube(rem, 1000);
+        filasR.goal_aportes = filasR.goal_aportes.map(a => a.id === 'ap1' ? { ...a, deleted_at: TOMB } : a);
+        const plan = win.planPuestaAlDia({ local: baseL, base: baseL, revs: revsL, nube: nubeDe(filasR) });
+        const r = win.aplicarFilasAEstado(stL, plan);
+        const nb = win.actualizarBaseYRevs(baseL, revsL, plan);
+        const ops = win.diffSnapshots(nb.base, snap(r.estado));
+        const g = r.estado.goals[0];
+        assert(ops.length === 0 && r.omitidas.length === 0 && r.estado.expenses[0].amount === 2100 && r.estado.incomes.length === 2
+          && g.name === 'Viaje 2' && JSON.stringify(g.aportes.map(a => a.id)) === '["ap9"]'
+          && r.estado.config.categorias.includes('Mascotas') && r.estado.transfers.length === 1
+          && stL.expenses[0].amount === 2000 && stL.goals[0].aportes.length === 1,
+          'T7: aplicar cambios remotos (edición, alta, meta, aporte nuevo, aporte con tombstone, config, transferencia) -> diffSnapshots(base, construirSnapshot(state)) = [] y el estado original no se muta',
+          `${resAcc(plan.filter(a => a.accion !== 'ignorar'))} · ops después=${resumen(ops)}`);
+      }
+      // Aporte cuya meta no está acá: no se aplica (el motor no avanza ni base ni cursor)
+      {
+        const st = fx(), base = snap(st);
+        const plan = win.planPuestaAlDia({ local: base, base, revs: {},
+          nube: nubeDe({ goal_aportes: [meta({ id: 'apX', user_id: USER, goal_id: 'gNoEsta', monto: 1, fecha: '2026-09-01', tipo: 'manual' }, 50)] }) });
+        const r = win.aplicarFilasAEstado(st, plan);
+        assert(acc(plan, 'goal_aportes', 'apX').accion === 'aplicar' && r.omitidas.length === 1 && r.omitidas[0].clave === 'apX',
+          'T7: aporte remoto cuya meta no existe localmente -> queda en «omitidas» (se relee después; nunca se fija en la base)', resAcc(plan));
+      }
+      // Adopción de la cola del escritor único
+      {
+        const stQ = fx(); stQ.expenses.push({ ...stQ.expenses[0], id: 'e2', amount: 2 });
+        const base = snap(stQ);
+        const e1 = JSON.parse(base.expenses.e1), e2 = JSON.parse(base.expenses.e2);
+        const up = (k, f) => ({ tabla: 'expenses', clave: k, tipo: 'upsert', fila: f, v: 'v1' });
+        const del = k => ({ tabla: 'expenses', clave: k, tipo: 'delete', fila: { id: k, user_id: USER }, v: 'v1' });
+        const cola = [up('e1', e1), up('e2', e2), del('e3'), del('e4'), up('e5', { ...e1, id: 'e5' }),
+                      { tabla: 'config_dispositivo', clave: DEV, tipo: 'upsert', fila: {}, v: 'v1' }];
+        const nube = nubeDe({ expenses: [meta(e1, 50), meta({ ...e2, amount: 3 }, 51), meta({ ...e1, id: 'e3' }, 52, { deleted_at: TOMB }), meta({ ...e1, id: 'e4' }, 53)] });
+        const r = win.adoptarColaPendiente(cola, base, nube);
+        assert(acc(r.acciones, 'expenses', 'e1').accion === 'adoptarRev' && acc(r.acciones, 'expenses', 'e1').rev === 50
+          && acc(r.acciones, 'expenses', 'e2').accion === 'choque' && acc(r.acciones, 'expenses', 'e4').accion === 'choque'
+          && r.quitar.length === 1 && r.quitar[0].clave === 'e3' && !r.acciones.some(a => a.clave === 'e5' || a.tabla === 'config_dispositivo'),
+          'T7 adopción de la cola: base igual al servidor -> adoptarRev (base_rev = rev del servidor) · distinta -> choque · delete ya borrado allá -> sobra · fila nueva -> sale sin base_rev',
+          `${resAcc(r.acciones)} · quitar=${r.quitar.map(o => o.clave)}`);
+      }
+      // D9: meta eliminada -> sus aportes también salen como delete (y con su base_rev)
+      {
+        const stD = fx(), sinMeta = clon(stD); sinMeta.goals = [];
+        const ops = win.ordenarOps(win.diffSnapshots(snap(stD), snap(sinMeta)));
+        const env = win.adjuntarBaseRev(ops, { goals: { g1: 10 }, goal_aportes: { ap1: 11 } });
+        assert(ops.length === 2 && ops.every(o => o.tipo === 'delete') && ops[0].tabla === 'goal_aportes'
+          && env.find(o => o.tabla === 'goals').base_rev === 10 && env.find(o => o.tabla === 'goal_aportes').base_rev === 11,
+          'T7 (D9): eliminar una meta -> delete de la meta Y de cada aporte (el servidor les pone tombstone), cada uno con su base_rev', resumen(ops));
+      }
+      // N1: sync_activar_multi no produce choque falso en config_compartida
+      {
+        const stC = fx(), bC = snap(stC), revsC = { config_compartida: { [USER]: 100 } };
+        const nC = nubeDe({ config_compartida: [meta(JSON.parse(bC.config_compartida[USER]), 101, { dispositivo_escritor: 'multi:v2', modificado_por: null })] });
+        const p1 = win.planPuestaAlDia({ local: bC, base: bC, revs: revsC, nube: nC });
+        const stC2 = clon(stC); stC2.config.categorias = ['Solo local'];
+        const p2 = win.planPuestaAlDia({ local: snap(stC2), base: bC, revs: revsC, nube: nC, pendientes: new Set(['config_compartida|' + USER]) });
+        assert(acc(p1, 'config_compartida', USER).accion === 'adoptarRev' && acc(p2, 'config_compartida', USER).accion === 'adoptarRev',
+          'T7 (N1): un cambio que solo toca dispositivo_escritor/metadatos de config_compartida -> adoptarRev, nunca choque (tampoco con un cambio local pendiente)',
+          `${resAcc(p1)} · ${resAcc(p2)}`);
+      }
+      // diferir · lectura completa (borrado físico)
+      {
+        const st = fx(), base = snap(st);
+        const e1 = JSON.parse(base.expenses.e1);
+        const pV = win.planPuestaAlDia({ local: base, base, revs: {}, nube: nubeDe({ expenses: [meta({ ...e1, amount: 5 }, 70)] }), enVuelo: new Set(['expenses|e1']) });
+        const loc = clon(st); loc.incomes = [];
+        const pC = win.planPuestaAlDia({ local: snap(loc), base, revs: {}, completa: true, pendientes: new Set(['goals|g1']),
+          nube: nubeDe({ cuentas_financieras: [meta(JSON.parse(base.cuentas_financieras.acc1), 1)], goal_aportes: [meta(JSON.parse(base.goal_aportes.ap1), 2)] }) });
+        assert(acc(pV, 'expenses', 'e1').accion === 'diferir'
+          && acc(pC, 'expenses', 'e1').accion === 'aplicarBorrado' && acc(pC, 'incomes', 'i1').accion === 'adoptarRev'
+          && acc(pC, 'goals', 'g1').accion === 'choque' && acc(pC, 'goals', 'g1').motivo === 'no_existe'
+          && !pC.some(a => a.tabla === 'config_compartida'),
+          'T7: fila en vuelo -> diferir · lectura completa: lo que la nube ya no tiene se borra acá (o choque «no_existe» si había cambio pendiente); config sin fila no es un borrado',
+          `${resAcc(pV)} · ${resAcc(pC)}`);
+      }
+      // Choque doble: dos filas en pausa, la misma clave no se duplica
+      {
+        const c1 = win.combinarChoques([], [{ tabla: 'expenses', clave: 'e1', motivo: 'version' }, { tabla: 'goals', clave: 'g1', motivo: 'eliminado' }], 't1');
+        const c2 = win.combinarChoques(c1, [{ tabla: 'expenses', clave: 'e1', motivo: 'eliminado' }], 't2');
+        const ops = [{ tabla: 'expenses', clave: 'e1', tipo: 'upsert' }, { tabla: 'goals', clave: 'g1', tipo: 'upsert' }, { tabla: 'expenses', clave: 'e2', tipo: 'upsert' }];
+        const libres = win.opsNoPausadas(ops, c2);
+        assert(c2.length === 2 && c2.find(c => c.clave === 'e1').motivo === 'eliminado' && c2.find(c => c.clave === 'e1').detectado === 't2'
+          && libres.length === 1 && libres[0].clave === 'e2',
+          'T7 choque doble: dos choques quedan registrados (el más nuevo reemplaza al de la misma fila) y solo esas filas se pausan',
+          `${c2.map(c => c.tabla + ' ' + c.clave + '/' + c.motivo).join(', ')} · libres: ${libres.map(o => o.clave)}`);
+      }
+      // Realtime: ¿dejar de escribir?
+      {
+        const m = { deviceId: DEV, multi: true }, u = { deviceId: DEV };
+        const f = e => ({ user_id: USER, dispositivo_escritor: e });
+        const ok = win.escritorDejaDeSerEste(f('multi:v2'), m) === false && win.escritorDejaDeSerEste(f(DEV), m) === true
+          && win.escritorDejaDeSerEste(f('otro'), u) === true && win.escritorDejaDeSerEste(f(DEV), u) === false
+          && win.escritorDejaDeSerEste({ user_id: USER }, m) === false;
+        assert(ok, 'T7: con varios escritores, el UPDATE a multi:v2 (incluida la activación propia) NO detiene la sync; volver a un device sí. Escritor único: igual que antes');
+      }
+    }
+
     // ---- Tanda 4a.1: escritor único y dispositivo legado ----
     {
       const r = win.resultadoReclamoEscritor;
