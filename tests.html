@@ -2589,18 +2589,20 @@ async function runTests(){
       const cta = d.getElementById('deskCuentaBtn');
       const sinSesion = { con: cta.classList.contains('con-sesion'), nombre: d.getElementById('deskCuentaNombre').textContent };
       cta.click();
-      const grupoCuenta = d.getElementById('cuentaUsuarioSinSesion').closest('details.cfg-group');
-      sinSesion.sheets = abiertos().join(); sinSesion.cuentaAbierta = grupoCuenta.open;
+      // T23: «Iniciar sesión» abre la hoja de cuenta (#sheetCuenta), con el formulario de correo a la vista.
+      sinSesion.sheets = abiertos().join();
+      sinSesion.cuentaAbierta = d.getElementById('sheetCuenta').contains(d.getElementById('inpLoginCorreo'))
+        && d.getElementById('inpLoginCorreo').offsetParent !== null;
       cerrarSheets();
       win.renderCuentaUsuario({ user: { email:'ana@ejemplo.cl', user_metadata: { full_name:'Ana Pérez' } } });
       const conSesion = { con: cta.classList.contains('con-sesion'), nombre: d.getElementById('deskCuentaNombre').textContent, email: d.getElementById('deskCuentaEmail').textContent,
                           avatar: d.getElementById('deskCuentaAvatar').textContent, tip: d.getElementById('deskCuentaTip').textContent };
       win.renderCuentaUsuario(null);
       const rI = { cfg, sinSesion, conSesion, trasCerrar: d.getElementById('deskCuentaNombre').textContent };
-      assert(cfg === 'sheetConfig' && !sinSesion.con && sinSesion.nombre === 'Iniciar sesión' && sinSesion.sheets === 'sheetConfig' && sinSesion.cuentaAbierta
+      assert(cfg === 'sheetConfig' && !sinSesion.con && sinSesion.nombre === 'Iniciar sesión' && sinSesion.sheets === 'sheetCuenta' && sinSesion.cuentaAbierta
         && conSesion.con && conSesion.nombre === 'Ana Pérez' && conSesion.email === 'ana@ejemplo.cl' && conSesion.avatar === 'AP' && conSesion.tip === 'Ana Pérez'
         && rI.trasCerrar === 'Iniciar sesión',
-        'T20 E1 (i): Configuración abre su hoja; el bloque de cuenta sigue a renderCuentaUsuario() y «Iniciar sesión» lleva a Cuenta de usuario', JSON.stringify(rI));
+        'T20 E1 (i): Configuración abre su hoja; el bloque de cuenta sigue a renderCuentaUsuario() y «Iniciar sesión» lleva a la hoja de cuenta con el formulario de correo', JSON.stringify(rI));
 
       // (j) 1100 px: menú compacto de 72 px; el rótulo sigue como nombre accesible y el tooltip es aria-hidden.
       anchoIframe(1100);
@@ -2747,7 +2749,7 @@ async function runTests(){
       }
     }
 
-    // (g)–(k) Flujo en la interfaz, con la hoja de Configuración abierta (iframe fuera de pantalla).
+    // (g)–(k) Flujo en la interfaz, con la hoja de cuenta abierta desde el avatar (T23; iframe fuera de pantalla).
     const auth = win.eval('supa').auth;
     const origAuth = { signInWithOtp: auth.signInWithOtp, verifyOtp: auth.verifyOtp };
     const origSubida = win.intentarSubidaInicial, origRender = win.renderCuentaUsuario;
@@ -2775,8 +2777,7 @@ async function runTests(){
       win.renderCuentaUsuario(null); eventos.length = 0;
       win.eval('loginCorreo.bloqueoEnvioHastaMs = 0; loginCorreo.bloqueoVerifHastaMs = 0;');
       win.reiniciarLoginCorreo();
-      $('btnConfig').click();
-      $('cuentaUsuarioSinSesion').closest('details.cfg-group').open = true;
+      $('btnCuentaAvatar').click();   // T23: el login vive en #sheetCuenta (antes: Configuración → Cuenta de usuario)
 
       // (g) Paso 1: estructura, validación y envío.
       const inpC = $('inpLoginCorreo'), inpK = $('inpLoginCodigo');
@@ -2794,7 +2795,7 @@ async function runTests(){
       const envio = llamadas[0] && llamadas[0][1];
       const tras = { paso1Oculto: $('loginCorreoPaso1').hidden, paso2: visible('loginCorreoPaso2'), destino: $('loginCorreoDestino').textContent,
         foco: d.activeElement === inpK, reenviar: $('btnLoginReenviar').textContent, reenviarDis: $('btnLoginReenviar').disabled };
-      assert(estructura.orden && estructura.sep === 'o' && estructura.tipo === 'email' && estructura.autoc === 'email' && estructura.fuente === '16px'
+      assert(estructura.orden && estructura.sep === 'o con tu correo' && estructura.tipo === 'email' && estructura.autoc === 'email' && estructura.fuente === '16px'
         && estructura.label === 'Entrar con tu correo' && estructura.boton === 'Enviarme un código' && estructura.alerta === 'alert' && estructura.paso2Oculto
         && /nombre@correo\.cl/.test(invalido.error) && invalido.foco && invalido.llamadas === 0
         && envio && envio.email === 'ana@ejemplo.cl' && envio.options && envio.options.shouldCreateUser === true && !('emailRedirectTo' in envio.options)
@@ -2885,7 +2886,7 @@ async function runTests(){
 
       // (k) 1440 px: el bloque cabe sin desbordar y el paso 2 también a 375 px.
       win.eval('cierreSesionPropio = true;'); await auth._notifyAllSubscribers('SIGNED_OUT', null, false); win.eval('cierreSesionPropio = false;');
-      const desborde = () => { const g = sinSesion.closest('.cfg-group-body'); return [...g.querySelectorAll('*')].filter(n => n.offsetParent !== null && n.getBoundingClientRect().right > g.getBoundingClientRect().right + 0.5).map(n => n.id || n.className || n.tagName); };
+      const desborde = () => { const g = sinSesion; return [...g.querySelectorAll('*')].filter(n => n.offsetParent !== null && n.getBoundingClientRect().right > g.getBoundingClientRect().right + 0.5).map(n => n.id || n.className || n.tagName); };
       const a375p1 = desborde();
       inpC.value = 'ana@ejemplo.cl'; $('btnLoginEnviarCodigo').click(); await tick(10);
       const a375p2 = desborde();
@@ -2907,6 +2908,179 @@ async function runTests(){
       }catch(_){}
       iframe.style.cssText = 'display:none';
       try{ win.syncDeskLayout(); }catch(_){}
+    }
+  }
+
+  // ==================== T23 · Fase 1: cuenta (avatar, hoja, invitación, bienvenida) ====================
+  // Reloj fijo (instalarRelojPruebas). Nada toca el localStorage real: los flags de interfaz van a
+  // un almacén en memoria (uiLocal.ls) y la sesión se simula con renderCuentaUsuario().
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const memLs = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), _m: m }; };
+    const stOrig = win.eval('JSON.stringify(state)');
+    const sesionOrig = win.eval('sesionUiEstado');
+    const pendOrig = win.eval('JSON.stringify(avisosPendientes)');
+    const visto = id => !$(id).hidden;
+    const barrasVisibles = () => ['invitacionCuenta', 'backupReminder', 'installBanner'].filter(visto);
+    const conRegistros = (nGastos, nIngresos) => {
+      const st = fixtureBase();
+      for(let i = 0; i < nGastos; i++) st.expenses.push({ id: 'g' + i, date: isoRel(0, 2), amount: 1000, category: 'Comida', method: 'Efectivo', cuentaId: 'acc1' });
+      for(let i = 0; i < nIngresos; i++) st.incomes.push({ id: 'i' + i, date: isoRel(0, 2), amount: 1000, source: 'Sueldo', cuentaId: 'acc1' });
+      setState(win, st);
+    };
+    const sesionAna = { user: { email: 'ana@ejemplo.cl', user_metadata: { full_name: 'Ana Pérez' } } };
+    try{
+      // (a) Umbral: 19 registros no invitan; 20 sí (gastos + ingresos), con punto dorado en el avatar.
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); avisosPendientes.respaldo = false; avisosPendientes.instalar = false;');
+      win.renderCuentaUsuario(null);
+      conRegistros(12, 7); win.arbitrarAvisos();
+      const con19 = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso') };
+      conRegistros(12, 8); win.arbitrarAvisos();
+      const con20 = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso'),
+        puntoDesk: $('deskCuentaBtn').classList.contains('con-aviso'), titulo: $('invCuentaTitulo').textContent };
+      const pura = [19, 20].map(n => win.debeMostrarInvitacion({ sesion: false, registros: n, vista: false }));
+      assert(!con19.inv && !con19.punto && con20.inv && con20.punto && con20.puntoDesk && con20.titulo === 'Ya llevas 20 registros'
+        && pura[0] === false && pura[1] === true,
+        'T23 (a): la invitación aparece con 20 registros (gastos + ingresos) y no con 19; mientras está pendiente el avatar lleva el punto dorado',
+        JSON.stringify({ con19, con20, pura }));
+
+      // (b) Una sola vez: «Ahora no» la marca vista; al volver a arbitrar (o con más registros) no regresa.
+      $('invCuentaAhoraNo').click();
+      const trasAhoraNo = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso'),
+        flag: win.eval("uiLocal.ls.getItem(UI_FLAG_INVITACION)") };
+      conRegistros(30, 10); win.arbitrarAvisos();
+      const despues = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso') };
+      // «Crear cuenta» también la marca vista, y además abre la hoja de cuenta.
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      win.arbitrarAvisos();
+      const otraVez = visto('invitacionCuenta');
+      $('invCuentaCrear').click();
+      const trasCrear = { inv: visto('invitacionCuenta'), flag: win.eval("uiLocal.ls.getItem(UI_FLAG_INVITACION)"),
+        hoja: $('sheetCuenta').classList.contains('open') };
+      win.closeSheet('sheetCuenta');
+      win.arbitrarAvisos();
+      assert(!trasAhoraNo.inv && !trasAhoraNo.punto && trasAhoraNo.flag === '1' && !despues.inv && !despues.punto
+        && otraVez && !trasCrear.inv && trasCrear.flag === '1' && trasCrear.hoja && !visto('invitacionCuenta'),
+        'T23 (b): la invitación se muestra una sola vez: «Ahora no» o «Crear cuenta» la marcan vista (flag local) y no vuelve; «Crear cuenta» abre la hoja de cuenta',
+        JSON.stringify({ trasAhoraNo, despues, otraVez, trasCrear }));
+
+      // (c) Con sesión no aparece (ni el punto), aunque haya 25 registros y no esté vista.
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      conRegistros(20, 5);
+      win.renderCuentaUsuario(sesionAna);
+      const conSesion = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso'),
+        pura: win.debeMostrarInvitacion({ sesion: true, registros: 25, vista: false }),
+        desconocida: win.debeMostrarInvitacion({ sesion: null, registros: 25, vista: false }) };
+      win.renderCuentaUsuario(null);
+      const sinSesion = visto('invitacionCuenta');
+      assert(!conSesion.inv && !conSesion.punto && conSesion.pura === false && conSesion.desconocida === false && sinSesion,
+        'T23 (c): con sesión (o mientras la sesión aún no se conoce) la invitación no aparece; al cerrar sesión vuelve a estar pendiente',
+        JSON.stringify({ conSesion, sinSesion }));
+
+      // (d) Árbitro: como máximo una barra. Sin sesión: invitación > respaldo > instalar; con sesión: respaldo > instalar.
+      win.eval('avisosPendientes.respaldo = true; avisosPendientes.instalar = true;');
+      win.renderCuentaUsuario(null); win.arbitrarAvisos();
+      const sinS = barrasVisibles();
+      $('invCuentaAhoraNo').click();
+      const trasInv = barrasVisibles();
+      win.eval('avisosPendientes.respaldo = false;'); win.arbitrarAvisos();
+      const soloInstalar = barrasVisibles();
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); avisosPendientes.respaldo = true;');
+      win.renderCuentaUsuario(sesionAna);
+      const conS = barrasVisibles();
+      const tabla = [
+        win.elegirAviso({ sesion: false, invitacion: true, respaldo: true, instalar: true }),
+        win.elegirAviso({ sesion: false, invitacion: false, respaldo: true, instalar: true }),
+        win.elegirAviso({ sesion: true, invitacion: true, respaldo: true, instalar: true }),
+        win.elegirAviso({ sesion: true, invitacion: false, respaldo: false, instalar: true }),
+        win.elegirAviso({ sesion: false, invitacion: false, respaldo: false, instalar: false })
+      ];
+      win.renderCuentaUsuario(null);
+      assert(sinS.join() === 'invitacionCuenta' && trasInv.join() === 'backupReminder' && soloInstalar.join() === 'installBanner'
+        && conS.join() === 'backupReminder' && tabla.join() === 'invitacion,respaldo,respaldo,instalar,',
+        'T23 (d): árbitro de avisos: una sola barra a la vez; sin sesión invitación > respaldo > instalar, con sesión respaldo > instalar',
+        JSON.stringify({ sinS, trasInv, soloInstalar, conS, tabla }));
+      win.eval('avisosPendientes.respaldo = false; avisosPendientes.instalar = false;'); win.arbitrarAvisos();
+
+      // (e) Bienvenida de cuenta: solo tras el onboarding automático de primera ejecución.
+      const b = o => win.debeMostrarBienvenidaCuenta(Object.assign({ auto: true, onboardingVistoAlCargar: false, sesion: false, vista: false }, o));
+      const casos = { primera: b({}), yaVisto: b({ onboardingVistoAlCargar: true }), relanzado: b({ auto: false }),
+        conSesion: b({ sesion: true }), sesionDesconocida: b({ sesion: null }), yaVista: b({ vista: true }) };
+      // Integración: relanzar el tutorial y terminarlo no abre la bienvenida.
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      win.mostrarBienvenidaCuentaSiCorresponde({ auto: false });
+      const relanzadaAbre = $('sheetBienvenidaCuenta').classList.contains('open');
+      const flagRelanzado = win.eval('uiLocal.ls.getItem(UI_FLAG_BIENVENIDA)');
+      assert(casos.primera && !casos.yaVisto && !casos.relanzado && !casos.conSesion && casos.sesionDesconocida && !casos.yaVista
+        && !relanzadaAbre && flagRelanzado === null,
+        'T23 (e): la bienvenida de cuenta solo aparece en la primera ejecución (onboarding automático, sin sesión, no vista); nunca si onboardingVisto ya era true al cargar',
+        JSON.stringify({ casos, relanzadaAbre, flagRelanzado }));
+
+      // (f) Estado del respaldo: solo estados reales; sin escritura habilitada NUNCA «al día».
+      const e = o => win.estadoRespaldoCuenta(Object.assign({ habilitada: true, enLinea: true, cola: 0, fallidas: 0 }, o));
+      const est = { alDia: e({}), cola: e({ cola: 3 }), cola1: e({ cola: 1 }), fallidas: e({ fallidas: 2, cola: 4 }),
+        offline: e({ enLinea: false, cola: 2 }), noEscritor: e({ habilitada: false }), noEscritorOffline: e({ habilitada: false, enLinea: false }) };
+      win.renderCuentaUsuario(sesionAna);
+      const tarjeta = { tono: $('cuentaEstado').dataset.tono, texto: $('cuentaEstadoTxt').textContent, choques: $('cuentaFilaChoques').hidden };
+      win.renderCuentaUsuario(null);
+      assert(est.alDia.texto === 'Respaldo al día' && est.alDia.tono === 'ok'
+        && est.cola.texto === 'Guardando 3 cambios…' && est.cola.tono === 'pendiente' && est.cola1.texto === 'Guardando 1 cambio…'
+        && est.fallidas.texto === '2 cambios sin respaldar' && est.offline.texto === 'Sin conexión · se respaldará al volver' && est.offline.tono === 'gris'
+        && est.noEscritor.tono === 'gris' && /no está respaldando/.test(est.noEscritor.texto) && /no está respaldando/.test(est.noEscritorOffline.texto)
+        && !Object.values(est).some(x => x !== est.alDia && /al día/.test(x.texto))
+        && tarjeta.tono === 'gris' && /no está respaldando/.test(tarjeta.texto) && tarjeta.choques === true,
+        'T23 (f): la tarjeta de estado usa solo estados reales (al día, guardando, sin respaldar, sin conexión, no escritor); sin sync habilitada nunca dice «al día» y sin choques no hay fila «Cambios por revisar»',
+        JSON.stringify({ est, tarjeta }));
+
+      // (g) Con #sheetCuenta cerrada, renderCuentaUsuario() deja avatar y estado correctos al entrar y salir.
+      win.closeSheet('sheetCuenta');
+      win.renderCuentaUsuario(null);
+      const av = $('btnCuentaAvatar');
+      const s0 = { sin: av.classList.contains('sin-sesion'), con: av.classList.contains('con-sesion'), aria: av.getAttribute('aria-label'),
+        icono: !!av.querySelector('svg'), deskNombre: $('deskCuentaNombre').textContent, bloqueSin: $('cuentaUsuarioSinSesion').style.display !== 'none' };
+      win.renderCuentaUsuario(sesionAna);
+      const s1 = { sin: av.classList.contains('sin-sesion'), con: av.classList.contains('con-sesion'), aria: av.getAttribute('aria-label'),
+        texto: av.textContent, nombre: $('cuentaPerfilNombre').textContent, email: $('cuentaUsuarioEmail').textContent,
+        perfilAv: $('cuentaPerfilAvatar').textContent, bloqueCon: $('cuentaUsuarioConSesion').style.display !== 'none',
+        estado: $('cuentaEstadoTxt').textContent, hojaCerrada: !$('sheetCuenta').classList.contains('open') };
+      win.renderCuentaUsuario(null);
+      const s2 = { sin: av.classList.contains('sin-sesion'), con: av.classList.contains('con-sesion'), aria: av.getAttribute('aria-label'),
+        nombre: $('cuentaPerfilNombre').textContent, bloqueSin: $('cuentaUsuarioSinSesion').style.display !== 'none' };
+      assert(s0.sin && !s0.con && s0.aria === 'Cuenta: sin sesión' && s0.icono && s0.deskNombre === 'Iniciar sesión' && s0.bloqueSin
+        && !s1.sin && s1.con && s1.aria === 'Cuenta de Ana Pérez' && s1.texto === 'AP' && s1.nombre === 'Ana Pérez' && s1.email === 'ana@ejemplo.cl'
+        && s1.perfilAv === 'AP' && s1.bloqueCon && /no está respaldando/.test(s1.estado) && s1.hojaCerrada
+        && s2.sin && !s2.con && s2.aria === 'Cuenta: sin sesión' && s2.nombre === '' && s2.bloqueSin,
+        'T23 (g): con la hoja de cuenta cerrada, renderCuentaUsuario() mantiene el avatar (sin sesión: ícono y «Cuenta: sin sesión»; con sesión: iniciales), el perfil y el estado al iniciar y cerrar sesión',
+        JSON.stringify({ s0, s1, s2 }));
+
+      // (h) Foco: el cierre del usuario (Escape / [data-close]) lo devuelve al avatar; closeSheet() programático no.
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:900px; border:0;'; void win.innerWidth; win.syncDeskLayout();
+      av.focus(); av.click();
+      const abierta = $('sheetCuenta').classList.contains('open');
+      d.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const trasEscape = { cerrada: !$('sheetCuenta').classList.contains('open'), foco: d.activeElement === av };
+      av.focus(); av.click();
+      $('sheetCuenta').querySelector('.hoja-cerrar').click();
+      const trasCerrar = d.activeElement === av;
+      av.focus(); av.click();
+      $('inpLoginCorreo').focus();
+      win.closeSheet('sheetCuenta');
+      const programatico = d.activeElement === av;
+      iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+      assert(abierta && trasEscape.cerrada && trasEscape.foco && trasCerrar && !programatico,
+        'T23 (h): el avatar abre #sheetCuenta; Escape y «cerrar» devuelven el foco al avatar; closeSheet() programático no lo mueve',
+        JSON.stringify({ abierta, trasEscape, trasCerrar, programatico }));
+    }catch(e){
+      assert(false, 'T23: excepción durante las pruebas de cuenta', e && e.stack || String(e));
+    }finally{
+      try{
+        iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+        ['sheetCuenta', 'sheetBienvenidaCuenta'].forEach(id => win.closeSheet(id));
+        win.eval('state = ' + stOrig + '; uiLocal.ls = null; uiLocal._mem.clear(); Object.assign(avisosPendientes, ' + pendOrig + ');');
+        win.renderCuentaUsuario(null);
+        win.eval('sesionUiEstado = ' + JSON.stringify(sesionOrig) + ';');
+        resetCaches(win); win.arbitrarAvisos();
+      }catch(_){}
     }
   }
 
