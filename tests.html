@@ -3084,6 +3084,111 @@ async function runTests(){
     }
   }
 
+  // ==================== T23 · Fase 2: Configuración (variante A) ====================
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const stOrig = win.eval('JSON.stringify(state)');
+    const abiertas = () => [...d.querySelectorAll('.sheet-overlay.open')].map(o => o.id).filter(id => id !== 'sheetOnboarding');
+    const cerrarTodo = () => abiertas().forEach(id => win.closeSheet(id));
+    const HIJAS = ['cfgHojaCategorias', 'cfgHojaMetodos', 'cfgHojaFuentes', 'cfgHojaCuentas', 'cfgHojaApariencia', 'cfgHojaNotif', 'cfgHojaInicio', 'cfgHojaRespaldo'];
+    try{
+      // (i) Inventario «hoy → destino»: cada control sigue existiendo una sola vez y vive donde corresponde.
+      const destino = {
+        cfgHojaCategorias: ['cfgCategorias', 'newCategoria'], cfgHojaMetodos: ['cfgMetodos', 'newMetodo'],
+        cfgHojaFuentes: ['cfgFuentes', 'newFuente'], cfgHojaCuentas: ['cfgCuentas', 'newCuenta', 'btnAddCuenta'],
+        cfgHojaInicio: ['cfgInicioRegistro'],
+        cfgHojaRespaldo: ['btnBackupData', 'btnRestoreData', 'restoreFileInput', 'respaldoPrevioBox', 'btnRespaldoPrevioMulti', 'btnRespaldoPrevioBorrar', 'cfgStorageInfo', 'btnCfgExportar'],
+        cfgHojaApariencia: ['paletteRow', 'fontScaleRow', 'cfgAltoContraste'], cfgHojaNotif: ['cfgNotifStatus', 'btnActivarNotif'],
+        sheetConfig: ['cfgReadOnly', 'btnRelanzarOnboarding', 'cfgBuildTag', 'cfgFilaCuenta'],
+        sheetCuenta: ['btnLoginGoogle', 'loginCorreoPaso1', 'loginCorreoPaso2', 'inpLoginCorreo', 'inpLoginCodigo', 'btnLogout', 'btnEliminarCuenta', 'cuentaUsuarioEmail']
+      };
+      const faltan = [];
+      Object.entries(destino).forEach(([hoja, ids]) => ids.forEach(id => {
+        const n = d.querySelectorAll('#' + id).length;
+        if(n !== 1 || !$(hoja).contains($(id))) faltan.push(id + '@' + hoja + '×' + n);
+      }));
+      const acordeones = $('sheetConfig').querySelectorAll('details').length;
+      const legales = ['privacidad.html', 'terminos.html'].every(h => $('sheetConfig').querySelector('a[href="' + h + '"]'));
+      assert(faltan.length === 0 && acordeones === 0 && legales,
+        'T23 F2 (i): inventario al 100 %: cada control de la Configuración anterior existe una sola vez en su hoja de destino; sin acordeones; Tutorial, legales y versión en el pie',
+        JSON.stringify({ faltan, acordeones, legales }));
+
+      // (j) Cada fila abre su hoja apilada; «‹ Configuración» vuelve a la principal con el foco en la fila.
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:390px; height:844px; border:0;'; void win.innerWidth; win.syncDeskLayout();
+      cerrarTodo(); $('btnConfig').click();
+      const filas = HIJAS.map(h => {
+        const fila = $('sheetConfig').querySelector('[data-hoja="' + h + '"]');
+        fila.focus(); fila.click();
+        const r = { h, abiertas: abiertas().join(), encima: (parseInt($(h).style.zIndex, 10) || 50) > (parseInt($('sheetConfig').style.zIndex, 10) || 50) };
+        $(h).querySelector('.cfg-volver').click();
+        r.vuelta = abiertas().join() === 'sheetConfig' && d.activeElement === fila;
+        return r;
+      });
+      const malas = filas.filter(r => r.abiertas !== 'sheetConfig,' + r.h && r.abiertas !== r.h + ',sheetConfig' || !r.encima || !r.vuelta);
+      assert(malas.length === 0,
+        'T23 F2 (j): las 8 filas abren su hoja independiente apilada sobre la principal; «‹ Configuración» vuelve con el foco en la fila de origen',
+        JSON.stringify(malas.length ? malas : filas.map(r => r.h)));
+
+      // (k) Escape cierra solo la hoja de arriba; la segunda vez, la principal.
+      $('sheetConfig').querySelector('[data-hoja="cfgHojaApariencia"]').click();
+      const esc = () => d.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      esc(); const tras1 = abiertas().join();
+      esc(); const tras2 = abiertas().join();
+      // cerrarConfiguracion() (respaldo, restaurar, tutorial, eliminar cuenta) cierra la pila completa.
+      $('btnConfig').click(); $('sheetConfig').querySelector('[data-hoja="cfgHojaRespaldo"]').click();
+      win.cerrarConfiguracion(); const trasCerrar = abiertas().join();
+      assert(tras1 === 'sheetConfig' && tras2 === '' && trasCerrar === '',
+        'T23 F2 (k): Escape cierra solo la hoja superior; cerrarConfiguracion() cierra hijas y principal',
+        JSON.stringify({ tras1, tras2, trasCerrar }));
+
+      // (l) Valores de las filas (reloj fijo) y «hace X días» del último respaldo.
+      const hoy = win.Date.now(), DIA = 86400000;
+      const st = fixtureBase();
+      st.config.paleta = 'medianoche'; st.config.mesInicioRegistro = '2026-03'; st.config.ultimoRespaldo = hoy - 5 * DIA;
+      const v1 = win.valoresFilasConfig(st);
+      st.accounts.push({ id: 'acc2', nombre: 'Ahorro', orden: 1, archivada: false }, { id: 'acc3', nombre: 'Vieja', orden: 2, archivada: true });
+      delete st.config.mesInicioRegistro; delete st.config.ultimoRespaldo;
+      const v2 = win.valoresFilasConfig(st);
+      const hace = [hoy, hoy - DIA, hoy - 9 * DIA, 0].map(ms => win.textoHaceDias(ms, hoy));
+      assert(v1.cfgValCategorias === '11' && v1.cfgValMetodos === '4' && v1.cfgValFuentes === '7' && v1.cfgValCuentas === 'Principal'
+        && v1.cfgValApariencia === 'Medianoche (OLED)' && v1.cfgValInicio === win.eval('MESES[2]') + ' 2026' && v1.cfgValRespaldo === 'Hace 5 días'
+        && v2.cfgValCuentas === '2' && v2.cfgValInicio === 'Sin definir' && v2.cfgValRespaldo === 'Nunca'
+        && hace.join() === 'Hoy,Ayer,Hace 9 días,Nunca',
+        'T23 F2 (l): cada fila muestra su valor actual (cantidades, cuenta única por nombre, paleta, mes de inicio, «hace X días» del último respaldo)',
+        JSON.stringify({ v1, v2, hace }));
+
+      // (m) Solo lectura: interruptor en la misma fila de la hoja principal, mismo #cfgReadOnly.
+      const ro = $('cfgReadOnly');
+      assert(ro.type === 'checkbox' && ro.getAttribute('role') === 'switch' && !!ro.closest('.cfg-fila') && ro.closest('.sheet-overlay').id === 'sheetConfig',
+        'T23 F2 (m): «Modo solo lectura» es un interruptor (role=switch) en su fila de la hoja principal', JSON.stringify({ fila: !!ro.closest('.cfg-fila') }));
+
+      // (n) «Continuar con Google»: #FFFFFF / #1F1F1F fijos en cualquier paleta y con alto contraste.
+      const colores = () => ['btnLoginGoogle', 'bienvGoogle'].map(id => { const c = win.getComputedStyle($(id)); return c.backgroundColor + '|' + c.color; });
+      const palOrig = win.eval("state.config.paleta || 'cafe'"), hcOrig = win.eval('!!state.config.altoContraste');
+      const enCafe = colores();
+      win.aplicarPaleta('medianoche'); const enMedianoche = colores();
+      win.aplicarAltoContraste(true); const enHc = colores();
+      win.eval('state.config.altoContraste = ' + hcOrig + ';'); win.aplicarPaleta(palOrig);
+      const esperado = 'rgb(255, 255, 255)|rgb(31, 31, 31)';
+      assert([...enCafe, ...enMedianoche, ...enHc].every(c => c === esperado),
+        'T23 F2 (n): «Continuar con Google» (hoja de cuenta y bienvenida) usa #FFFFFF y #1F1F1F fijos en Café, Medianoche y alto contraste',
+        JSON.stringify({ enCafe, enMedianoche, enHc }));
+
+      // (o) El aviso de fallo de guardado nombra la fila nueva.
+      const toast = String(win.showSaveErrorDialog);
+      assert(/Configuración → Respaldo y exportar/.test(toast) && !/Respaldo de datos/.test(toast),
+        'T23 F2 (o): el toast de respaldo fallido apunta a «Configuración → Respaldo y exportar»', '');
+    }catch(e){
+      assert(false, 'T23 F2: excepción durante las pruebas de Configuración', e && e.stack || String(e));
+    }finally{
+      try{
+        cerrarTodo();
+        iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+        win.eval('state = ' + stOrig + ';'); resetCaches(win);
+      }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }

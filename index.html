@@ -1092,9 +1092,12 @@ button{font-family:inherit;}
 .cuenta-benef{list-style:none; margin:0 0 16px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:16px;}
 .cuenta-benef li{display:flex; align-items:flex-start; gap:10px; font-size:13.5px; color:var(--cream); line-height:1.45; padding:5px 0;}
 .cuenta-benef svg{width:16px; height:16px; flex-shrink:0; margin-top:2px; color:var(--success);}
+/* «Continuar con Google» (#btnLoginGoogle, #bienvGoogle). T23 · Fase 2: colores FIJOS de la
+   guía de marca de Google (tema claro: fondo #FFFFFF, texto #1F1F1F, borde #747775), a
+   propósito fuera de las variables: no cambian con la paleta ni con alto contraste. */
 .btn-claro{
   width:100%; min-height:48px; display:flex; align-items:center; justify-content:center; gap:10px;
-  background:var(--cream); color:var(--bg); border:none; border-radius:var(--radius-sm);
+  background:#FFFFFF; color:#1F1F1F; border:1px solid #747775; border-radius:var(--radius-sm);
   padding:13px; font-size:15.5px; font-weight:600; font-family:inherit; cursor:pointer; margin-top:0;
 }
 .btn-claro:active{transform:scale(0.97);}
@@ -1145,6 +1148,104 @@ button{font-family:inherit;}
 .invitacion-cuenta{flex-direction:column; align-items:stretch; gap:10px; margin:0 0 12px; padding:14px 16px; border-radius:16px;}
 .invitacion-cuenta .notice-bar-actions{justify-content:flex-end; gap:8px;}
 .invitacion-cuenta .nb-primary, .invitacion-cuenta .nb-ghost{min-height:44px; padding:10px 16px; font-size:13.5px;}
+
+/* ---------- T23 · Fase 2: Configuración (variante A) ----------
+   Hoja principal con listas de filas de 52 px (ícono en recuadro de 32 px, etiqueta, valor
+   actual, chevron) y hojas hijas apiladas (.cfg-hija) con «‹ Configuración». Solo variables
+   de la paleta (9 paletas + alto contraste). */
+#sheetConfig .sheet, .cfg-hija .sheet{border-radius:24px 24px 0 0;}
+.cfg-cuenta{
+  width:100%; min-height:64px; display:flex; align-items:center; gap:12px; padding:10px 14px; margin:0 0 6px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:16px;
+  color:var(--cream); font-family:inherit; text-align:left; cursor:pointer;
+}
+.cfg-cuenta-av{
+  width:40px; height:40px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background-color:var(--surface-3); background-size:cover; background-position:center; color:var(--gold);
+  font-size:14px; font-weight:700; border:1px solid var(--border);
+}
+.cfg-cuenta-av.con-sesion{background-color:var(--gold); color:var(--burgundy); border-color:transparent;}
+.cfg-cuenta-av svg{width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;}
+.cfg-cuenta-txt{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+.cfg-cuenta-nombre{font-size:15.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cfg-cuenta-estado{font-size:12.5px; color:var(--cream-dim); line-height:1.35;}
+.cfg-grupo-tit, .cfg-sub-tit{
+  font-family:inherit; font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--cream-dim); margin:20px 4px 8px;
+}
+.cfg-sub-tit{margin:18px 2px 8px;}
+.cfg-lista{background:var(--surface-2); border:1px solid var(--border); border-radius:16px; overflow:hidden;}
+.cfg-fila{
+  width:100%; min-height:52px; display:flex; align-items:center; gap:12px; padding:8px 14px;
+  background:none; border:none; color:var(--cream); font-family:inherit; font-size:15px; text-align:left; cursor:pointer;
+}
+.cfg-fila + .cfg-fila{border-top:1px solid var(--border);}
+.cfg-fila:active{background:var(--surface-3);}
+.cfg-ic{
+  width:32px; height:32px; flex-shrink:0; border-radius:9px; display:flex; align-items:center; justify-content:center;
+  background:var(--surface-3); color:var(--gold);
+}
+.cfg-ic svg, .cfg-chev, .cfg-volver svg{fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;}
+.cfg-ic svg{width:17px; height:17px;}
+.cfg-fila-lbl{flex:1; min-width:0;}
+.cfg-fila-lbl small{display:block; margin-top:3px; font-size:12px; color:var(--cream-dim); line-height:1.4;}
+.cfg-fila-val{max-width:46%; color:var(--cream-dim); font-size:13.5px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.cfg-chev{width:16px; height:16px; flex-shrink:0; color:var(--cream-dim);}
+.cfg-fila-sola{background:var(--surface-2); border:1px solid var(--border); border-radius:16px; margin-top:18px;}
+/* Interruptor (checkbox con role="switch"): 46×28 dentro de una fila de 52 px. */
+.cfg-switch{
+  appearance:none; -webkit-appearance:none; flex-shrink:0; position:relative; width:46px; height:28px; margin:0;
+  border-radius:14px; background:var(--surface-3); border:1px solid var(--border); cursor:pointer; transition:background .15s ease;
+}
+.cfg-switch::before{
+  content:""; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%;
+  background:var(--cream-dim); transition:transform .15s ease, background .15s ease;
+}
+.cfg-switch:checked{background:var(--gold); border-color:var(--gold);}
+.cfg-switch:checked::before{transform:translateX(18px); background:var(--bg);}
+.cfg-switch:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+.cfg-nota{font-size:11.5px; color:var(--cream-dim); line-height:1.45; margin:8px 4px 0;}
+.cfg-pie{display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px 6px; margin:22px 0 0; color:var(--cream-dim); font-size:13px;}
+.cfg-pie-link{
+  min-height:44px; display:inline-flex; align-items:center; padding:0 6px; background:none; border:none;
+  color:var(--gold); font-family:inherit; font-size:13px; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
+}
+.cfg-version{text-align:center; font-size:11px; color:var(--cream-dim); opacity:.7; margin:0;}
+.cfg-volver{
+  min-height:44px; display:inline-flex; align-items:center; gap:2px; margin:-6px 0 4px -8px; padding:0 8px 0 0;
+  background:none; border:none; color:var(--gold); font-family:inherit; font-size:15px; cursor:pointer;
+}
+.cfg-volver svg{width:22px; height:22px;}
+/* Apariencia: vista previa de la tarjeta Disponible, rejilla de paletas y control segmentado. */
+.cfg-preview{background:var(--burgundy); color:var(--on-burgundy); border-radius:16px; padding:14px 16px; margin:0 0 4px;}
+.cfg-preview-lbl{margin:0; font-size:12.5px; opacity:.85;}
+.cfg-preview-monto{margin:2px 0 8px; font-family:ui-serif,Georgia,serif; font-size:28px; font-weight:500;}
+.cfg-preview-stats{display:flex; gap:14px; font-size:12px;}
+.cfg-preview-stats span{display:inline-flex; align-items:center; gap:5px;}
+.cfg-preview-stats b{font-weight:600;}
+.cfg-preview-stats i{font-style:normal; font-size:11px;}
+.cfg-preview-stats .ing{color:var(--success);} .cfg-preview-stats .gas{color:var(--danger);} .cfg-preview-stats .met{color:var(--gold);}
+.cfg-hija .palette-row{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px;}
+.cfg-hija .palette-opt{flex-direction:column; justify-content:center; gap:7px; min-height:76px; padding:10px 6px; text-align:center; border-radius:12px;}
+.cfg-hija .palette-opt.active{border:2px solid var(--gold); padding:9px 5px;}
+.palette-circs{display:flex;}
+.cfg-hija .palette-circs .sw{width:22px; height:22px; border-radius:50%; border:2px solid var(--surface-2);}
+.cfg-hija .palette-circs .sw + .sw{margin-left:-6px;}
+.cfg-hija .palette-name{font-size:12px; line-height:1.25; color:var(--cream);}
+.cfg-segmentado{gap:4px; padding:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px;}
+.cfg-segmentado .toggle-opt{min-height:40px; padding:9px 4px; border:none; border-radius:9px; background:none; font-size:14px;}
+.cfg-segmentado .toggle-opt.active{background:var(--burgundy); color:var(--on-burgundy);}
+/* Respaldo y exportar: tarjetas de estado. */
+.cfg-estado-card{display:flex; flex-direction:column; gap:3px; padding:12px 16px; margin:0 0 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:16px;}
+.cfg-estado-card[hidden]{display:none;}
+.cfg-estado-tit{font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--cream-dim);}
+.cfg-estado-txt{font-size:14px; color:var(--cream);}
+.cfg-estado-sub{font-size:11.5px; color:var(--cream-dim);}
+.cfg-estado-sub:empty{display:none;}
+#cfgHojaRespaldo .btn-primary{margin-top:6px;}
+:root.hc .cfg-lista, :root.hc .cfg-cuenta, :root.hc .cfg-estado-card, :root.hc .cfg-fila-sola, :root.hc .cfg-segmentado{border-width:2px;}
+:root.hc .cfg-grupo-tit, :root.hc .cfg-sub-tit, :root.hc .cfg-fila-val, :root.hc .cfg-nota, :root.hc .cfg-cuenta-estado, :root.hc .cfg-estado-sub{color:var(--cream);}
+:root.hc .cfg-switch{border-width:2px;}
 
 .choice-row{display:flex; gap:12px; margin-bottom:6px;}
 .choice-card{
@@ -1388,12 +1489,6 @@ button{font-family:inherit;}
 .cfg-group > summary .icon{width:16px; height:16px; transition:transform .2s ease; flex-shrink:0;}
 .cfg-group[open] > summary .icon{transform:rotate(180deg);}
 .cfg-group-body{padding:2px 0 16px;}
-/* Día 14 · "Respaldo de datos" en 2ª posición: más peso visual que los demás bloques
-   de primer nivel (negrita + --gold en vez de --gold-dim, ambos ya de la paleta) para
-   que no se lea como un bloque más — es la función más importante contra pérdida de
-   datos. */
-.cfg-group-destacado > summary{color:var(--gold); font-weight:700;}
-.cfg-group-destacado > summary .icon{color:var(--gold);}
 .cfg-group-body .config-list{margin-bottom:10px;}
 
 /* ==================== Tanda I / día 14 · Configuración agrupada (accordion anidado) ====================
@@ -2762,177 +2857,179 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
-<!-- SHEET: configuración -->
+<!-- SHEET: configuración (T23 · Fase 2, variante A). Hoja principal: tarjeta de cuenta y tres
+     listas de filas (ícono + etiqueta + valor actual + chevron). Cada fila abre una HOJA
+     INDEPENDIENTE apilada (.cfg-hija) con su contenido de siempre: mismos ids y handlers.
+     «‹ Configuración» ([data-close]) vuelve a la principal con el foco en la fila de origen
+     (dismissSheet devuelve el foco); Escape cierra solo la hoja de arriba. -->
 <div class="sheet-overlay" id="sheetConfig">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Configuración</h2>
+    <div class="hoja-cab">
+      <h2>Configuración</h2>
+      <button type="button" class="hoja-cerrar" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <!-- Tarjeta de cuenta: abre #sheetCuenta (renderTarjetaCuentaConfig, script de Cuenta de usuario). -->
+    <button type="button" class="cfg-cuenta" id="cfgFilaCuenta">
+      <span class="cfg-cuenta-av" id="cfgCuentaAv" aria-hidden="true"></span>
+      <span class="cfg-cuenta-txt"><span class="cfg-cuenta-nombre" id="cfgCuentaNombre">Sin cuenta</span><span class="cfg-cuenta-estado" id="cfgCuentaEstado"></span></span>
+      <svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
 
-    <!-- Tanda I / día 14: bloques colapsables de primer nivel (Apariencia, Datos y
-         seguridad), más "Respaldo de datos" y "Tutorial" como bloques de primer nivel
-         propios (no anidados). Cada ítem interno conserva su id y su comportamiento;
-         solo hay que abrir primero el bloque que lo contiene.
-         Día 15: el envoltorio "Tus datos" que agrupaba los siguientes 5 acordeones se
-         eliminó (Opción A, Hallazgo 5) — ahora son bloques de primer nivel propios,
-         igual que Apariencia/Datos y seguridad, en el mismo orden interno de antes. -->
-        <details class="cfg-group">
-          <summary>Categorías de gastos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <div class="config-list" id="cfgCategorias"></div>
-            <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
-          </div>
-        </details>
+    <h3 class="cfg-grupo-tit" id="cfgTitRegistros">Tus registros</h3>
+    <div class="cfg-lista" role="group" aria-labelledby="cfgTitRegistros">
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaCategorias"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><span class="cfg-fila-lbl">Categorías</span><span class="cfg-fila-val" id="cfgValCategorias"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaMetodos"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="cfg-fila-lbl">Métodos de pago</span><span class="cfg-fila-val" id="cfgValMetodos"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaFuentes"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span><span class="cfg-fila-lbl">Fuentes de ingreso</span><span class="cfg-fila-val" id="cfgValFuentes"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaCuentas"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><span class="cfg-fila-lbl">Cuentas</span><span class="cfg-fila-val" id="cfgValCuentas"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </div>
 
-        <details class="cfg-group">
-          <summary>Métodos de pago <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <div class="config-list" id="cfgMetodos"></div>
-            <div class="add-inline"><input type="text" id="newMetodo" placeholder="Nuevo método"><button class="small-btn" data-addlist="metodos">Agregar</button></div>
-          </div>
-        </details>
+    <h3 class="cfg-grupo-tit" id="cfgTitPreferencias">Preferencias</h3>
+    <div class="cfg-lista" role="group" aria-labelledby="cfgTitPreferencias">
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaApariencia"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.5-.7 1.5-1.5 0-.4-.1-.7-.4-1-.3-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-4.9-4.5-9-10-9z"/></svg></span><span class="cfg-fila-lbl">Apariencia</span><span class="cfg-fila-val" id="cfgValApariencia"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaNotif"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="cfg-fila-lbl">Notificaciones</span><span class="cfg-fila-val" id="cfgValNotif"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaInicio"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="cfg-fila-lbl">Inicio del registro</span><span class="cfg-fila-val" id="cfgValInicio"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </div>
 
-        <details class="cfg-group">
-          <summary>Fuentes de ingreso <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <div class="config-list" id="cfgFuentes"></div>
-            <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
-          </div>
-        </details>
+    <h3 class="cfg-grupo-tit" id="cfgTitDatos">Tus datos</h3>
+    <div class="cfg-lista" role="group" aria-labelledby="cfgTitDatos">
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaRespaldo"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><span class="cfg-fila-lbl">Respaldo y exportar</span><span class="cfg-fila-val" id="cfgValRespaldo"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <!-- Modo solo lectura: interruptor en la misma fila (mismo #cfgReadOnly y su listener). -->
+      <label class="cfg-fila cfg-fila-switch"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="cfg-fila-lbl">Modo solo lectura</span><input type="checkbox" class="cfg-switch" id="cfgReadOnly" role="switch" aria-describedby="cfgReadOnlyNota"></label>
+    </div>
+    <p class="cfg-nota" id="cfgReadOnlyNota">Solo lectura bloquea agregar, editar o eliminar gastos, ingresos y metas, y los cambios de categorías/métodos/fuentes. Cambiar de mes, ver Historial, Insights y Metas sigue funcionando igual. Descargar o compartir el respaldo también sigue disponible; restaurar uno queda bloqueado mientras esté activo.</p>
 
-        <details class="cfg-group">
-          <summary>Cuentas <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <p class="sheet-note" style="margin:0 0 12px;">
-              Cada gasto o ingreso pertenece a una cuenta. El selector del encabezado (en Resumen e Historial) filtra por cuenta; “Total” suma todas. Archivar una cuenta la saca del selector y de los formularios sin borrar sus movimientos.
-            </p>
-            <div class="config-list" id="cfgCuentas"></div>
-            <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
-          </div>
-        </details>
-
-        <details class="cfg-group">
-          <summary>Mes de inicio de registro <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <p class="sheet-note" style="margin:0 0 12px;">
-              Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.
-            </p>
-            <div class="field" style="margin-bottom:0;">
-              <label for="cfgInicioRegistro">Mes de inicio</label>
-              <select id="cfgInicioRegistro"></select>
-            </div>
-          </div>
-        </details>
-
-    <!-- Respaldo de datos: bloque de primer nivel propio, en segunda posición (justo
-         después de "Mes de inicio de registro") y con más peso visual (negrita + acento --gold en vez
-         de --gold-dim) — es la funcionalidad más importante para evitar pérdida de
-         datos, así que no debe leerse como un bloque más entre los demás. -->
-    <details class="cfg-group cfg-group-destacado">
-      <summary>Respaldo de datos <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-        <p class="sheet-note" style="margin:0 0 12px;">
-          Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.
-        </p>
-        <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
-        <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
-        <!-- S1 · T7 (C1/C3): solo aparece si este dispositivo reemplazó sus datos por los de la
-             nube (sync con varios escritores). Descargar NO lo borra: se borra al vencer (30 días)
-             o con «Ya lo guardé, eliminar». -->
-        <div id="respaldoPrevioBox" style="display:none;">
-          <button class="btn-ghost" id="btnRespaldoPrevioMulti" style="margin-top:8px;">Descargar respaldo anterior a la sincronización</button>
-          <button type="button" class="btn-discreto" id="btnRespaldoPrevioBorrar">Ya lo guardé, eliminar</button>
-        </div>
-        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
-        <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
-      </div>
-    </details>
-
-    <!-- T23 · Fase 1: «Cuenta de usuario» salió de Configuración: el login, cerrar sesión y
-         eliminar la cuenta viven ahora en #sheetCuenta (avatar del encabezado y deskCuentaBtn). -->
-    <details class="cfg-group">
-      <summary>Apariencia <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-
-        <details class="cfg-group">
-          <summary>Paleta de colores <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <div class="palette-row" id="paletteRow"></div>
-          </div>
-        </details>
-
-        <details class="cfg-group">
-          <summary>Tamaño de letra <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <div class="toggle-row" id="fontScaleRow">
-              <div class="toggle-opt" data-fontscale="1">Normal</div>
-              <div class="toggle-opt" data-fontscale="1.15">Grande</div>
-              <div class="toggle-opt" data-fontscale="1.3">Muy grande</div>
-            </div>
-          </div>
-        </details>
-
-        <details class="cfg-group">
-          <summary>Alto contraste <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <label class="check-row" style="margin-bottom:0;">
-              <input type="checkbox" id="cfgAltoContraste">
-              <small>Endurece el contraste de textos y bordes sobre la paleta que tengas activa. Útil con luz intensa o baja visión.</small>
-            </label>
-          </div>
-        </details>
-
-      </div>
-    </details>
-
-    <details class="cfg-group">
-      <summary>Datos y seguridad <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-
-        <details class="cfg-group">
-          <summary>Modo solo lectura <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <label class="check-row" style="margin-bottom:0;">
-              <input type="checkbox" id="cfgReadOnly">
-              <small>Bloquea agregar, editar o eliminar gastos, ingresos y metas, y los cambios de categorías/métodos/fuentes. Cambiar de mes, ver Historial, Insights y Metas sigue funcionando igual. Descargar o compartir el respaldo también sigue disponible; restaurar uno queda bloqueado mientras esté activo.</small>
-            </label>
-          </div>
-        </details>
-
-        <details class="cfg-group">
-          <summary>Notificaciones <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-          <div class="cfg-group-body">
-            <p class="sheet-note" style="margin:0 0 12px;">
-              Aviso local cuando una cuota está próxima a vencer, mientras la app está abierta o vuelve a primer plano. No es un aviso push con la app cerrada.
-            </p>
-            <p class="sheet-note" id="cfgNotifStatus" style="margin:0 0 10px; font-size:12.5px;"></p>
-            <button class="btn-ghost" id="btnActivarNotif" style="margin-top:0;">Activar avisos de cuotas</button>
-          </div>
-        </details>
-
-      </div>
-    </details>
-
-    <!-- Tutorial: fuera de los 3 bloques (decisión del usuario, día 14 — es un tutorial,
-         no un dato ni una preferencia de seguridad). Fila de primer nivel, sin agrupar. -->
-    <details class="cfg-group">
-      <summary>Tutorial <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></summary>
-      <div class="cfg-group-body">
-        <p class="sheet-note" style="margin:0 0 12px;">
-          Vuelve a recorrer los 6 pasos de bienvenida (fuentes, ingreso, categorías, gastos fijos, cuotas y una meta). Tus categorías y fuentes actuales no se borran ni se reinician: aparecen ya marcadas.
-        </p>
-        <button class="btn-ghost" id="btnRelanzarOnboarding" style="margin-top:0;">Volver a ver el tutorial</button>
-      </div>
-    </details>
-
-    <p class="sheet-note" id="cfgBuildInfo" style="margin:18px 0 0; text-align:center; font-size:11px; opacity:.55;">
-      Telora · versión <span id="cfgBuildTag">—</span>
-    </p>
-    <p class="sheet-note" style="margin:4px 0 0; text-align:center; font-size:11px; opacity:.55;">
-      <a class="legal-link" href="privacidad.html" target="_blank" rel="noopener">Privacidad</a> · <a class="legal-link" href="terminos.html" target="_blank" rel="noopener">Términos</a>
-    </p>
-    <button class="btn-ghost" data-close style="margin-top:10px;">Cerrar</button>
+    <!-- Pie: Tutorial (relanza los 6 pasos sin borrar categorías ni fuentes) · legales · versión. -->
+    <div class="cfg-pie">
+      <button type="button" class="cfg-pie-link" id="btnRelanzarOnboarding">Tutorial</button>
+      <span aria-hidden="true">·</span>
+      <a class="cfg-pie-link" href="privacidad.html" target="_blank" rel="noopener">Privacidad</a>
+      <span aria-hidden="true">·</span>
+      <a class="cfg-pie-link" href="terminos.html" target="_blank" rel="noopener">Términos</a>
+    </div>
+    <p class="cfg-version" id="cfgBuildInfo">Telora · versión <span id="cfgBuildTag">—</span></p>
   </div>
 </div>
+
+<!-- Hojas hijas de Configuración (T23 · Fase 2). Contenido reubicado sin cambios de lógica. -->
+<div class="sheet-overlay cfg-hija" id="cfgHojaCategorias">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Categorías</h2>
+    <div class="config-list" id="cfgCategorias"></div>
+    <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaMetodos">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Métodos de pago</h2>
+    <div class="config-list" id="cfgMetodos"></div>
+    <div class="add-inline"><input type="text" id="newMetodo" placeholder="Nuevo método"><button class="small-btn" data-addlist="metodos">Agregar</button></div>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaFuentes">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Fuentes de ingreso</h2>
+    <div class="config-list" id="cfgFuentes"></div>
+    <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaCuentas">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Cuentas</h2>
+    <p class="sheet-note" style="margin:0 0 14px;">Cada gasto o ingreso pertenece a una cuenta. El selector del encabezado (en Resumen e Historial) filtra por cuenta; “Total” suma todas. Archivar una cuenta la saca del selector y de los formularios sin borrar sus movimientos.</p>
+    <div class="config-list" id="cfgCuentas"></div>
+    <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaApariencia">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Apariencia</h2>
+    <!-- Vista previa: la tarjeta Disponible con la paleta activa (monto: renderValoresConfig). -->
+    <div class="cfg-preview" aria-hidden="true">
+      <p class="cfg-preview-lbl">Disponible</p>
+      <p class="cfg-preview-monto" id="cfgPreviewMonto">$0</p>
+      <div class="cfg-preview-stats"><span><b>Ingresos</b><i class="ing">●</i></span><span><b>Gastos</b><i class="gas">●</i></span><span><b>Metas</b><i class="met">●</i></span></div>
+    </div>
+    <h3 class="cfg-sub-tit">Paleta</h3>
+    <div class="palette-row" id="paletteRow" role="group" aria-label="Paleta de colores"></div>
+    <h3 class="cfg-sub-tit" id="cfgTitLetra">Tamaño de letra</h3>
+    <div class="toggle-row cfg-segmentado" id="fontScaleRow" role="group" aria-labelledby="cfgTitLetra">
+      <div class="toggle-opt" data-fontscale="1">Normal</div>
+      <div class="toggle-opt" data-fontscale="1.15">Grande</div>
+      <div class="toggle-opt" data-fontscale="1.3">Muy grande</div>
+    </div>
+    <label class="cfg-fila cfg-fila-switch cfg-fila-sola"><span class="cfg-fila-lbl">Alto contraste<small>Endurece el contraste de textos y bordes sobre la paleta activa. Útil con luz intensa o baja visión.</small></span><input type="checkbox" class="cfg-switch" id="cfgAltoContraste" role="switch"></label>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaNotif">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Notificaciones</h2>
+    <p class="sheet-note" style="margin:0 0 14px;">Aviso local cuando una cuota está próxima a vencer, mientras la app está abierta o vuelve a primer plano. No es un aviso push con la app cerrada.</p>
+    <p class="sheet-note" id="cfgNotifStatus" style="margin:0 0 10px; font-size:12.5px;"></p>
+    <button class="btn-ghost" id="btnActivarNotif" style="margin-top:0;">Activar avisos de cuotas</button>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaInicio">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Inicio del registro</h2>
+    <p class="sheet-note" style="margin:0 0 14px;">Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.</p>
+    <div class="field" style="margin-bottom:0;">
+      <label for="cfgInicioRegistro">Mes de inicio</label>
+      <select id="cfgInicioRegistro"></select>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-overlay cfg-hija" id="cfgHojaRespaldo">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
+    <h2>Respaldo y exportar</h2>
+    <p class="sheet-note" style="margin:0 0 14px;">Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.</p>
+    <!-- Estado: nube (solo con sesión; mismo estadoRespaldoCuenta que la hoja de cuenta) y archivo. -->
+    <div class="cfg-estado-card" id="cfgRespNube" hidden>
+      <span class="cfg-estado-tit">En la nube</span>
+      <span class="cfg-estado-txt" id="cfgRespNubeTxt"></span>
+    </div>
+    <div class="cfg-estado-card">
+      <span class="cfg-estado-tit">Archivo</span>
+      <span class="cfg-estado-txt" id="cfgRespArchivoTxt"></span>
+      <span class="cfg-estado-sub" id="cfgStorageInfo"></span>
+    </div>
+    <button class="btn-primary" id="btnBackupData">Descargar respaldo</button>
+    <button class="btn-ghost" id="btnRestoreData">Restaurar desde un respaldo</button>
+    <button class="btn-ghost" id="btnCfgExportar">Exportar a Excel</button>
+    <!-- S1 · T7 (C1/C3): solo aparece si este dispositivo reemplazó sus datos por los de la
+         nube (sync con varios escritores). Descargar NO lo borra: se borra al vencer (30 días)
+         o con «Ya lo guardé, eliminar». -->
+    <div id="respaldoPrevioBox" style="display:none;">
+      <button class="btn-ghost" id="btnRespaldoPrevioMulti" style="margin-top:8px;">Descargar respaldo anterior a la sincronización</button>
+      <button type="button" class="btn-discreto" id="btnRespaldoPrevioBorrar">Ya lo guardé, eliminar</button>
+    </div>
+    <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+  </div>
+</div>
+
 
 <!-- SHEET: cuenta de usuario (T23 · Fase 1). La abren el avatar del encabezado y deskCuentaBtn
      (abrirCuenta). Los dos estados (sin/con sesión) los alterna renderCuentaUsuario(); el login
@@ -5327,11 +5424,26 @@ document.getElementById('btnAdd').onclick = ()=>{
 document.getElementById('choiceGasto').onclick = ()=>{ closeSheet('sheetChoice'); openGastoForm(null); };
 document.getElementById('choiceIngreso').onclick = ()=>{ closeSheet('sheetChoice'); openIngresoForm(null); };
 document.getElementById('btnConfig').onclick = ()=>{
-  // Las 3 secciones colapsables vuelven siempre a su estado por defecto (cerradas).
-  document.querySelectorAll('#sheetConfig details.cfg-group').forEach(d=> d.open = false);
   renderConfig();
   openSheet('sheetConfig');
 };
+// T23 · Fase 2: cada fila abre su hoja hija APILADA sobre la principal (openSheet sube el
+// z-index). «‹ Configuración» es [data-close]: dismissSheet devuelve el foco a la fila.
+function abrirHojaConfig(id){
+  renderConfig();
+  openSheet(id);
+}
+document.querySelectorAll('#sheetConfig [data-hoja]').forEach(b=>{
+  b.addEventListener('click', ()=> abrirHojaConfig(b.dataset.hoja));
+});
+document.getElementById('cfgFilaCuenta').onclick = ()=> abrirCuenta();
+document.getElementById('btnCfgExportar').onclick = ()=> document.getElementById('btnExport').click();
+// Cierra Configuración entera (hojas hijas + principal), sin mover el foco: lo usan las
+// acciones que salen de Configuración (respaldo, restaurar, tutorial, eliminar cuenta).
+function cerrarConfiguracion(){
+  document.querySelectorAll('.cfg-hija.open').forEach(o=> closeSheet(o.id));
+  closeSheet('sheetConfig');
+}
 document.getElementById('btnExport').onclick = ()=>{
   // Día 19 / T22: ExcelJS se precarga al ABRIR la hoja (no al tocar "Generar/Compartir"),
   // y además el archivo se genera en segundo plano (programarPregeneracion, al final, tras
@@ -10068,9 +10180,56 @@ function renderConfig(){
   renderStorageInfoRow();
   renderNotifRow();
   renderRespaldoPrevioMulti();
+  renderValoresConfig();   // T23 · Fase 2
+}
+/* ==================== T23 · Fase 2: valores de las filas de Configuración ====================
+   Texto corto con el valor actual de cada fila (a la derecha, en cream-dim). Solo lee estado. */
+// «Hoy» / «Ayer» / «Hace N días» por días de calendario locales; sin fecha → «Nunca».
+function textoHaceDias(ms, ahoraMs){
+  if(!(typeof ms === 'number' && isFinite(ms) && ms > 0)) return 'Nunca';
+  const a = new Date(ahoraMs != null ? ahoraMs : Date.now()), b = new Date(ms);
+  const dias = Math.round((new Date(a.getFullYear(), a.getMonth(), a.getDate()) - new Date(b.getFullYear(), b.getMonth(), b.getDate())) / DIA_MS);
+  if(dias <= 0) return 'Hoy';
+  if(dias === 1) return 'Ayer';
+  return 'Hace ' + dias + ' días';
+}
+function textoEstadoNotif(){
+  if(!('Notification' in window) || !('serviceWorker' in navigator)) return 'No disponible';
+  const perm = Notification.permission;
+  return perm === 'granted' ? 'Activadas' : perm === 'denied' ? 'Bloqueadas' : 'Desactivadas';
+}
+function valoresFilasConfig(st){
+  const c = st.config || {};
+  const vivas = (st.accounts || []).filter(a => a && !a.archivada);
+  const inicio = (typeof c.mesInicioRegistro === 'string' && /^\d{4}-\d{2}$/.test(c.mesInicioRegistro)) ? c.mesInicioRegistro : '';
+  return {
+    cfgValCategorias: String((c.categorias || []).length),
+    cfgValMetodos:    String((c.metodos || []).length),
+    cfgValFuentes:    String((c.fuentes || []).length),
+    cfgValCuentas:    vivas.length === 1 ? (vivas[0].nombre || '1') : String(vivas.length),
+    cfgValApariencia: (PALETAS[c.paleta] || PALETAS.cafe).nombre,
+    cfgValInicio:     inicio ? MESES[Number(inicio.slice(5)) - 1] + ' ' + inicio.slice(0, 4) : 'Sin definir',
+    cfgValRespaldo:   textoHaceDias(c.ultimoRespaldo)
+  };
+}
+function renderValoresConfig(){
+  try{
+    const v = valoresFilasConfig(state);
+    v.cfgValNotif = textoEstadoNotif();
+    Object.entries(v).forEach(([id, txt])=>{ const el = document.getElementById(id); if(el) el.textContent = txt; });
+    // Respaldo y exportar · tarjeta «Archivo».
+    const last = state.config && state.config.ultimoRespaldo;
+    document.getElementById('cfgRespArchivoTxt').textContent = last
+      ? 'Último descargado: ' + textoHaceDias(last).toLowerCase() + ' (' + new Date(last).toLocaleDateString('es-CL') + ')'
+      : 'Aún no descargas un respaldo en este dispositivo.';
+    // Apariencia · vista previa con el Disponible del Resumen.
+    const disp = document.getElementById('rDisponible');
+    document.getElementById('cfgPreviewMonto').textContent = (disp && disp.textContent) || '$0';
+    if(typeof renderTarjetaCuentaConfig === 'function') renderTarjetaCuentaConfig();
+  }catch(_){}
 }
 /* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
-   Línea informativa dentro de Configuración → Respaldo de datos. Se alimenta de lo
+   Línea informativa dentro de Configuración → Respaldo y exportar. Se alimenta de lo
    que registró storageShield() (persistencia y uso/cuota) y de la fecha del último
    respaldo. Si no hay ningún dato disponible, la línea queda oculta. */
 function renderStorageInfoRow(){
@@ -11082,7 +11241,7 @@ function showSaveErrorDialog(kind, attemptedJSON){
       markBackupDone();
       showToast('Respaldo descargado. Guárdalo en un lugar seguro.', 'success', 5000);
     }catch(_){
-      showToast('No se pudo generar el respaldo. Prueba Configuración → Respaldo de datos.', 'error', 6000);
+      showToast('No se pudo generar el respaldo. Prueba Configuración → Respaldo y exportar.', 'error', 6000);
     }
   };
   document.getElementById('btnSaveErrDismiss').onclick = ()=>{ ov.classList.remove('open'); };
@@ -11093,7 +11252,7 @@ function showSaveErrorDialog(kind, attemptedJSON){
 let pendingBackup = null;
 let pendingBackupPrevio = false;   // S1 · T7 (C3): la tarjeta muestra el respaldo anterior a la sincronización
 document.getElementById('btnBackupData').onclick = ()=>{
-  closeSheet('sheetConfig');
+  cerrarConfiguracion();
   abrirTarjetaRespaldo();
 };
 // Arma el respaldo y abre su tarjeta (Compartir / Descargar). T2b: también se abre desde
@@ -11485,7 +11644,7 @@ document.getElementById('restoreFileInput').onchange = (e)=>{
       // propio sheet — no bloquea, el usuario decide si sigue.
       const warnBox = document.getElementById('restoreSchemaWarning');
       if(warnBox) warnBox.style.display = (backupSchemaVersion > CURRENT_SCHEMA_VERSION) ? 'flex' : 'none';
-      closeSheet('sheetConfig');
+      cerrarConfiguracion();
       openSheet('sheetConfirmRestore');
     }catch(err){
       showToast('No se pudo leer el archivo. Asegúrate de elegir un respaldo (.json) generado por esta misma app.', 'error');
@@ -13238,11 +13397,10 @@ function renderPaletteRow(){
   const box = document.getElementById('paletteRow');
   if(!box) return;
   const cur = state.config.paleta || 'cafe';
+  // T23 · Fase 2: rejilla de 3 columnas; dos círculos (burdeo y dorado) + nombre.
   box.innerHTML = Object.entries(PALETAS).map(([k,p])=>`
-    <button type="button" class="palette-opt${k===cur ? ' active' : ''}" data-palette="${k}">
-      <span class="sw" style="background:${p.vars['--burgundy']}"></span>
-      <span class="sw" style="background:${p.vars['--gold']}"></span>
-      <span class="sw" style="background:${p.vars['--bg']}"></span>
+    <button type="button" class="palette-opt${k===cur ? ' active' : ''}" data-palette="${k}" aria-pressed="${k===cur}">
+      <span class="palette-circs" aria-hidden="true"><span class="sw" style="background:${p.vars['--burgundy']}"></span><span class="sw" style="background:${p.vars['--gold']}"></span></span>
       <span class="palette-name">${p.nombre}</span>
     </button>`).join('');
   box.querySelectorAll('[data-palette]').forEach(b=>{
@@ -13454,6 +13612,7 @@ function renderAll(){
   if(currentScreen==='metas') renderMetas();
   checkMigracionCuotasMetasLegacy();   // Tanda L1: aviso de deudas/metas legacy sin cuenta (≥2 cuentas)
   arbitrarAvisos();   // T23: al cruzar los 20 registros la invitación aparece sin recargar
+  renderValoresConfig();   // T23 · Fase 2: valores de las filas de Configuración
 }
 // Tanda P3 (rediseño): barrido de "meta completada" — cubre el único camino sin evento
 // discreto (aporte automático que cruza 0->100% solo por el paso del calendario, ver
@@ -14207,7 +14366,7 @@ document.getElementById('obBody').addEventListener('change', e=>{
 });
 
 document.getElementById('btnRelanzarOnboarding').onclick = ()=>{
-  closeSheet('sheetConfig');
+  cerrarConfiguracion();
   iniciarOnboarding(true);
 };
 
@@ -14310,6 +14469,7 @@ function renderTopbarAvatar(session){
     img.onload = ()=>{
       btn.style.backgroundImage = `url("${avatarUrl}")`; btn.textContent = ''; renderDeskCuenta({ nombre, email, foto: avatarUrl });
       if(perfilAv){ perfilAv.style.backgroundImage = `url("${avatarUrl}")`; perfilAv.textContent = ''; }
+      try{ renderTarjetaCuentaConfig(); }catch(_){}
     };
     img.onerror = ()=>{ btn.style.backgroundImage = ''; btn.textContent = inicialesDe(nombre || email); };
     img.src = avatarUrl;
@@ -14376,6 +14536,35 @@ function renderEstadoCuenta(){
   document.getElementById('cuentaEstadoTxt').textContent = est.texto;
   document.getElementById('cuentaFilaChoques').hidden = !(multi && choques > 0);
   document.getElementById('cuentaChoquesN').textContent = String(choques);
+  // T23 · Fase 2: el mismo estado en Configuración (tarjeta de cuenta y «En la nube»).
+  const nube = document.getElementById('cfgRespNube');
+  if(nube){
+    nube.hidden = sesionUiEstado !== true;
+    document.getElementById('cfgRespNubeTxt').textContent = est.texto;
+  }
+  renderTarjetaCuentaConfig(est);
+}
+// Tarjeta de cuenta arriba de Configuración: avatar, nombre o «Sin cuenta» y una línea de
+// estado. Copia lo que ya pintó renderTopbarAvatar (foto/iniciales y nombre).
+function renderTarjetaCuentaConfig(est){
+  const av = document.getElementById('cfgCuentaAv');
+  if(!av) return;
+  const con = sesionUiEstado === true;
+  const fuente = document.getElementById('cuentaPerfilAvatar');
+  av.classList.toggle('con-sesion', con);
+  if(con){
+    av.style.backgroundImage = fuente.style.backgroundImage;
+    av.textContent = fuente.style.backgroundImage ? '' : fuente.textContent;
+  } else {
+    av.style.backgroundImage = '';
+    av.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  }
+  document.getElementById('cfgCuentaNombre').textContent = con
+    ? (document.getElementById('cuentaPerfilNombre').textContent || document.getElementById('cuentaUsuarioEmail').textContent)
+    : 'Sin cuenta';
+  document.getElementById('cfgCuentaEstado').textContent = con
+    ? ((est && est.texto) || document.getElementById('cuentaEstadoTxt').textContent)
+    : 'Tus datos viven solo en este dispositivo';
 }
 // Por ahora solo un aviso: T11 conecta la revisión de choques.
 document.getElementById('cuentaFilaChoques').onclick = ()=> showToast('Disponible pronto');
@@ -15879,7 +16068,7 @@ function descargarRespaldoPrevioMulti(userId){
   let previo;
   try{ previo = prepararRespaldoPrevioMulti(reg); }
   catch(e){ console.warn('[Sync] el respaldo anterior a la sincronización está dañado', e); showToast('El respaldo anterior está dañado y no se puede descargar.', 'error'); return; }
-  try{ if(document.getElementById('sheetConfig').classList.contains('open')) closeSheet('sheetConfig'); }catch(_){}
+  try{ cerrarConfiguracion(); }catch(_){}
   abrirTarjetaRespaldo(previo);
 }
 // C3: el respaldo previo solo se borra al vencer (30 días) o con «Ya lo guardé, eliminar».
@@ -17023,7 +17212,8 @@ document.getElementById('btnEliminarCuentaConfirmar').onclick = async ()=>{
   }
   if(borrarLocal) return;   // borrarDatosLocales() ya recargó la app; el toast sale tras la recarga
   closeSheet('sheetEliminarCuenta');
-  closeSheet('sheetConfig');
+  closeSheet('sheetCuenta');
+  cerrarConfiguracion();
   showToast('Tu cuenta fue eliminada', 'success');
 };
 // Otra pestaña borró los datos locales (eliminar cuenta con la casilla marcada): esta se
