@@ -56,6 +56,10 @@
 
 <style>
 :root{
+  /* Pulido P1 · pto 4: controles nativos (casillas, opciones, fecha, select) en oscuro
+     y con el acento del tema. Todas las paletas son oscuras. */
+  color-scheme:dark;
+  accent-color:var(--gold);
   --bg:#161011;
   --surface:#221715;
   --surface-2:#2B1E1B;
@@ -545,6 +549,12 @@ button{font-family:inherit;}
 .li-title{font-size:15px; color:var(--cream); margin:0 0 2px; display:flex; align-items:center; column-gap:6px; row-gap:4px; min-width:0;}
 .li-title .li-title-text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
 .li-sub{font-size:13px; color:var(--cream-dim); margin:0;}
+/* Pulido P1 · pto 5: segunda línea SIEMPRE visible del Historial — etiquetas (FIJO,
+   CUOTA, SIN PAGAR, CRÉDITO, RANGO…) + fecha (si la lista no está agrupada por día) +
+   categoría/fuente. Así las etiquetas ya no le quitan ancho al nombre. */
+.li-meta{display:flex; align-items:center; flex-wrap:wrap; column-gap:6px; row-gap:4px; font-size:12.5px; color:var(--cream-dim); margin:2px 0 0; min-width:0;}
+.li-meta .li-meta-txt{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto;}
+:root.hc .li-meta{color:var(--cream);}
 .li-muted{color:var(--cream-dim); font-style:italic;}
 .li-amount{font-size:15.5px; font-weight:600; color:var(--cream); white-space:nowrap;}
 .li-amount.income{color:var(--mv-ingreso);}
@@ -816,7 +826,7 @@ button{font-family:inherit;}
 }
 .hist-filter-checks{display:flex; flex-wrap:wrap; gap:8px 16px;}
 .hist-check{display:flex; align-items:center; gap:7px; font-size:14px; color:var(--cream); cursor:pointer;}
-.hist-check input{width:18px; height:18px; flex-shrink:0; accent-color:var(--burgundy); font-size:16px;}
+.hist-check input{width:18px; height:18px; flex-shrink:0; font-size:16px;}
 /* panel del embudo = ordenamiento (Fecha / Monto / Nombre, ambas direcciones) */
 .hist-sort-opts{display:flex; flex-direction:column; gap:10px;}
 
@@ -1278,7 +1288,7 @@ button{font-family:inherit;}
   font-size:14.5px; color:var(--cream); line-height:1.4;
 }
 .check-row input[type=checkbox]{
-  width:20px; height:20px; margin:1px 0 0; flex-shrink:0; accent-color:var(--burgundy);
+  width:20px; height:20px; margin:1px 0 0; flex-shrink:0;
   font-size:16px;   /* evita el auto-zoom de iOS al enfocar */
 }
 .check-row small{color:var(--cream-dim); font-size:12.5px;}
@@ -1582,12 +1592,19 @@ button{font-family:inherit;}
   position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
 }
 .color-grid button.active .icon{display:block;}
+/* Pulido P1 · pto 1: color personalizado antiguo (fuera de CAT_PALETA) como muestra
+   extra al inicio, rotulada «Actual» debajo del círculo. */
+.color-grid.con-actual{row-gap:24px;}
+.color-grid button.cg-actual::after{
+  content:'Actual'; position:absolute; top:calc(100% + 3px); left:50%; transform:translateX(-50%);
+  font-size:11px; line-height:1; color:var(--cream-dim); white-space:nowrap;
+}
 
 .export-opt{
   display:flex; align-items:center; gap:10px; padding:13px 14px; background:var(--surface-2);
   border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px; cursor:pointer;
 }
-.export-opt input{accent-color:var(--burgundy); width:18px; height:18px; font-size:16px;}  /* 16px: sin efecto visual en el radio, evita el auto-zoom de iOS */
+.export-opt input{width:18px; height:18px; font-size:16px;}  /* 16px: sin efecto visual en el radio, evita el auto-zoom de iOS */
 .export-opt span{font-size:15px; color:var(--cream);}
 
 /* ---------- SISTEMA DE ANIMACIÓN (Tanda G · Día 6) ---------- */
@@ -1966,7 +1983,7 @@ button:active{ transform:scale(0.93); }
 }
 .goal-racha .gr-count{font-weight:700; color:var(--gold);}
 .goal-racha-aviso{font-size:11.5px; color:var(--gold); line-height:1.5; margin:4px 0 0;}
-.goal-racha-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:4px 0 0;}
+.goal-racha-rota{font-size:11.5px; color:var(--cream-dim); line-height:1.5; margin:4px 0 0;}   /* Pulido P1 · pto 2: tono neutro */
 .goal-racha-none{font-size:12px; color:var(--cream-dim); line-height:1.5; margin:2px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--border);}
 :root.hc .goal-racha-none{color:var(--cream);}
 :root.hc .goal-racha .gr-count{color:var(--cream);}
@@ -1989,7 +2006,7 @@ button:active{ transform:scale(0.93); }
 .racha-badge:active{ transform:scale(0.97); }
 :root.hc .racha-badge{color:var(--cream);}
 #rRachaRegistroRota:empty{display:none;}
-.racha-registro-rota{font-size:11.5px; color:var(--danger); line-height:1.5; margin:0 0 18px;}
+.racha-registro-rota{font-size:11.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 18px;}   /* Pulido P1 · pto 2: tono neutro */
 
 /* ---------- ESCRITORIO (Tanda E1): menú lateral + barra superior ---------- */
 /* Todo lo de escritorio vive bajo @media (min-width:1024px). Fuera de ella solo esta regla:
@@ -2875,9 +2892,8 @@ button:active{ transform:scale(0.93); }
     <div class="cfg-lista" role="group" aria-labelledby="cfgTitDatos">
       <button type="button" class="cfg-fila" data-hoja="cfgHojaRespaldo"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><span class="cfg-fila-lbl">Respaldo y exportar</span><span class="cfg-fila-val" id="cfgValRespaldo"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
       <!-- Modo solo lectura: interruptor en la misma fila (mismo #cfgReadOnly y su listener). -->
-      <label class="cfg-fila cfg-fila-switch"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="cfg-fila-lbl">Modo solo lectura</span><input type="checkbox" class="cfg-switch" id="cfgReadOnly" role="switch" aria-describedby="cfgReadOnlyNota"></label>
+      <label class="cfg-fila cfg-fila-switch"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="cfg-fila-lbl">Modo solo lectura<small id="cfgReadOnlyNota">Bloquea cambios; puedes seguir consultando</small></span><input type="checkbox" class="cfg-switch" id="cfgReadOnly" role="switch" aria-describedby="cfgReadOnlyNota"></label>
     </div>
-    <p class="cfg-nota" id="cfgReadOnlyNota">Solo lectura bloquea agregar, editar o eliminar gastos, ingresos y metas, y los cambios de categorías/métodos/fuentes. Cambiar de mes, ver Historial, Insights y Metas sigue funcionando igual. Descargar o compartir el respaldo también sigue disponible; restaurar uno queda bloqueado mientras esté activo.</p>
 
     <!-- Pie: Tutorial (relanza los 6 pasos sin borrar categorías ni fuentes) · legales · versión. -->
     <div class="cfg-pie">
@@ -3559,7 +3575,11 @@ const METAS_SUGERIDAS = [
 const CAT_ICONS = {
   "Comida":"coffee","Aseo casa":"home","Transporte":"truck","Cursos":"book-open",
   "Libros":"book","Vestuario":"bag","Maquillaje/Skincare":"star","Aseo/cuidado personal":"droplet",
-  "Salidas con amigas o citas":"users","Regalos":"gift","Ahorro":"dollar","Varios":"dots"
+  "Salidas con amigas o citas":"users","Regalos":"gift","Ahorro":"dollar","Varios":"dots",
+  // Pulido P1 · pto nuevo: categorías por defecto actuales (DEFAULTS.categorias) que
+  // caían en 'tag'. Solo íconos ya existentes en ICONS (no hay factura ni rayo: «calc»).
+  "Arriendo/Vivienda":"home","Cuentas y Servicios":"calc","Salud":"health",
+  "Cuidado personal":"droplet","Vestimenta":"bag","Entretenimiento":"star"
 };
 // Set de íconos ofrecidos en el selector de ícono por categoría.
 const CAT_ICON_SET = ["coffee","home","truck","book-open","book","bag","star","droplet","users","gift","dollar","dots","tag","target","cart","heart","phone","car","plane","health","paw","music"];
@@ -4007,9 +4027,14 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 // pegado al número, dejándolo detrás del símbolo. Fuente única: todo el resto de la
 // app llama a money(), nunca arma el signo por su cuenta salvo con Math.abs() de por
 // medio (montos que ya llegan sin signo).
+// Pulido P1 · pto 6: el signo negativo es «−» (U+2212, signo menos tipográfico), igual
+// que los «−» armados a mano en el Resumen. Va seguido de U+2060 (unión de palabras,
+// invisible): a diferencia del «-» ASCII, el navegador sí corta línea entre «−» y «$»,
+// y quedaba el signo solo al final de un renglón. Los inputs no pasan por money(); las
+// notas de texto del Excel lo vuelven a «-» ASCII en xlNota().
 const money = n => {
   const r = Math.round(n);
-  return (r < 0 ? '-' : '') + '$' + Math.abs(r).toLocaleString('es-CL');
+  return (r < 0 ? '\u2212\u2060' : '') + '$' + Math.abs(r).toLocaleString('es-CL');
 };
 const monthKey = d => d.getFullYear()*12 + d.getMonth();
 const monthKeyStr = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
@@ -6652,7 +6677,7 @@ function rachaMetaHtml(g){
     html += `<p class="goal-racha-aviso">En ${mesNom(r.parcial.mk)} aportaste ${money(r.parcial.aportado)} de ${money(r.parcial.objetivo)} pactado — ese mes no se cumplió el monto completo (la racha no se cortó).</p>`;
   }
   if(r.rota){
-    html += `<p class="goal-racha-rota">La racha se cortó en ${mesNom(r.rota.mk)}: ese mes no hubo ningún aporte.</p>`;
+    html += `<p class="goal-racha-rota">Tu racha de aportes terminó en ${mesNom(r.rota.mk).toLowerCase()}.</p>`;
   }
   html += `</div>`;
   return html;
@@ -6728,7 +6753,7 @@ function rachaRegistroHtml(){
     + ` aria-label="${resumen}. ${rachaBadgeExpandida ? 'Toca para compactar.' : 'Toca para ver el detalle.'}"`
     + ` title="${resumen}">${rachaBadgeExpandida ? textoExpandido : textoCompacto}</button>`;
   const rota = r.rota
-    ? `<p class="racha-registro-rota">La racha se cortó el ${fmtDiaMes(r.rota.fecha)}: pasaron 5 días sin registrar ningún gasto ni ingreso.</p>`
+    ? `<p class="racha-registro-rota">Tu racha terminó el ${fmtDiaMes(r.rota.fecha)}. Registra hoy para empezar una nueva.</p>`
     : '';
   return { badge, rota };
 }
@@ -7489,10 +7514,11 @@ function cuotasPorCategoriaGastoDelMes(refDate, cuentaId){
    "Otros" que agrupaba el resto). El total es el mismo del indicador "Gastos" = contado +
    cuotas que CUENTAN este mes (Tanda AC: contado + TODAS en mes cerrado, o contado +
    confirmadas en mes en curso/futuro) — por eso, a diferencia de antes, SÍ cambia al
-   confirmar una cuota como pagada dentro del mismo mes en curso. Los colores se asignan
-   por ranking (categoría más gastadora = color 0) vía sliceColor(), que da tonos
-   distintos hasta 12+ categorías; la lista "Gasto por categoría" reusa este mismo mapa
-   `colorDeCat` para funcionar como leyenda. Esto es presentación: ningún monto se agrupa
+   confirmar una cuota como pagada dentro del mismo mes en curso. Pulido P1 · pto 1: el
+   color de cada tramo sale de colorDeCategoria() (personalizado > posición en la lista >
+   hash), NO del ranking del mes — así una categoría tiene el mismo color en la dona, la
+   torta, las barras y el Historial, en cualquier mes. `colorDeCat` se conserva como mapa
+   de leyenda. Esto es presentación: ningún monto se agrupa
    ni se recorta, sólo se dibujan todos los tramos. */
 // Tanda C3: `cuentaId` opcional al final. Sin él (o 'total') idéntico a hoy; con un id
 // de cuenta, sólo los gastos de esa cuenta y sin cuotas (globales hasta C5 → $0).
@@ -7505,7 +7531,7 @@ function donaResumenData(refDate, cuentaId){
   Object.keys(cuotasCat).forEach(c=> ct[c] = (ct[c]||0) + cuotasCat[c]);
   const orden = Object.entries(ct).filter(([,v])=> v > 0).sort((a,b)=> b[1]-a[1]);
   const colorDeCat = {};
-  orden.forEach(([cat], i)=>{ colorDeCat[cat] = sliceColor(i); });
+  orden.forEach(([cat])=>{ colorDeCat[cat] = colorDeCategoria(cat); });
   const segs = orden.map(([cat,val])=> ({ label:cat, value:val, color: colorDeCat[cat] }));
   const suma = segs.reduce((s,x)=> s + x.value, 0);
   return { segs, total: totalGastos, colorDeCat, suma, cuadra: Math.round(suma) === Math.round(totalGastos) };
@@ -7788,7 +7814,7 @@ function renderResumen(){
     box.innerHTML = `<div class="empty-state">${icon('frown')}<p>Todavía no hay gastos registrados este mes.</p></div>`;
   } else if(chartView.resumen !== 'lista'){
     box.style.display = 'none'; chartBox.style.display = '';
-    const cd = rows.map(([cat,val])=>({ label:cat, value:val }));
+    const cd = rows.map(([cat,val])=>({ label:cat, value:val, color: colorDeCategoria(cat) }));
     if(chartView.resumen === 'torta') renderPieChart(chartBox, cd);
     else renderBarChart(chartBox, cd);
   } else {
@@ -9656,8 +9682,9 @@ function renderHistorial(){
       <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}" style="--li-accent:${colorDeCategoria(e.category)};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${e.description ? escHtml(e.description) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
-          <p class="li-sub">${fmtDate(e.date)} · ${escHtml(e.category)} · cuota ${e.cuotaNum} de ${e.totalCuotas}</p>
+          <p class="li-title"><span class="li-title-text">${e.description ? escHtml(e.description) : '<span class="li-muted">Sin descripción</span>'}</span></p>
+          ${liMetaHtml(`<span class="li-badge">Cuota</span>${unpaidBadge}${check}`, agrupaPorDia ? '' : fmtDate(e.date), escHtml(e.category))}
+          ${liSubHtml([`cuota ${e.cuotaNum} de ${e.totalCuotas}`])}
         </div>
         <span class="li-amount li-amount-cuota-real">${money(e.amount)}</span>
         <button class="li-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
@@ -9680,8 +9707,9 @@ function renderHistorial(){
       <div class="list-item${expCls}" data-editexpense="${e.id}" style="--li-accent:${liAccentDia(e.date, colorDeCategoria(e.category))};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${badge}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(e.date)} · ${escHtml(e.category)} · ${escHtml(e.method)}${e.description ? ' · ' + escHtml(e.description) : ''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span></p>
+          ${liMetaHtml(badge + (rb ? rb.badge : ''), agrupaPorDia ? '' : (rb ? rb.fechaTxt : fmtDate(e.date)), escHtml(e.category))}
+          ${liSubHtml([agrupaPorDia && rb ? rb.fechaTxt : '', escHtml(e.method), e.description ? escHtml(e.description) : ''])}
           ${rb ? rb.btn : ''}
         </div>
         <span class="${amtCls}">${money(e.amount)}</span>
@@ -9713,8 +9741,9 @@ function renderHistorial(){
       <div class="list-item income${expCls}" data-editincome="${i.id}" style="--li-accent:${liAccentDia(i.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span>${i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(i.date)} · ${escHtml(i.source)}${i.description? ' · '+escHtml(i.description):''}</p>
+          <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span></p>
+          ${liMetaHtml((i.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '') + (rb ? rb.badge : ''), agrupaPorDia ? '' : (rb ? rb.fechaTxt : fmtDate(i.date)), escHtml(fuente))}
+          ${liSubHtml([agrupaPorDia && rb ? rb.fechaTxt : '', i.description ? escHtml(i.description) : ''])}
           ${rb ? rb.btn : ''}
         </div>
         <span class="li-amount income">${money(i.amount)}</span>
@@ -9826,8 +9855,9 @@ function renderHistorialTodo(box){
       <div class="list-item income${expCls}" data-editincome="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Ingreso</span>${it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : ''}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${escHtml(it.source)}${it.description ? ' · '+escHtml(it.description) : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span></p>
+          ${liMetaHtml('<span class="li-badge">Ingreso</span>' + (it.tipo==='Fijo' ? '<span class="li-badge">Fijo</span>' : '') + (rb ? rb.badge : ''), agrupaPorDia ? '' : (rb ? rb.fechaTxt : fmtDate(it.date)), escHtml(fuente))}
+          ${liSubHtml([agrupaPorDia && rb ? rb.fechaTxt : '', it.description ? escHtml(it.description) : ''])}
           ${rb ? rb.btn : ''}
         </div>
         <div class="li-amount-wrap">
@@ -9852,8 +9882,8 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-edittransfer="${it.transferId}" style="--li-accent:var(--gold-dim);">
         <div class="li-icon">${tIcon}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Transferencia</span>'}</span><span class="li-badge">Transferencia</span></p>
-          <p class="li-sub">${fmtDate(it.date)} · ${ruta}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Transferencia</span>'}</span></p>
+          ${liMetaHtml('<span class="li-badge">Transferencia</span>', agrupaPorDia ? '' : fmtDate(it.date), ruta)}
           ${nota}
         </div>
         <div class="li-amount-wrap">
@@ -9872,8 +9902,9 @@ function renderHistorialTodo(box){
       <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}" style="--li-accent:${colorDeCategoria(it.category)};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin descripción</span>'}</span><span class="li-badge">Cuota</span>${unpaidBadge}${check}</p>
-          <p class="li-sub">${fmtDate(it.date)} · ${escHtml(it.category)} · cuota ${it.cuotaNum} de ${it.totalCuotas}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin descripción</span>'}</span></p>
+          ${liMetaHtml(`<span class="li-badge">Cuota</span>${unpaidBadge}${check}`, agrupaPorDia ? '' : fmtDate(it.date), escHtml(it.category))}
+          ${liSubHtml([`cuota ${it.cuotaNum} de ${it.totalCuotas}`])}
         </div>
         <div class="li-amount-wrap">
           <span class="li-amount li-amount-cuota-real">−${money(it.amount)}</span>
@@ -9902,8 +9933,9 @@ function renderHistorialTodo(box){
       <div class="list-item${expCls}" data-editexpense="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeCategoria(it.category))};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
-          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span><span class="li-badge">Gasto</span>${badge}${rb ? rb.badge : ''}</p>
-          <p class="li-sub">${rb ? rb.fechaTxt : fmtDate(it.date)} · ${escHtml(it.category)} · ${escHtml(it.method)}${it.description ? ' · ' + escHtml(it.description) : ''}</p>
+          <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span></p>
+          ${liMetaHtml('<span class="li-badge">Gasto</span>' + badge + (rb ? rb.badge : ''), agrupaPorDia ? '' : (rb ? rb.fechaTxt : fmtDate(it.date)), escHtml(it.category))}
+          ${liSubHtml([agrupaPorDia && rb ? rb.fechaTxt : '', escHtml(it.method), it.description ? escHtml(it.description) : ''])}
           ${cuotaNote}
           ${rb ? rb.btn : ''}
         </div>
@@ -9955,6 +9987,20 @@ function fmtDayHeader(iso){
 }
 // items YA ordenados por fecha (en la dirección deseada). Inserta una cabecera de día
 // cada vez que cambia la fecha y arma cada fila con rowHtml(item).
+// Pulido P1 · pto 5: línea de etiquetas · fecha · categoría bajo el nombre (Historial).
+// `fechaTxt` llega vacío cuando la lista está agrupada por día (el encabezado ya la dice).
+function liMetaHtml(badgesHtml, fechaTxt, catTxt){
+  const txt = [fechaTxt, catTxt].filter(Boolean).join(' · ');
+  if(!badgesHtml && !txt) return '';
+  return `<p class="li-meta">${badgesHtml || ''}${txt ? `<span class="li-meta-txt">${txt}</span>` : ''}</p>`;
+}
+// El Detalle (.li-sub) ya no repite fecha ni categoría/fuente (están en .li-meta): deja
+// solo lo demás (método, descripción, «cuota N de M», o el rango de días de un fijo
+// cuando la lista va agrupada por día y .li-meta no lleva fecha). Sin partes, no hay línea.
+function liSubHtml(partes){
+  const txt = partes.filter(Boolean).join(' · ');
+  return txt ? `<p class="li-sub">${txt}</p>` : '';
+}
 function groupByDayHtml(items, rowHtml){
   let html = '', lastDay = null;
   const hoyIso = fechaHoyLocalISO();   // fecha real del sistema, no currentDate
@@ -9994,6 +10040,27 @@ document.querySelectorAll('[data-ctab]').forEach(b=>{
     renderCuotas();
   });
 });
+// Pulido P1 · pto 3: cuántas cuotas de `debt` cuentan como PAGADAS hasta el mes visto
+// (cuotas 1..N del ciclo cuyo mes es <= refDate). Mismo criterio que la hoja Cuotas del
+// Excel (prepararDatosExport): mes cerrado o confirmada a mano (cuotaPagadaDelMes).
+// Solo presentación: no toca manualPaidMonthKeys ni el Disponible.
+function cuotasPagadasHastaMes(debt, refDate){
+  const refMk = monthKey(refDate);
+  let pagadas = 0;
+  for(let n = 1; n <= debt.numCuotas; n++){
+    const mesCuota = addMonths(debt.purchaseDate, n);
+    if(monthKey(mesCuota) > refMk) break;
+    if(esMesCerrado(mesCuota) || cuotaPagadaDelMes(debt, mesCuota)) pagadas++;
+  }
+  return pagadas;
+}
+// Texto del detalle: «Cuota 3 de 3 · última, por confirmar» / «· última» / «· por confirmar».
+function cuotaDetalleTxt(cuotaNum, numCuotas, porConfirmar){
+  const extra = [];
+  if(cuotaNum === numCuotas) extra.push('última');
+  if(porConfirmar) extra.push('por confirmar');
+  return `Cuota <b>${cuotaNum} de ${numCuotas}</b>` + (extra.length ? ' · ' + extra.join(', ') : '');
+}
 function renderCuotas(){
   const box = document.getElementById('cList');
   const refDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -10053,7 +10120,8 @@ function renderCuotas(){
     const info = cuotaInfoForMonth(d, refDate);
     const cuotaNum = info.cuotaNum;
     const saldoRestante = info.saldoRestante;
-    const pct = Math.round((cuotaNum/d.numCuotas)*100);
+    // Pulido P1 · pto 3: la barra muestra cuotas PAGADAS / total (no la cuota en curso).
+    const pct = Math.round((cuotasPagadasHastaMes(d, refDate)/d.numCuotas)*100);
     // Tanda O · punto 7: salto a la compra de origen desde la tarjeta de deuda (misma
     // lógica que btnCuotaProyOrigen del detalle de la fila virtual del Historial).
     const tieneOrigen = state.expenses.some(e=> e.debtId === d.id);
@@ -10088,7 +10156,7 @@ function renderCuotas(){
       <button class="row-expand" aria-label="Ver detalle">${icon('chevron-down')}</button>
       <div class="cuota-expand">
         <div class="debt-foot">
-          <span>Cuota <b>${cuotaNum} de ${d.numCuotas}</b></span>
+          <span>${cuotaDetalleTxt(cuotaNum, d.numCuotas, est.tab === 'activas' && !!est.porConfirmar)}</span>
           <span>Saldo restante: <b>${money(saldoRestante)}</b></span>
         </div>
         <p class="debt-purchase-date">Fecha de compra: <b>${fmtDate(d.purchaseDate)}</b></p>
@@ -10209,25 +10277,19 @@ function renderValoresConfig(){
   }catch(_){}
 }
 /* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
-   Línea informativa dentro de Configuración → Respaldo y exportar. Se alimenta de lo
-   que registró storageShield() (persistencia y uso/cuota) y de la fecha del último
-   respaldo. Si no hay ningún dato disponible, la línea queda oculta. */
+   Línea dentro de Configuración → Respaldo y exportar, tarjeta «Archivo». Pulido P1 ·
+   pto 7: sin detalle técnico (persistencia, MB). Solo si storageShield() registró que
+   el navegador NO concedió almacenamiento persistente, se muestra un aviso corto en
+   lenguaje simple; en cualquier otro caso la línea queda oculta. La fecha del último
+   respaldo ya la dice #cfgRespArchivoTxt («Último descargado: …»). */
 function renderStorageInfoRow(){
   const el = document.getElementById('cfgStorageInfo');
   if(!el) return;
-  const parts = [];
-  const p = state.config && state.config.persistConcedido;
-  if(p === true)       parts.push('Almacenamiento persistente: concedido');
-  else if(p === false) parts.push('Almacenamiento persistente: no concedido');
-  const s = state.__storage;
-  if(s && s.quota){
-    const mb = n => (n / 1048576).toFixed(1) + ' MB';
-    parts.push('Uso: ' + mb(s.usage) + ' de ' + mb(s.quota) + ' (' + Math.round(s.ratio * 100) + '%)');
-  }
-  const last = state.config && state.config.ultimoRespaldo;
-  if(last) parts.push('Último respaldo: ' + new Date(last).toLocaleDateString('es-CL'));
-  el.textContent = parts.join(' · ');
-  el.style.display = parts.length ? '' : 'none';
+  const noConcedido = !!(state.config && state.config.persistConcedido === false);
+  el.textContent = noConcedido
+    ? 'Este navegador podría borrar los datos si le falta espacio. Descarga un respaldo de vez en cuando.'
+    : '';
+  el.style.display = noConcedido ? '' : 'none';
 }
 /* ==================== MES DE INICIO DE REGISTRO (Tanda L) ==================== */
 // Guarda "YYYY-MM" en state.config.mesInicioRegistro (o lo borra si es "Sin definir").
@@ -11024,14 +11086,9 @@ document.getElementById('btnCatEditColor').onclick = ()=>{
 /* ==================== Día 14 · sub-tarea 4: color personalizado por categoría ====================
    Mismo patrón visual/de interacción que sheetCatIcon: grilla de swatches, uno activo si
    coincide con el color guardado, y "Usar color automático" para volver al cálculo de
-   paleta fija de colorDeCategoria(). Paleta fija de 16 tonos, independiente de la paleta
-   de tema activa (Apariencia) para que se puedan distinguir categorías sin depender de
-   cuál esté elegida. */
-const CAT_COLOR_SET = [
-  '#C9A66B','#8B3A3A','#4C7A5E','#3B6B8F','#8A5FB0','#C77B45',
-  '#B0555A','#5B8C6E','#4A6FA5','#A0567A','#6B7A99','#9C8A4E',
-  '#7A4A6B','#4F8A8B','#B08642','#5C6B73'
-];
+   paleta fija de colorDeCategoria(). Pulido P1 · pto 1: ofrece las mismas 12 de
+   CAT_PALETA (independientes del tema). Un color personalizado antiguo que no esté en
+   CAT_PALETA se conserva y se muestra como muestra extra «Actual» al inicio. */
 let catColorTarget = null;   // nombre de categoría
 function openCatColor(catName){
   if(isReadOnly()){ blockReadOnly(); return; }
@@ -11040,8 +11097,12 @@ function openCatColor(catName){
   document.getElementById('catColorTitle').textContent = 'Color de "' + catName + '"';
   const cur = catColorPersonalizado(catName);
   const grid = document.getElementById('catColorGrid');
-  grid.innerHTML = CAT_COLOR_SET.map(hex=>
-    `<button type="button" data-pickcolor="${hex}" class="${cur === hex ? 'active' : ''}" style="background:${hex};" aria-label="Color ${hex}">${icon('check')}</button>`
+  const extra = cur && !CAT_PALETA.some(h=> h.toLowerCase() === cur.toLowerCase());
+  grid.classList.toggle('con-actual', !!extra);
+  grid.innerHTML = (extra
+    ? `<button type="button" data-pickcolor="${cur}" class="active cg-actual" style="background:${cur};" aria-label="Color actual ${cur}">${icon('check')}</button>`
+    : '') + CAT_PALETA.map(hex=>
+    `<button type="button" data-pickcolor="${hex}" class="${cur && cur.toLowerCase() === hex.toLowerCase() ? 'active' : ''}" style="background:${hex};" aria-label="Color ${hex}">${icon('check')}</button>`
   ).join('');
   grid.querySelectorAll('[data-pickcolor]').forEach(b=>{
     b.addEventListener('click', ()=> setCatColor(catColorTarget, b.dataset.pickcolor));
@@ -12239,8 +12300,13 @@ function xlFilaTotal(ws, filaN, col0, cols, rango, valores, etiqueta, funcion){
 }
 function xlNota(ws, filaN, col, texto, color){
   const celda = ws.getRow(filaN).getCell(col);
-  celda.value = texto;
+  celda.value = String(texto).replace(/\u2212/g, '-').replace(/\u2060/g, '');   // Pulido P1 · pto 6: el Excel sigue con «-» ASCII
   celda.font = xlFuente({ italic: true, size: 10, color: { argb: color || XL.gris } });
+}
+// Columna «Signo» del «¿De dónde sale?» en el Excel. Pulido P1 · pto 6: «-» ASCII (igual
+// que xlNota); la app sigue mostrando «−» tipográfico en pantalla.
+function xlSignoTermino(t){
+  return t.signo > 0 ? (t.monto < 0 ? '-' : '+') : '-';
 }
 function xlAplicarAnchos(ws, anchos, cols, col0){
   Object.keys(anchos).forEach(k=>{
@@ -12385,7 +12451,7 @@ function construirLibroExcel(ExcelJS, datos, logo){
     f += 1;
     const colsDisp = [{ key: 'label', header: 'Término', tipo: 'texto' }, { key: 'signo', header: 'Signo', tipo: 'texto' }, { key: 'monto', header: 'Monto', tipo: 'money' }];
     const filasDisp = R.disponible.terminos.map(t=> ({
-      label: t.label, signo: t.signo > 0 ? (t.monto < 0 ? '−' : '+') : '−', monto: Math.abs(t.monto)
+      label: t.label, signo: xlSignoTermino(t), monto: Math.abs(t.monto)
     }));
     const rd = xlTabla(ws, f, 2, colsDisp, filasDisp, anchosR);
     for(let r = rd.desde; r <= rd.hasta; r++) ws.getCell(r, 3).alignment = { horizontal: 'center', vertical: 'top' };
@@ -12610,7 +12676,9 @@ function prepararDatosResumenImagen(currentDate, cta){
   const disponible = T.dispLibre;   // ya reincorpora cuotas pendientes si el mes no está cerrado
 
   const dona = donaResumenData(currentDate, cta);
-  const cats = dona.segs.map(s=> ({ label: s.label, value: s.value }));
+  // Pulido P1 · pto 1: cada categoría lleva su color de colorDeCategoria() (hex), el
+  // mismo de la dona y el Historial. «Otros» va sin color → cream-dim al dibujar.
+  const cats = dona.segs.map(s=> ({ label: s.label, value: s.value, color: colorDeCategoria(s.label) }));
   const totalCat = totalGastos || 1;
   const hayCats = cats.length > 0;
 
@@ -12618,7 +12686,7 @@ function prepararDatosResumenImagen(currentDate, cta){
   let grouped = cats;
   if(cats.length > 6){
     const rest = cats.slice(5).reduce((s,c)=> s + c.value, 0);
-    grouped = [...cats.slice(0,5), { label:'Otros', value:rest }];
+    grouped = [...cats.slice(0,5), { label:'Otros', value:rest, color:null }];
   }
   const mesLabel = MESES[currentDate.getMonth()] + ' ' + currentDate.getFullYear();
   const ctaLabel = cta === 'total' ? '' : ('Cuenta: ' + cuentaNombre(cta));
@@ -12637,7 +12705,7 @@ function generarResumenImagen(){
     gold: cv('--gold'), goldDim: cv('--gold-dim'),
     pos: cv('--success'), neg: cv('--danger')
   };
-  const CATC = ['--gold','--burgundy-light','--success','--gold-dim','--danger','--cream-dim','--burgundy'].map(cv);
+  const colCat = c => c.color || COL.dim;   // Pulido P1 · pto 1: color de la categoría; «Otros» en cream-dim
   const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
   const SERIF = "Georgia, 'Times New Roman', serif";
 
@@ -12750,7 +12818,7 @@ function generarResumenImagen(){
       roundRectPath(ctx, pad, trackY, colW, trackH, 11);
       ctx.fillStyle = COL.surface; ctx.fill();
       roundRectPath(ctx, pad, trackY, Math.max(6, (c.value / maxVal) * colW), trackH, 11);
-      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      ctx.fillStyle = colCat(c); ctx.fill();
       y += 84;
     });
     y += 30;
@@ -12774,7 +12842,7 @@ function generarResumenImagen(){
       ctx.beginPath();
       if(grouped.length === 1){ ctx.arc(cx, cy, r, 0, Math.PI*2); }
       else { ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath(); }
-      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      ctx.fillStyle = colCat(c); ctx.fill();
       a0 = a1;
     });
 
@@ -12783,7 +12851,7 @@ function generarResumenImagen(){
     grouped.forEach((c,i)=>{
       const ly = lTop + i*54;
       roundRectPath(ctx, lx, ly + 2, 28, 28, 7);
-      ctx.fillStyle = CATC[i % CATC.length]; ctx.fill();
+      ctx.fillStyle = colCat(c); ctx.fill();
       ctx.textAlign = 'left';
       ctx.fillStyle = COL.text;
       ctx.font = '600 28px ' + SANS;
@@ -12898,22 +12966,20 @@ const CHART_STATES_BY_SCREEN = {
   historial: ['lista','torta'],
   metas: ['lista','barra','torta']
 };
-// Colores de sectores (torta): salen de las CSS custom properties, se ciclan.
+// Colores de sectores para gráficos que NO son de categoría ni de fuente (hoy: la torta
+// de ahorro por meta). Salen de las CSS custom properties del tema y se ciclan.
 const SLICE_COLORS = ['var(--gold)','var(--burgundy-light)','var(--success)','var(--gold-dim)','var(--danger)','var(--cream-dim)','var(--burgundy)'];
-// Tanda X · pto 2: al quitar el tope "top 5" de la dona del Resumen puede haber hasta
-// 12 categorías (o 12 fuentes en la torta de ingresos). Los 7 tonos de SLICE_COLORS no
-// alcanzan, así que a partir del 8º se generan por rotación de matiz (ángulo áureo)
-// sobre una base cálida coherente con la paleta. El color de un índice dado es siempre
-// el mismo: `sliceColor(3)` no cambia entre renders ni entre meses.
-function sliceColor(i){
-  if(i < SLICE_COLORS.length) return SLICE_COLORS[i];
-  const k = i - SLICE_COLORS.length;
-  // Base en 150° (verde-cian): así los tonos generados no se confunden con los 7 fijos,
-  // que son todos cálidos (oro / burdeos / rojo). Ángulo áureo = máximo reparto entre sí.
-  const hue = Math.round((150 + k * 137.508) % 360);
-  const sat = 55 + (k % 3) * 10;                       // 55 / 65 / 75 %
-  const lig = 62;
-  return `hsl(${hue} ${sat}% ${lig}%)`;
+// Pulido P1 · pto 1: paleta categórica ÚNICA para categorías de gasto y fuentes de
+// ingreso. 12 tonos fijos, independientes de la paleta del tema (Apariencia), para que
+// una categoría tenga el mismo color en todas las pantallas, gráficos y meses. La usan
+// colorDeCategoria()/colorDeFuente() y el selector de color de categoría (catColorGrid).
+const CAT_PALETA = ['#C9A66B','#C0645A','#7FA36B','#6E9CC6','#D98C4A','#A07CC4',
+  '#4FA8A0','#CC7898','#A3A24E','#9A8070','#7F86D6','#E0A08A'];
+// Tono de respaldo por hash del nombre (categoría/fuente que ya no está en la lista).
+function colorPorHash(nombre){
+  let h = 0;
+  for(let c = 0; c < nombre.length; c++) h = (h * 31 + nombre.charCodeAt(c)) | 0;
+  return CAT_PALETA[Math.abs(h) % CAT_PALETA.length];
 }
 
 function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -13183,16 +13249,14 @@ function ingresoPorFuenteData(refDate){
 // Color ESTABLE por fuente: sale de su posición en state.config.fuentes, no de su
 // ranking del mes ni de su nombre — así una fuente no cambia de color entre meses, y
 // tampoco al renombrarla (Tanda W cambia el texto, no la posición en la lista). Una
-// fuente heredada que ya no está en la lista cae a un tono generado por hash del nombre;
-// "Sin fuente" tiene un tono fijo apagado.
+// fuente heredada que ya no está en la lista cae a un tono de CAT_PALETA por hash del
+// nombre; "Sin fuente" tiene un tono fijo apagado (fuera de CAT_PALETA).
 function colorDeFuente(nombre){
   if(nombre === 'Sin fuente') return 'var(--cream-dim)';
   const arr = (state.config && state.config.fuentes) || [];
   const idx = arr.indexOf(nombre);
-  if(idx >= 0) return sliceColor(idx);
-  let h = 0;
-  for(let c = 0; c < nombre.length; c++) h = (h * 31 + nombre.charCodeAt(c)) | 0;
-  return sliceColor(SLICE_COLORS.length + (Math.abs(h) % 12));   // zona de tonos generados
+  if(idx >= 0) return CAT_PALETA[idx % CAT_PALETA.length];
+  return colorPorHash(nombre);
 }
 
 // Tanda (rediseño Opción B): mismo patrón que colorDeFuente, pero por CATEGORÍA de
@@ -13207,13 +13271,13 @@ function colorDeCategoria(nombre){
   if(custom) return custom;
   const arr = (state.config && state.config.categorias) || [];
   const idx = arr.indexOf(nombre);
-  if(idx >= 0) return sliceColor(idx);
-  let h = 0;
-  for(let c = 0; c < nombre.length; c++) h = (h * 31 + nombre.charCodeAt(c)) | 0;
-  return sliceColor(SLICE_COLORS.length + (Math.abs(h) % 12));   // zona de tonos generados
+  if(idx >= 0) return CAT_PALETA[idx % CAT_PALETA.length];
+  return colorPorHash(nombre);
 }
 
-// Barras horizontales. data: [{label, value}]. opts: {max, fmt, empty, note}
+// Barras horizontales. data: [{label, value, color?}]. opts: {max, fmt, empty, note}
+// Si un dato trae `color` (barras por categoría del Resumen) la barra se pinta con él;
+// si no, queda en el dorado del tema (.c-bar).
 function renderBarChart(container, data, opts){
   opts = opts || {};
   const fmt = opts.fmt || (v=> money(v));
@@ -13231,7 +13295,7 @@ function renderBarChart(container, data, opts){
     const valCls = inside ? 'c-val-in' : 'c-val';
     return `
       <text x="0" y="${y - 4}" class="c-lbl">${escHtml(d.label)}</text>
-      <rect x="0" y="${y}" width="${bw}" height="${rowH}" rx="4" class="c-bar c-bar-in" style="animation-delay:${i * 45}ms"></rect>
+      <rect x="0" y="${y}" width="${bw}" height="${rowH}" rx="4" class="c-bar c-bar-in" style="${d.color ? `fill:${d.color}; ` : ''}animation-delay:${i * 45}ms"></rect>
       <text x="${valX}" y="${y + 15}" text-anchor="${valAnchor}" class="${valCls}">${fmt(d.value)}</text>`;
   }).join('');
   container.innerHTML = svgWrap(w, h, body) + (opts.note ? `<p class="chart-note">${opts.note}</p>` : '');

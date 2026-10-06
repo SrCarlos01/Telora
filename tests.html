@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="icons/favicon-32.png">
 <title>Telora · Tests del motor financiero</title>
 <style>
   body{ font-family: system-ui, sans-serif; max-width: 760px; margin: 32px auto; padding: 0 16px; }
@@ -3185,6 +3186,186 @@ async function runTests(){
         cerrarTodo();
         iframe.style.cssText = 'display:none'; win.syncDeskLayout();
         win.eval('state = ' + stOrig + ';'); resetCaches(win);
+      }catch(_){}
+    }
+  }
+
+  // ==================== Pulido P1 · paleta única, racha, cuotas, signo, textos, íconos ====================
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const stOrig = win.eval('JSON.stringify(state)');
+    const fechaOrig = win.eval('currentDate.getTime()');
+    const isoLocal = dt => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    try{
+      const PAL = win.eval('CAT_PALETA.slice()');
+      const CATS12 = ['Comida','Arriendo/Vivienda','Cuentas y Servicios','Transporte','Salud','Cuidado personal',
+        'Vestimenta','Entretenimiento','Regalos','Ahorro','Varios','Mascotas'];
+      const st = fixtureBase();
+      st.config.categorias = CATS12.slice();
+      // Mes A (-2): Comida es la más gastadora. Mes B (-1): Salud la más gastadora, Comida la menor.
+      CATS12.forEach((c, k)=>{
+        st.expenses.push({ id:'pa'+k, date:isoRel(-2, 5), amount: (k === 0 ? 900000 : 10000 + k*1000), tipo:'Casual', category:c, method:'Débito' });
+        st.expenses.push({ id:'pb'+k, date:isoRel(-1, 5), amount: (c === 'Salud' ? 900000 : (c === 'Comida' ? 1000 : 10000 + k*1000)), tipo:'Casual', category:c, method:'Débito' });
+      });
+      setState(win, st); resetCaches(win);
+      const A = mesRel(-2, 1), B = mesRel(-1, 1);
+      const donaA = win.donaResumenData(A, 'total'), donaB = win.donaResumenData(B, 'total');
+      win.eval(`currentDate = new Date(${A.getTime()});`);
+      const histA = win.gastoPorCategoriaData(A);
+      win.eval(`currentDate = new Date(${B.getTime()});`);
+      const histB = win.gastoPorCategoriaData(B);
+      const rankA = donaA.segs.map(s=> s.label), rankB = donaB.segs.map(s=> s.label);
+      const mismos = CATS12.every((c, k)=>{
+        const col = win.colorDeCategoria(c);
+        return col === PAL[k] && donaA.colorDeCat[c] === col && donaB.colorDeCat[c] === col
+          && histA.find(x=> x.label === c).color === col && histB.find(x=> x.label === c).color === col;
+      });
+      assert(rankA[0] === 'Comida' && rankB[0] === 'Salud' && rankB[rankB.length-1] === 'Comida' && mismos,
+        'P1 · pto 1: la misma categoría tiene el mismo color (CAT_PALETA[posición]) en la dona del Resumen y en la torta del Historial, en dos meses con distinto ranking',
+        `ranking A: ${rankA.slice(0,2).join(', ')} · ranking B: ${rankB[0]} … ${rankB[rankB.length-1]} · Comida: ${win.colorDeCategoria('Comida')}`);
+      assert(new Set(CATS12.map(c=> win.colorDeCategoria(c))).size === 12 && PAL.length === 12,
+        'P1 · pto 1: 12 categorías → 12 colores distintos de CAT_PALETA');
+      const huerf = win.colorDeCategoria('Categoría borrada'), fHuerf = win.colorDeFuente('Fuente vieja');
+      assert(PAL.includes(huerf) && PAL.includes(fHuerf) && !/hsl/.test(huerf + fHuerf) && win.colorDeFuente('Sin fuente') === 'var(--cream-dim)'
+        && win.colorDeFuente(st.config.fuentes[1]) === PAL[1] && typeof win.sliceColor === 'undefined',
+        'P1 · pto 1: respaldo por hash cae en CAT_PALETA (sin hsl), fuentes por posición, «Sin fuente» en cream-dim, sliceColor eliminado',
+        `huérfana: ${huerf} · fuente vieja: ${fHuerf}`);
+
+      // Resumen torta y barras: cada tramo/barra en el color de su categoría.
+      const box = d.createElement('div'); box.style.width = '320px'; d.body.appendChild(box);
+      win.renderBarChart(box, [{ label:'Comida', value:5, color: PAL[0] }, { label:'Salud', value:3, color: PAL[4] }]);
+      const rects = [...box.querySelectorAll('rect.c-bar')];
+      const barrasOk = rects.length === 2 && win.getComputedStyle(rects[0]).fill === 'rgb(201, 166, 107)'
+        && win.getComputedStyle(rects[1]).fill === 'rgb(217, 140, 74)';
+      win.renderBarChart(box, [{ label:'Ene', value:5 }]);
+      const sinColor = box.querySelector('rect.c-bar').style.fill === '';
+      box.remove();
+      assert(barrasOk && sinColor, 'P1 · pto 1: renderBarChart pinta cada barra con d.color; sin color queda en el dorado del tema');
+      const fuenteRes = win.eval(`/label:cat, value:val, color: colorDeCategoria\\(cat\\)/.test(renderResumen.toString())`);
+      win.eval(`currentDate = new Date(${A.getTime()});`);
+      const datosImg = win.prepararDatosResumenImagen(A, 'total');
+      assert(fuenteRes && datosImg.grouped.length === 6 && datosImg.grouped[0].color === PAL[0] && datosImg.grouped[5].label === 'Otros' && datosImg.grouped[5].color === null,
+        'P1 · pto 1: torta/barras del Resumen y la imagen compartible usan colorDeCategoria («Otros» sin color → cream-dim)',
+        `grouped: ${JSON.stringify(datosImg.grouped.map(g=> [g.label, g.color]))}`);
+
+      // Selector de color: mismas 12; color antiguo fuera de CAT_PALETA → muestra «Actual» al inicio.
+      win.eval(`state.config.readOnly = false; state.config.categoriaColores = { 'Comida': '#8B3A3A' };`);
+      assert(win.colorDeCategoria('Comida') === '#8B3A3A', 'P1 · pto 1: un color personalizado antiguo se conserva y manda sobre CAT_PALETA');
+      win.openCatColor('Comida');
+      const btns = [...$('catColorGrid').querySelectorAll('[data-pickcolor]')];
+      const actualOk = btns.length === 13 && btns[0].classList.contains('cg-actual') && btns[0].classList.contains('active')
+        && btns[0].dataset.pickcolor === '#8B3A3A' && btns.slice(1).map(b=> b.dataset.pickcolor).join() === PAL.join();
+      win.closeSheet('sheetCatColor');
+      win.eval(`state.config.categoriaColores = { 'Comida': '${PAL[3]}' };`);
+      win.openCatColor('Comida');
+      const btns2 = [...$('catColorGrid').querySelectorAll('[data-pickcolor]')];
+      const sinExtra = btns2.length === 12 && !$('catColorGrid').querySelector('.cg-actual') && btns2[3].classList.contains('active');
+      win.closeSheet('sheetCatColor');
+      assert(actualOk && sinExtra, 'P1 · pto 1: catColorGrid ofrece las 12 de CAT_PALETA; un color fuera de ella aparece primero como «Actual»',
+        `con antiguo: ${btns.length} muestras · con color de la paleta: ${btns2.length}`);
+
+      // Pto 2: racha cortada, texto nuevo y tono neutro.
+      const h = new Date(HOY_PRUEBAS); const d1 = new Date(h); d1.setDate(h.getDate() - 15); const d2 = new Date(h); d2.setDate(h.getDate() - 14);
+      const stR = fixtureBase();
+      stR.expenses.push({ id:'r1', date: isoLocal(d1), amount: 1000, tipo:'Casual', category:'Comida', method:'Débito' });
+      stR.expenses.push({ id:'r2', date: isoLocal(d2), amount: 1000, tipo:'Casual', category:'Comida', method:'Débito' });
+      setState(win, stR); resetCaches(win);
+      const rotaHtml = win.rachaRegistroHtml().rota;
+      const rachaMetaOrig = win.rachaMeta;
+      win.rachaMeta = () => ({ streak: 0, rota: { mk: 2026*12 + 2 } });
+      const metaHtml = win.rachaMetaHtml({ aporteAutomatico: { activo: true } });
+      win.rachaMeta = rachaMetaOrig;
+      const pR = d.createElement('p'); pR.className = 'racha-registro-rota'; d.body.appendChild(pR);
+      const pM = d.createElement('p'); pM.className = 'goal-racha-rota'; d.body.appendChild(pM);
+      const tmp = d.createElement('span'); tmp.style.color = 'var(--cream-dim)'; d.body.appendChild(tmp);
+      const dim = win.getComputedStyle(tmp).color;
+      const neutro = win.getComputedStyle(pR).color === dim && win.getComputedStyle(pM).color === dim;
+      pR.remove(); pM.remove(); tmp.remove();
+      assert(/Tu racha terminó el \d+ de [a-záéíóú]+\. Registra hoy para empezar una nueva\./.test(rotaHtml)
+        && metaHtml.includes('Tu racha de aportes terminó en marzo 2026.') && neutro,
+        'P1 · pto 2: racha cortada con texto nuevo (registro y metas) en cream-dim',
+        `registro: ${rotaHtml.replace(/<[^>]+>/g,'')} · metas: ${metaHtml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()}`);
+
+      // Pto 3: cuotas pagadas / total (criterio del Excel hasta el mes visto) y texto del detalle.
+      const debt = { id:'dP1', description:'Tele', purchaseDate: isoRel(-3, 10), category:'Varios', totalAmount: 300000, numCuotas: 3, manualPaidMonthKeys: [], manualUnpaidMonthKeys: [], cuentaId:'acc1' };
+      const stC = fixtureBase(); stC.debts.push(debt); setState(win, stC); resetCaches(win);
+      const pMesActual = win.cuotasPagadasHastaMes(debt, mesRel(0, 1));
+      const pMesPrevio = win.cuotasPagadasHastaMes(debt, mesRel(-2, 1));
+      const debtConf = { ...debt, manualPaidMonthKeys: [mk(mesRel(0, 1))] };
+      const pConf = win.cuotasPagadasHastaMes(debtConf, mesRel(0, 1));
+      assert(pMesActual === 2 && pMesPrevio === 1 && pConf === 3 && JSON.stringify(debt.manualPaidMonthKeys) === '[]',
+        'P1 · pto 3: cuotas pagadas = meses cerrados o confirmadas, contadas hasta el mes visto (sin tocar manualPaidMonthKeys)',
+        `mes actual: ${pMesActual} · hace 2 meses: ${pMesPrevio} · confirmada la actual: ${pConf}`);
+      assert(win.cuotaDetalleTxt(3, 3, true) === 'Cuota <b>3 de 3</b> · última, por confirmar'
+        && win.cuotaDetalleTxt(3, 3, false) === 'Cuota <b>3 de 3</b> · última'
+        && win.cuotaDetalleTxt(2, 3, true) === 'Cuota <b>2 de 3</b> · por confirmar'
+        && win.cuotaDetalleTxt(1, 3, false) === 'Cuota <b>1 de 3</b>',
+        'P1 · pto 3: detalle «Cuota N de M» con «· última» y «, por confirmar» cuando corresponde');
+      win.eval(`currentDate = new Date(${mesRel(0, 1).getTime()}); cTab = 'activas';`);
+      win.renderCuotas();
+      const fill = $('cList').querySelector('.debt-card .progress-fill');
+      assert(fill && fill.dataset.pct === '67', 'P1 · pto 3: la barra de Cuotas muestra 2 de 3 pagadas (67%), no la cuota en curso (3/3 = 100%)',
+        `data-pct = ${fill && fill.dataset.pct}`);
+
+      // Pto 6: signo menos tipográfico en money(); notas del Excel en ASCII.
+      const neg = win.eval('money(-1500)'), pos = win.eval('money(1500)');
+      const celda = {};
+      win.xlNota({ getRow: () => ({ getCell: () => celda }) }, 1, 1, `Disponible ${neg}`);
+      assert(neg === '\u2212\u2060$1.500' && pos === '$1.500' && celda.value === 'Disponible -$1.500',
+        'P1 · pto 6: money() usa «−» (U+2212, unido al «$» con U+2060) y xlNota() lo devuelve a «-» ASCII', `money(-1500) = ${neg} · nota: ${celda.value}`);
+      const signos = [win.xlSignoTermino({ signo: 1, monto: 5 }), win.xlSignoTermino({ signo: 1, monto: -5 }), win.xlSignoTermino({ signo: -1, monto: 5 })];
+      assert(signos.join('') === '+--', 'P1 · pto 6: columna «Signo» del Excel con «-» ASCII', `signos: ${JSON.stringify(signos)}`);
+
+      // Pto 7: tarjeta «Archivo» sin detalle técnico.
+      win.eval('state.config.persistConcedido = false; state.__storage = { usage: 1048576, quota: 10485760, ratio: 0.1 };');
+      win.renderStorageInfoRow();
+      const txtNo = $('cfgStorageInfo').textContent, visNo = $('cfgStorageInfo').style.display !== 'none';
+      win.eval('state.config.persistConcedido = true;'); win.renderStorageInfoRow();
+      const visSi = $('cfgStorageInfo').style.display !== 'none';
+      win.eval('delete state.__storage;');
+      assert(txtNo === 'Este navegador podría borrar los datos si le falta espacio. Descarga un respaldo de vez en cuando.' && visNo && !visSi && !/MB|persistente/.test(txtNo),
+        'P1 · pto 7: Respaldo muestra solo el aviso simple si la persistencia no está concedida (sin MB ni «persistente»)');
+
+      // Pto 8: subtítulo de Solo lectura en la misma fila.
+      const sub = $('cfgReadOnlyNota');
+      assert(sub && sub.tagName === 'SMALL' && sub.closest('label') === $('cfgReadOnly').closest('label')
+        && sub.textContent === 'Bloquea cambios; puedes seguir consultando' && !d.querySelector('p#cfgReadOnlyNota'),
+        'P1 · pto 8: Solo lectura con subtítulo corto en la misma fila (sin el párrafo largo)');
+
+      // Pto 4: controles nativos oscuros con acento del tema.
+      const rs = win.getComputedStyle(d.documentElement);
+      const chk = $('chkEliminarCuentaLocal');
+      const tmpG = d.createElement('span'); tmpG.style.color = 'var(--gold)'; d.body.appendChild(tmpG);
+      const gold = win.getComputedStyle(tmpG).color; tmpG.remove();
+      assert(rs.colorScheme === 'dark' && rs.accentColor === gold && chk && win.getComputedStyle(chk).accentColor === gold,
+        'P1 · pto 4: :root con color-scheme dark y accent-color = --gold, heredado por la casilla de Eliminar cuenta', `color-scheme: ${rs.colorScheme} · accent: ${rs.accentColor} · gold: ${gold}`);
+
+      // Pto 5: Historial — etiquetas en la línea .li-meta, no en el título.
+      const stH = fixtureBase();
+      stH.expenses.push({ id:'h1', date: isoRel(0, 3), amount: 5000, tipo:'Fijo', category:'Comida', method:'Débito', nombre:'Supermercado con un nombre bastante largo', cuentaId:'acc1' });
+      setState(win, stH); resetCaches(win);
+      win.eval(`currentDate = new Date(${mesRel(0, 1).getTime()}); hTab = 'gastos'; chartView.historial = 'lista'; hSortMode = 'fecha-desc';`);
+      win.renderHistorial();
+      const fila = $('hList').querySelector('[data-editexpense="h1"]');
+      const metaAgr = fila && fila.querySelector('.li-meta');
+      win.eval(`hSortMode = 'valor-desc';`); win.renderHistorial();
+      const fila2 = $('hList').querySelector('[data-editexpense="h1"]');
+      const meta2 = fila2 && fila2.querySelector('.li-meta');
+      win.eval(`hSortMode = 'fecha-desc';`);
+      assert(fila && !fila.querySelector('.li-title .li-badge') && metaAgr && metaAgr.querySelector('.li-badge').textContent === 'Fijo'
+        && metaAgr.textContent.includes('Comida') && !/\d/.test(metaAgr.querySelector('.li-meta-txt').textContent)
+        && meta2 && /\d/.test(meta2.querySelector('.li-meta-txt').textContent),
+        'P1 · pto 5: Historial — etiquetas · fecha · categoría en .li-meta; sin fecha si la lista está agrupada por día',
+        `agrupada: «${metaAgr && metaAgr.textContent}» · por monto: «${meta2 && meta2.textContent}»`);
+
+      // Pto nuevo: íconos de todas las categorías por defecto.
+      const sinIcono = win.eval(`DEFAULTS.categorias.filter(c=> !CAT_ICONS[c] || !ICONS[CAT_ICONS[c]] || CAT_ICONS[c] === 'tag')`);
+      assert(sinIcono.length === 0, 'P1 · íconos: ninguna categoría de DEFAULTS.categorias cae en «tag»', `sin ícono propio: ${JSON.stringify(sinIcono)}`);
+    }catch(e){
+      assert(false, 'P1: excepción durante las pruebas del pulido', e && e.stack || String(e));
+    }finally{
+      try{
+        win.eval('state = ' + stOrig + `; currentDate = new Date(${fechaOrig});`); resetCaches(win);
       }catch(_){}
     }
   }
