@@ -1491,26 +1491,6 @@ button{font-family:inherit;}
 .cfg-group-body{padding:2px 0 16px;}
 .cfg-group-body .config-list{margin-bottom:10px;}
 
-/* ==================== Tanda I / día 14 · Configuración agrupada (accordion anidado) ====================
-   "Apariencia" y "Datos y seguridad" son un <details class="cfg-group"> que envuelve
-   otros <details class="cfg-group"> (mismo patrón, un nivel más adentro). El segundo
-   nivel se indenta con una guía vertical a la izquierda y un summary algo más chico
-   para que en 375px se lea la jerarquía sin cortar texto. "Respaldo de datos" y
-   "Tutorial" NO entran en ningún grupo (ni son un dato ni una preferencia de seguridad):
-   quedan como filas de primer nivel, sin agrupar.
-   Día 15: "Tus datos" (que agrupaba Categorías/Métodos/Fuentes/Cuentas/Mes de inicio)
-   se aplanó — esos 5 pasaron a ser bloques de primer nivel propios, por lo que ya no
-   matchean esta regla `.cfg-group-body > .cfg-group` y heredan el estilo plano de
-   `.cfg-group > summary` de más arriba, igual que Apariencia/Datos y seguridad. */
-.cfg-group-body > .cfg-group{
-  border-left:2px solid var(--border);
-  padding-left:12px;
-}
-.cfg-group-body > .cfg-group:last-child{border-bottom:none;}
-.cfg-group-body > .cfg-group > summary{
-  font-size:13px; padding:12px 0;
-}
-
 .config-list{margin-bottom:22px;}
 .config-item{
   display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 0;

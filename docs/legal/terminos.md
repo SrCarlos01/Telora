@@ -1,6 +1,6 @@
 # Términos de Uso de Telora
 
-**Vigentes desde:** [FECHA DE PUBLICACIÓN]
+**Vigentes desde:** 28 de septiembre de 2026
 **Última actualización:** 6 de octubre de 2026
 **Versión:** 1.0.1 — Corrección editorial: se actualizan rutas de navegación; sin cambios en las condiciones.
 
