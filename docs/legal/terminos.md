@@ -1,7 +1,8 @@
 # Términos de Uso de Telora
 
 **Vigentes desde:** [FECHA DE PUBLICACIÓN]
-**Versión:** 1.0
+**Última actualización:** 6 de octubre de 2026
+**Versión:** 1.0.1 — Corrección editorial: se actualizan rutas de navegación; sin cambios en las condiciones.
 
 Estos términos regulan el uso de Telora, disponible en telora.cl y como aplicación instalable. Telora es ofrecida por **Carlos Humberto Álvarez Navarrete**, persona natural, con domicilio en la comuna de Olivar, Región del Libertador General Bernardo O'Higgins, Chile (contacto: privacidad@telora.cl). Al usar Telora aceptas estos términos. Si no estás de acuerdo, no uses la aplicación.
 
@@ -26,7 +27,7 @@ Telora es una herramienta para registrar y organizar tus finanzas personales: ga
 - Los datos que registras son tuyos. Telora los trata según la [Política de Privacidad](privacidad.html).
 - Eres responsable de la exactitud de lo que ingresas; los cálculos de Telora dependen de ello.
 - **Sin sesión iniciada**, tus datos existen solo en tu dispositivo: si los borras o pierdes el dispositivo sin un respaldo descargado, no se pueden recuperar.
-- Con sesión iniciada, Telora puede mantener un respaldo en la nube desde un solo dispositivo por cuenta, como se explica en la [Política de Privacidad](privacidad.html). Aun así, te recomendamos descargar también un respaldo periódico desde Configuración → Respaldo de datos.
+- Con sesión iniciada, Telora puede mantener un respaldo en la nube desde un solo dispositivo por cuenta, como se explica en la [Política de Privacidad](privacidad.html). Aun así, te recomendamos descargar también un respaldo periódico desde Configuración → Respaldo.
 
 ## 5. Uso aceptable
 

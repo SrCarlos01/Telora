@@ -1,7 +1,8 @@
 # Política de Privacidad de Telora
 
 **Vigente desde:** 1 de octubre de 2026
-**Versión:** 1.2
+**Última actualización:** 6 de octubre de 2026
+**Versión:** 1.2.1 — Corrección editorial: se actualiza la ruta de acceso a la cuenta; sin cambios en el tratamiento de datos.
 
 Telora es una aplicación de finanzas personales que te ayuda a registrar tus gastos, ingresos, compras en cuotas y metas de ahorro. Esta política explica qué datos personales trata Telora, para qué, dónde se guardan y cómo puedes ejercer tus derechos. Se rige por la Ley N° 19.628 sobre Protección de la Vida Privada y sus modificaciones, incluida la Ley N° 21.719.
 
@@ -79,7 +80,7 @@ Puedes ejercer en cualquier momento tus derechos de **acceso, rectificación, su
 
 - Responderemos en un plazo máximo de 30 días corridos, prorrogable por otros 30 si la solicitud lo justifica, con aviso previo.
 - Ejercer tus derechos es gratuito.
-- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo de datos), exportar a Excel, cerrar sesión y eliminar tu cuenta desde Configuración → Cuenta de usuario.
+- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo), exportar a Excel, cerrar sesión y eliminar tu cuenta desde tu ícono de cuenta (arriba a la derecha en el teléfono; en el computador, el bloque de tu cuenta del menú lateral).
 
 Si consideras que no se respetaron tus derechos, puedes reclamar ante la Agencia de Protección de Datos Personales.
 
