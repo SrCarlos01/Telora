@@ -1731,6 +1731,101 @@ async function runTests(){
           && win.escritorDejaDeSerEste({ user_id: USER }, m) === false;
         assert(ok, 'T7: con varios escritores, el UPDATE a multi:v2 (incluida la activación propia) NO detiene la sync; volver a un device sí. Escritor único: igual que antes');
       }
+      // C2: la cola del ex escritor único y modificado_por
+      {
+        const stQ = fx(), base = snap(stQ);
+        const e1 = JSON.parse(base.expenses.e1);
+        const otroE1 = { ...e1, amount: 7777 };
+        const delE1 = { tabla: 'expenses', clave: 'e1', tipo: 'delete', fila: { id: 'e1', user_id: USER }, v: 'v1' };
+        const upI1 = { tabla: 'incomes', clave: 'i1', tipo: 'upsert', fila: JSON.parse(base.incomes.i1), v: 'v1' };
+        const i1 = { ...JSON.parse(base.incomes.i1), amount: 1 };
+        // modificado_por NULL: lo escribió este dispositivo (upsert directo) o el Table Editor
+        const rNull = win.adoptarColaPendiente([delE1, upI1], base,
+          nubeDe({ expenses: [meta(otroE1, 60, { modificado_por: null })], incomes: [meta(i1, 61, { modificado_por: null })] }));
+        // modificado_por = otro dispositivo (escribió por RPC)
+        const rOtro = win.adoptarColaPendiente([delE1, upI1], base,
+          nubeDe({ expenses: [meta(otroE1, 60, { modificado_por: 'dev-B' })], incomes: [meta(i1, 61, { modificado_por: 'dev-B' })] }));
+        const nb = win.actualizarBaseYRevs(base, {}, rNull.acciones);
+        assert(acc(rNull.acciones, 'expenses', 'e1').accion === 'adoptarRev' && acc(rNull.acciones, 'expenses', 'e1').rev === 60
+          && acc(rNull.acciones, 'incomes', 'i1').accion === 'adoptarRev' && rNull.quitar.length === 0
+          && acc(rOtro.acciones, 'expenses', 'e1').accion === 'choque' && acc(rOtro.acciones, 'incomes', 'i1').accion === 'choque'
+          && nb.revs.expenses.e1 === 60 && nb.revs.incomes.i1 === 61
+          && !('e1' in nb.base.expenses) === !('e1' in base.expenses) && nb.base.incomes.i1 === base.incomes.i1,
+          'T7 (C2): fila viva con modificado_por NULL -> adoptarRev y la op pendiente (delete o upsert) se conserva y sale con ese rev; con modificado_por de otro dispositivo y contenido distinto -> choque; la base no se toca',
+          `NULL: ${resAcc(rNull.acciones)} · quitar=${rNull.quitar.length} · otro: ${resAcc(rOtro.acciones)}`);
+      }
+      // C1: respaldo previo vigente 30 días
+      {
+        const ahora = Date.parse('2026-10-07T12:00:00Z');
+        const v = win.respaldoPrevioVigente;
+        const ok = v({ fecha: '2026-10-07T11:00:00Z', contenido: '{}' }, ahora) === true
+          && v({ fecha: '2026-09-08T13:00:00Z', contenido: '{}' }, ahora) === true      // 29 días
+          && v({ fecha: '2026-09-07T11:00:00Z', contenido: '{}' }, ahora) === false     // 30 días y algo
+          && v({ fecha: '2026-10-07T11:00:00Z' }, ahora) === false && v(null, ahora) === false && v({ fecha: 'x', contenido: '{}' }, ahora) === false;
+        assert(ok, 'T7 (C1): el respaldo previo se ofrece hasta 30 días (vencido, sin contenido o con fecha inválida -> no)');
+      }
+      // C1: si el respaldo previo no se puede guardar, el reemplazo aborta y no toca nada
+      {
+        const almacen = win.eval('syncAlmacen');
+        const origGuardar = almacen.guardarRespaldoPrevio;
+        const previo = win.eval('JSON.stringify(state)');
+        const UIDC1 = 'u-t7-c1';
+        try{
+          const st = fixtureBase();
+          st.expenses.push({ id: 'eLocal', date: '2026-09-01', nombre: 'Local', amount: 500, category: 'Comida', method: 'Efectivo', description: '', tipo: 'Casual', debtId: null, cuentaId: 'acc1' });
+          setState(win, st);
+          let intentos = 0;
+          almacen.guardarRespaldoPrevio = () => { intentos++; return false; };   // cuota llena
+          const ctx = { userId: UIDC1, deviceId: 'dev-c1', multi: true };
+          const r = win.reemplazarLocalConNube(ctx, nubeDe(filasNube(fx())), '777');
+          const despues = win.eval('state');
+          const claves = Object.keys(localStorage).filter(k => k.includes(UIDC1));
+          assert(r === false && intentos === 1 && ctx.inicialBloqueada === true
+            && despues.expenses.length === 1 && despues.expenses[0].id === 'eLocal' && claves.length === 0,
+            'T7 (C1): si no se puede guardar el respaldo previo, reemplazarLocalConNube NO reemplaza nada (estado, base, revs y cursor intactos) y bloquea el reintento en esta carga',
+            `retorno=${r} · intentos=${intentos} · gastos=${despues.expenses.map(e => e.id)} · claves de la cuenta=${claves.join(', ') || 'ninguna'}`);
+        } finally {
+          almacen.guardarRespaldoPrevio = origGuardar;
+          win.eval('state = ' + previo + ';');
+        }
+      }
+      // C3: el respaldo previo usa el mismo archivo y la misma tarjeta que el respaldo normal;
+      // descargar NO lo borra y «Ya lo guardé» sí.
+      {
+        const almacen = win.eval('syncAlmacen');
+        const orig = { leer: almacen.leerRespaldoPrevio, borrar: almacen.borrarRespaldoPrevio };
+        const previoState = win.eval('JSON.stringify(state)');
+        try{
+          const st = fx(); st.schemaVersion = win.eval('CURRENT_SCHEMA_VERSION');
+          setState(win, st);
+          const reg = { fecha: new Date().toISOString(), contenido: win.eval('JSON.stringify(state)') };   // lo que guarda reemplazarLocalConNube
+          const prep = win.prepararRespaldoPrevioMulti(reg);
+          const textoPrevio = await prep.backup.blob.text();
+          const textoNormal = await win.buildBackupFile().blob.text();
+          const parsed = JSON.parse(textoPrevio);
+          const faltan = ['config','expenses','incomes','debts','goals','accounts','transfers','schemaVersion'].filter(k => !(k in parsed));
+          const validacion = win.validateBackupShape(parsed);
+          let borrados = 0;
+          almacen.leerRespaldoPrevio = () => reg;
+          almacen.borrarRespaldoPrevio = () => { borrados++; };
+          win.descargarRespaldoPrevioMulti('u-t7-c3');
+          const tarjeta = win.document.getElementById('sheetBackupShare').classList.contains('open');
+          const nombre = win.document.getElementById('backupFilenameText').textContent;
+          const esPrevio = win.eval('pendingBackupPrevio');
+          win.closeSheet('sheetBackupShare');
+          const trasDescargar = borrados;
+          win.eliminarRespaldoPrevioMulti('u-t7-c3');
+          assert(textoPrevio === textoNormal && faltan.length === 0 && validacion === null
+            && /^Telora_respaldo_antes_de_sincronizar_\d{4}-\d{2}-\d{2}\.json$/.test(prep.backup.filename)
+            && tarjeta && nombre === prep.backup.filename && esPrevio === true && trasDescargar === 0 && borrados === 1,
+            'T7 (C3): el respaldo previo es idéntico a buildBackupFile() (restaurable: config, expenses, incomes, debts, goals, accounts, transfers, schemaVersion), abre la misma tarjeta Compartir/Descargar, descargar NO lo borra y «Ya lo guardé, eliminar» sí',
+            `idéntico=${textoPrevio === textoNormal} · faltan=${faltan.join(',') || 'ninguna'} · validación=${validacion} · archivo=${prep.backup.filename} · tarjeta=${tarjeta} · borrados tras descargar=${trasDescargar} · tras eliminar=${borrados}`);
+        } finally {
+          almacen.leerRespaldoPrevio = orig.leer;
+          almacen.borrarRespaldoPrevio = orig.borrar;
+          win.eval('pendingBackupPrevio = false; state = ' + previoState + ';');
+        }
+      }
     }
 
     // ---- Tanda 4a.1: escritor único y dispositivo legado ----

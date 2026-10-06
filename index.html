@@ -1243,6 +1243,11 @@ button{font-family:inherit;}
   width:100%; background:none; color:var(--cream-dim); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; cursor:pointer; margin-top:8px;
 }
+/* S1 · T7 (C3): acción secundaria discreta (texto subrayado, sin borde). */
+.btn-discreto{
+  display:block; margin:6px auto 0; padding:8px 4px; background:none; border:none; cursor:pointer;
+  color:var(--cream-dim); font-size:12.5px; text-decoration:underline; text-underline-offset:3px;
+}
 
 /* Onboarding día 18: botonera inferior única de los Pasos 1-6 — [‹ Volver] (1/3,
    secundario) + [Siguiente] (2/3). En el Paso 1 solo va Siguiente, a todo el ancho. */
@@ -2725,6 +2730,13 @@ button:active{ transform:scale(0.93); }
         </p>
         <button class="btn-ghost" id="btnBackupData" style="margin-top:0;">Descargar o compartir respaldo</button>
         <button class="btn-ghost" id="btnRestoreData" style="margin-top:8px;">Restaurar desde un respaldo</button>
+        <!-- S1 · T7 (C1/C3): solo aparece si este dispositivo reemplazó sus datos por los de la
+             nube (sync con varios escritores). Descargar NO lo borra: se borra al vencer (30 días)
+             o con «Ya lo guardé, eliminar». -->
+        <div id="respaldoPrevioBox" style="display:none;">
+          <button class="btn-ghost" id="btnRespaldoPrevioMulti" style="margin-top:8px;">Descargar respaldo anterior a la sincronización</button>
+          <button type="button" class="btn-discreto" id="btnRespaldoPrevioBorrar">Ya lo guardé, eliminar</button>
+        </div>
         <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
         <p class="sheet-note" id="cfgStorageInfo" style="margin:12px 0 0; font-size:11.5px;"></p>
       </div>
@@ -3076,7 +3088,7 @@ button:active{ transform:scale(0.93); }
       <img class="mark-img" src="icons/icon-192.png" alt="" width="32" height="32">
       <span class="name">Telora</span>
     </div>
-    <h2 style="text-align:center;">Tu respaldo está listo</h2>
+    <h2 style="text-align:center;" id="backupCardTitle">Tu respaldo está listo</h2>
     <p class="sheet-note" id="backupSummaryText" style="text-align:center; margin:-4px 0 4px;"></p>
     <p class="sheet-note" id="backupFilenameText" style="text-align:center; font-size:11.5px; margin:0 0 18px;"></p>
     <button class="btn-primary" id="btnBackupShare" style="display:none;">Compartir</button>
@@ -9895,6 +9907,7 @@ function renderConfig(){
   renderReadOnlyRow();
   renderStorageInfoRow();
   renderNotifRow();
+  renderRespaldoPrevioMulti();
 }
 /* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
    Línea informativa dentro de Configuración → Respaldo de datos. Se alimenta de lo
@@ -10823,23 +10836,28 @@ document.getElementById('cfgReadOnly').addEventListener('change', e=>{
 // El respaldo es `state` completo tal cual: gastos, ingresos, deudas/cuotas, metas
 // (con sus aportes) y configuración.
 function buildBackupFile(){
-  const payload = JSON.stringify(state, null, 2);
-  const fecha = fechaHoyLocalISO();
-  const filename = `Telora_respaldo_${fecha}.json`;
+  return armarArchivoRespaldo(state, `Telora_respaldo_${fechaHoyLocalISO()}.json`);
+}
+// S1 · T7 (C3): mismo formato para cualquier estado (el actual o el guardado antes de
+// sincronizar), así todo respaldo se puede restaurar con «Restaurar desde un respaldo».
+function armarArchivoRespaldo(estado, filename){
+  const payload = JSON.stringify(estado, null, 2);
   const blob = new Blob([payload], {type:'application/json'});
   let file = null;
   try{ file = new File([blob], filename, {type:'application/json'}); }catch(_){ /* File API no disponible: solo queda la descarga */ }
   return { blob, file, filename };
 }
 function pluralEs(n, singular, plural){ return n===1 ? singular : (plural || singular+'s'); }
-function backupSummaryLine(){
-  const g = state.expenses.length, i = state.incomes.length, d = state.debts.length, m = (state.goals||[]).length;
+function backupSummaryLine(st, cierre){
+  const s = st || state;
+  const n = k => Array.isArray(s[k]) ? s[k].length : 0;
+  const g = n('expenses'), i = n('incomes'), d = n('debts'), m = n('goals');
   return [
     `${g} ${pluralEs(g,'gasto','gastos')}`,
     `${i} ${pluralEs(i,'ingreso','ingresos')}`,
     `${d} ${pluralEs(d,'deuda','deudas')}`,
     `${m} ${pluralEs(m,'meta','metas')}`,
-    'actualizado hoy'
+    cierre || 'actualizado hoy'
   ].join(' · ');
 }
 
@@ -10848,6 +10866,12 @@ function backupSummaryLine(){
 // aviso bloqueante de fallo de guardado — registren la fecha del último respaldo.
 function triggerBackupDownload(backup){
   if(!backup) backup = buildBackupFile();
+  descargarArchivoRespaldo(backup);
+  markBackupDone();
+}
+// Solo la descarga (sin marcar la fecha del último respaldo). S1 · T7 (C3): la usa también el
+// respaldo anterior a la sincronización, que es una foto vieja y no cuenta como respaldo de hoy.
+function descargarArchivoRespaldo(backup){
   const url = URL.createObjectURL(backup.blob);
   const a = document.createElement('a');
   a.href = url;
@@ -10856,7 +10880,6 @@ function triggerBackupDownload(backup){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  markBackupDone();
 }
 // Registra que se acaba de generar un respaldo (Tanda Q · pto 4). Actualiza la fecha
 // para el recordatorio semanal y limpia cualquier "posponer" pendiente. Usa guardado
@@ -10908,15 +10931,20 @@ function showSaveErrorDialog(kind, attemptedJSON){
 
 /* ---- Tarjeta previa: resumen del contenido + Compartir (nativo, con archivo) / Descargar ---- */
 let pendingBackup = null;
+let pendingBackupPrevio = false;   // S1 · T7 (C3): la tarjeta muestra el respaldo anterior a la sincronización
 document.getElementById('btnBackupData').onclick = ()=>{
   closeSheet('sheetConfig');
   abrirTarjetaRespaldo();
 };
 // Arma el respaldo y abre su tarjeta (Compartir / Descargar). T2b: también se abre desde
 // el sheet de eliminar la cuenta, apilada encima y sin cerrarlo.
-function abrirTarjetaRespaldo(){
-  pendingBackup = buildBackupFile();
-  document.getElementById('backupSummaryText').textContent = backupSummaryLine();
+// S1 · T7 (C3): `previo` = { backup, resumen } del respaldo anterior a la sincronización; usa la
+// misma tarjeta (el camino que funciona en iPhone y en PC) pero no marca el último respaldo.
+function abrirTarjetaRespaldo(previo){
+  pendingBackupPrevio = !!previo;
+  pendingBackup = previo ? previo.backup : buildBackupFile();
+  document.getElementById('backupCardTitle').textContent = previo ? 'Respaldo anterior a la sincronización' : 'Tu respaldo está listo';
+  document.getElementById('backupSummaryText').textContent = previo ? previo.resumen : backupSummaryLine();
   document.getElementById('backupFilenameText').textContent = pendingBackup.filename;
   let canShareFiles = false;
   try{ canShareFiles = !!(pendingBackup.file && navigator.canShare && navigator.canShare({files:[pendingBackup.file]})); }catch(_){}
@@ -10927,7 +10955,7 @@ document.getElementById('btnBackupShare').onclick = async ()=>{
   if(!pendingBackup || !pendingBackup.file) return;
   try{
     await navigator.share({ files:[pendingBackup.file], title:'Respaldo de Telora' });
-    markBackupDone();   // Tanda Q · pto 4: compartir también cuenta como respaldo hecho
+    if(!pendingBackupPrevio) markBackupDone();   // Tanda Q · pto 4: compartir también cuenta como respaldo hecho
   }catch(err){
     if(err && err.name === 'AbortError') return;   // el usuario cerró el share sheet: no es un error
     console.warn('No se pudo compartir el respaldo:', err);
@@ -10935,7 +10963,8 @@ document.getElementById('btnBackupShare').onclick = async ()=>{
   }
 };
 document.getElementById('btnBackupDownload').onclick = ()=>{
-  triggerBackupDownload(pendingBackup || buildBackupFile());
+  if(pendingBackupPrevio && pendingBackup) descargarArchivoRespaldo(pendingBackup);
+  else triggerBackupDownload(pendingBackup || buildBackupFile());
   showToast('Respaldo descargado.', 'success');
 };
 
@@ -14904,9 +14933,13 @@ function planPuestaAlDia(p){
   return acciones;
 }
 
-// Cola del escritor único al pasar a varios escritores: sus ops no tienen base_rev. Upsert: si
-// el contenido de la base (= lo encolado) es igual al del servidor, se adopta su rev; si no, es
-// un choque. Delete: si la nube ya no la tiene viva, la op sobra; si sigue viva, choque.
+// Cola del escritor único al pasar a varios escritores: sus ops no tienen base_rev. Esa cola solo
+// existe en el ex escritor único, así que una fila viva con modificado_por NULL la escribió este
+// mismo dispositivo (por upsert directo) o el Table Editor: se adopta su rev y la op pendiente
+// (upsert o delete) sale con él. Fila viva con modificado_por no nulo (la escribió otro
+// dispositivo por RPC): se adopta solo si su contenido es el de la base; si no, choque.
+// Tombstone: el upsert choca ('eliminado') y el delete sobra. Fila inexistente: el upsert sale
+// como nuevo y el delete sobra. soloRev: la base no se toca (sigue siendo lo encolado).
 function adoptarColaPendiente(cola, base, nube){
   const acciones = [], quitar = [];
   (cola || []).forEach(op => {
@@ -14914,15 +14947,15 @@ function adoptarColaPendiente(cola, base, nube){
     const R = ((nube || {})[op.tabla] || {})[op.clave];
     const B = ((base || {})[op.tabla] || {})[op.clave];
     const a = { tabla: op.tabla, clave: op.clave, rev: R ? R.rev : null, json: R ? R.json : null,
-                fila: R ? R.fila : null, borrada: R ? R.borrada : false };
-    if(op.tipo === 'delete'){
-      if(!R || R.borrada){ quitar.push(op); if(R) acciones.push({ ...a, accion: 'adoptarRev' }); }
-      else acciones.push({ ...a, accion: 'choque', motivo: 'version' });
+                fila: R ? R.fila : null, borrada: R ? R.borrada : false, soloRev: true };
+    if(!R){ if(op.tipo === 'delete') quitar.push(op); return; }   // upsert nuevo: sale con base_rev null
+    if(R.borrada){
+      if(op.tipo === 'delete'){ quitar.push(op); acciones.push({ ...a, accion: 'adoptarRev' }); }
+      else acciones.push({ ...a, accion: 'choque', motivo: 'eliminado' });
       return;
     }
-    if(!R) return;   // nueva: sale con base_rev null
-    if(R.borrada) acciones.push({ ...a, accion: 'choque', motivo: 'eliminado' });
-    else if(R.json === B) acciones.push({ ...a, accion: 'adoptarRev' });
+    const deEsteDispositivo = R.fila == null || R.fila.modificado_por == null;
+    if(deEsteDispositivo || (op.tipo === 'upsert' && R.json === B)) acciones.push({ ...a, accion: 'adoptarRev' });
     else acciones.push({ ...a, accion: 'choque', motivo: 'version' });
   });
   return { acciones, quitar };
@@ -15022,7 +15055,8 @@ function actualizarBaseYRevs(base, revs, acciones){
     if(a.accion !== 'aplicar' && a.accion !== 'aplicarBorrado' && a.accion !== 'adoptarRev') return;
     b[a.tabla] = b[a.tabla] || {};
     v[a.tabla] = v[a.tabla] || {};
-    if(a.accion === 'aplicarBorrado' || a.borrada) delete b[a.tabla][a.clave];
+    if(a.soloRev){ /* adopción de la cola: la base sigue siendo lo encolado */ }
+    else if(a.accion === 'aplicarBorrado' || a.borrada) delete b[a.tabla][a.clave];
     else b[a.tabla][a.clave] = a.json;
     if(a.rev != null) v[a.tabla][a.clave] = a.rev; else delete v[a.tabla][a.clave];
   });
@@ -15101,6 +15135,16 @@ function escritorDejaDeSerEste(fila, ctx){
 }
 function sinConfigDispositivo(snap){ return { ...(snap || {}), config_dispositivo: {} }; }
 
+// C1: respaldo de lo local guardado antes de reemplazarlo por la nube. Se ofrece en
+// Configuración hasta que se descarga o pasan 30 días (reloj del cliente: solo decide qué se
+// muestra, nunca precedencia de datos).
+const RESPALDO_PREVIO_DIAS = 30;
+function respaldoPrevioVigente(reg, ahoraMs){
+  if(!reg || typeof reg.contenido !== 'string' || typeof reg.fecha !== 'string') return false;
+  const t = Date.parse(reg.fecha);
+  return isFinite(t) && ahoraMs - t < RESPALDO_PREVIO_DIAS * 86400000;
+}
+
 /* ---- b) Adaptador de almacenamiento (localStorage; claves atadas al user_id) ---- */
 const syncAlmacen = {
   _leer(prefijo, userId){
@@ -15125,7 +15169,11 @@ const syncAlmacen = {
   leerCursor(userId){ return this._leer('telora_sync_cursor:', userId); },
   guardarCursor(userId, cursor){ return this._escribir('telora_sync_cursor:', userId, cursor); },
   leerChoques(userId){ return this._leer('telora_sync_choques:', userId) || []; },
-  guardarChoques(userId, lista){ return this._escribir('telora_sync_choques:', userId, lista); }
+  guardarChoques(userId, lista){ return this._escribir('telora_sync_choques:', userId, lista); },
+  // C1: { fecha: ISO, contenido: JSON del estado reemplazado }. false = no se pudo guardar.
+  leerRespaldoPrevio(userId){ return this._leer('telora_respaldo_previo_multi:', userId); },
+  guardarRespaldoPrevio(userId, reg){ return this._escribir('telora_respaldo_previo_multi:', userId, reg); },
+  borrarRespaldoPrevio(userId){ try{ localStorage.removeItem('telora_respaldo_previo_multi:' + userId); }catch(_){} }
 };
 
 /* ---- c) Adaptador de transporte (supabase-js) ---- */
@@ -15385,7 +15433,7 @@ function opcionesSnapshotSync(ctx){
 }
 
 async function calcularYEncolarSyncMulti(ctx){
-  if(syncCtx !== ctx || !syncHabilitada() || syncPausada) return;
+  if(syncCtx !== ctx || !syncHabilitada() || syncPausada || ctx.inicialBloqueada) return;
   if(!asegurarIdsSync()) return;
   const base = syncAlmacen.leerBase(ctx.userId);
   if(!base || !syncAlmacen.leerRevs(ctx.userId)){
@@ -15432,13 +15480,21 @@ async function sincronizacionInicialMulti(ctx, base){
 }
 
 // D2 sin base (dispositivo que nunca escribió): respaldo JSON de lo local, luego lo local se
-// reemplaza por la nube. El respaldo se ofrece en el aviso (si había datos financieros).
-let respaldoPrevioMulti = null;
+// reemplaza por la nube. C1: si había datos financieros, el respaldo se guarda en localStorage
+// ANTES de reemplazar; si no se puede guardar, no se reemplaza nada (y no se reintenta en esta
+// carga, para no repetir la lectura completa en cada guardado). Se ofrece en el aviso y en
+// Configuración → Respaldo de datos.
 function reemplazarLocalConNube(ctx, nube, cursor){
   const teniaDatos = !sinDatosFinancieros(state);
   if(teniaDatos){
-    try{ respaldoPrevioMulti = buildBackupFile(); }
-    catch(e){ console.warn('[Sync] varios escritores: no se pudo armar el respaldo; no se reemplaza nada.', e); return false; }
+    let reg = null;
+    try{ reg = { fecha: new Date().toISOString(), contenido: JSON.stringify(state) }; }catch(_){}
+    if(!reg || !syncAlmacen.guardarRespaldoPrevio(ctx.userId, reg)){
+      ctx.inicialBloqueada = true;
+      console.warn('[Sync] varios escritores: no se pudo guardar el respaldo previo en este dispositivo (sin espacio u '
+        + 'otro error de almacenamiento): NO se reemplazan los datos locales. Se vuelve a intentar la próxima vez que abras la app.');
+      return false;
+    }
   }
   const previo = state;
   state = migrateBackup(estadoDesdeNube(state, nube));
@@ -15451,13 +15507,79 @@ function reemplazarLocalConNube(ctx, nube, cursor){
   try{ renderAll(); }catch(_){}
   console.info('[Sync] varios escritores: lo local se reemplazó por la nube' + (teniaDatos ? ' (con respaldo previo).' : '.'));
   if(teniaDatos){
-    showToast('Este dispositivo ahora muestra los datos de tu cuenta. Guardamos un respaldo de lo que había antes.', 'success', 20000,
-      { label: 'Descargar respaldo', onClick: () => triggerBackupDownload(respaldoPrevioMulti) });
+    renderRespaldoPrevioMulti();
+    showToast('Este dispositivo ahora muestra los datos de tu cuenta. Guardamos un respaldo de lo que había antes (también en Configuración).', 'success', 20000,
+      { label: 'Descargar respaldo', onClick: () => descargarRespaldoPrevioMulti(ctx.userId) });
   } else {
     showToast('Tus datos de la nube ya están en este dispositivo.', 'success');
   }
   return true;
 }
+
+// C3: archivo del respaldo previo con armarArchivoRespaldo (el mismo formato que «Descargar o
+// compartir respaldo», así que se restaura con «Restaurar desde un respaldo»). Fecha local del
+// momento en que se guardó. Lanza si el contenido guardado no es JSON.
+function prepararRespaldoPrevioMulti(reg){
+  const estado = JSON.parse(reg.contenido);
+  const d = new Date(reg.fecha);
+  const fecha = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return {
+    estado,
+    backup: armarArchivoRespaldo(estado, 'Telora_respaldo_antes_de_sincronizar_' + fecha + '.json'),
+    resumen: backupSummaryLine(estado, 'guardado antes de sincronizar')
+  };
+}
+// C3: abre la MISMA tarjeta Compartir / Descargar que el respaldo normal (el camino que funciona
+// en iPhone instalado y en PC). NO borra el respaldo: descargar no garantiza que el archivo
+// quedó guardado (iPhone puede abrir una vista previa; el usuario puede cancelar).
+function descargarRespaldoPrevioMulti(userId){
+  const reg = userId ? syncAlmacen.leerRespaldoPrevio(userId) : null;
+  if(!respaldoPrevioVigente(reg, Date.now())){
+    showToast('El respaldo anterior a la sincronización ya no está disponible.', 'error');
+    renderRespaldoPrevioMulti();
+    return;
+  }
+  let previo;
+  try{ previo = prepararRespaldoPrevioMulti(reg); }
+  catch(e){ console.warn('[Sync] el respaldo anterior a la sincronización está dañado', e); showToast('El respaldo anterior está dañado y no se puede descargar.', 'error'); return; }
+  try{ if(document.getElementById('sheetConfig').classList.contains('open')) closeSheet('sheetConfig'); }catch(_){}
+  abrirTarjetaRespaldo(previo);
+}
+// C3: el respaldo previo solo se borra al vencer (30 días) o con «Ya lo guardé, eliminar».
+function eliminarRespaldoPrevioMulti(userId){
+  if(!userId) return;
+  syncAlmacen.borrarRespaldoPrevio(userId);
+  renderRespaldoPrevioMulti();
+}
+function usuarioRespaldoPrevio(){
+  return (syncCtx && syncCtx.userId) || (sesionConocida && sesionConocida.userId) || null;
+}
+// Muestra los botones de Configuración solo con un respaldo vigente de la cuenta con sesión; si
+// venció (30 días), lo borra para liberar espacio. try/catch: renderConfig() puede correr al
+// cargar, antes de que existan las `const`/`let` de esta sección (TDZ).
+function renderRespaldoPrevioMulti(){
+  const box = document.getElementById('respaldoPrevioBox');
+  if(!box) return;
+  let visible = false;
+  try{
+    const userId = usuarioRespaldoPrevio();
+    const reg = userId ? syncAlmacen.leerRespaldoPrevio(userId) : null;
+    if(reg && !respaldoPrevioVigente(reg, Date.now())) syncAlmacen.borrarRespaldoPrevio(userId);
+    else visible = !!reg;
+  }catch(_){}
+  box.style.display = visible ? '' : 'none';
+}
+document.getElementById('btnRespaldoPrevioMulti').onclick = ()=>{
+  const userId = usuarioRespaldoPrevio();
+  if(userId) descargarRespaldoPrevioMulti(userId);
+};
+document.getElementById('btnRespaldoPrevioBorrar').onclick = ()=>{
+  const userId = usuarioRespaldoPrevio();
+  if(!userId) return;
+  if(!confirm('¿Eliminar el respaldo anterior a la sincronización? Hazlo solo si ya guardaste el archivo: después no se puede recuperar.')) return;
+  eliminarRespaldoPrevioMulti(userId);
+  showToast('Respaldo anterior eliminado.', 'success');
+};
 
 function contarAcciones(acciones){
   const n = { ignorar: 0, diferir: 0, adoptarRev: 0, aplicar: 0, aplicarBorrado: 0, choque: 0 };
@@ -16309,7 +16431,8 @@ const TEXTO_CONFIRMAR_ELIMINAR = 'ELIMINAR';
 const MSG_CUENTA_ELIMINADA_SERVIDOR = 'Tu cuenta de Telora fue eliminada. Tus datos siguen en este dispositivo.';
 const CLAVE_TOAST_TRAS_RECARGA = 'telora_toast_tras_recarga';   // sessionStorage, no localStorage
 const PREFIJOS_SYNC_CUENTA = ['telora_sync_base:', 'telora_sync_cola:', 'telora_sync_fallidas:',
-  'telora_sync_revs:', 'telora_sync_cursor:', 'telora_sync_choques:'];   // las 3 últimas: S1 · T7
+  'telora_sync_revs:', 'telora_sync_cursor:', 'telora_sync_choques:',   // S1 · T7
+  'telora_respaldo_previo_multi:'];                                       // S1 · T7 (C1)
 
 function confirmacionEliminarValida(texto){ return String(texto == null ? '' : texto).trim() === TEXTO_CONFIRMAR_ELIMINAR; }
 function estadoBotonEliminarCuenta(enLinea){
