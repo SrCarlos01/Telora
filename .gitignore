@@ -15,3 +15,6 @@ desktop.ini
 graphify-out/
 # Instrucciones locales de Claude Code generadas por graphify claude install
 CLAUDE.md
+
+# Resúmenes diarios: viven en el Proyecto, el repositorio es público
+docs/**/Dia*_Resumen.*
