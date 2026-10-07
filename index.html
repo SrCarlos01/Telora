@@ -3,6 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+/* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
+   --font-scale en #app/.sheet, ese ampliado puede quedar «pegado». Solo ahí se fija
+   maximum-scale=1 (iOS lo ignora para el pellizco del usuario, pero sí corta el
+   auto-zoom). No va en el HTML estático: en Android bloquearía el pellizco (WCAG 1.4.4).
+   La clase .es-ios la usa el CSS (texto de ayuda de los campos de fecha vacíos). */
+(function(){
+  var n = navigator;
+  var esIOS = /iPhone|iPad|iPod/.test(n.userAgent) || (n.platform === 'MacIntel' && n.maxTouchPoints > 1);
+  if(!esIOS) return;
+  document.documentElement.classList.add('es-ios');
+  var vp = document.querySelector('meta[name="viewport"]');
+  if(vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover');
+})();
+</script>
 <title>Telora</title>
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -135,7 +150,7 @@ button{font-family:inherit;}
 #app{
   max-width:480px; margin:0 auto; height:100%; display:flex; flex-direction:column; position:relative;
   overflow-y:auto; overscroll-behavior:none;
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
   padding-top:env(safe-area-inset-top);
 }
 
@@ -316,7 +331,7 @@ button{font-family:inherit;}
 }
 
 /* ---------- SCREENS ---------- */
-.screen{display:none; padding:0 20px 110px; animation:fadeIn .28s ease; touch-action:pan-y;}
+.screen{display:none; padding:0 20px 110px; animation:fadeIn .28s ease; touch-action:pan-y pinch-zoom;}
 .screen.active{display:block;}
 @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
 
@@ -1087,7 +1102,7 @@ button{font-family:inherit;}
      (a font-scale=1 la división es /1: idéntico al comportamiento anterior). */
   max-height:calc((var(--app-vh, 88vh) - env(safe-area-inset-top) - 20px) / var(--font-scale, 1));
   overflow-y:auto; overflow-x:clip; transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
 }
 .sheet-overlay.open .sheet{transform:translateY(0);}
 .sheet-handle{width:36px; height:4px; background:var(--border); border-radius:4px; margin:6px auto 16px;}
@@ -1314,6 +1329,35 @@ button{font-family:inherit;}
 .field select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center;}
 .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
 .field input.input-lg{font-size:19px; font-weight:600;}
+/* Hotfix iOS H1 · campos de fecha: en iOS el control nativo tiene un ancho mínimo propio
+   y se salía del .field («Fecha límite», «Otra fecha»). Sin apariencia nativa obedece al
+   width:100%. El ícono de calendario va de fondo (mismo trazo que el chevron del <select>);
+   en Chrome/Android el indicador nativo queda invisible ENCIMA del ícono, así tocarlo sigue
+   abriendo el selector. iOS no tiene indicador: todo el campo abre la rueda de fecha. */
+input[type=date]{
+  -webkit-appearance:none; appearance:none; display:block; min-width:0; max-width:100%;
+  min-height:calc(1.25em + 26px);   /* vacío en iOS no colapsa: mismo alto que un campo de texto */
+}
+/* Con la especificidad de `.field input[type=date]` / `.hist-rango-field input`: su `background:`
+   abreviado borraría el ícono si fuera en la regla de arriba. */
+.field input[type=date], .hist-rango-field input[type=date]{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23C9A66B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 12px center;
+}
+.field input[type=date]{padding-right:38px;}
+.hist-rango-field input[type=date]{padding-right:32px; background-position:right 9px center;}
+input[type=date]::-webkit-date-and-time-value{text-align:left;}
+input[type=date]::-webkit-calendar-picker-indicator{opacity:0; cursor:pointer; margin:0; width:20px; height:20px;}
+/* Valor vacío: iOS lo deja en blanco. Texto de ayuda superpuesto (no es el valor del campo);
+   initFechaAyuda() envuelve cada input[type=date] y marca [data-vacia]. Solo en iOS: en el
+   resto el navegador ya muestra dd-mm-aaaa. */
+.fecha-wrap{display:block; position:relative; min-width:0;}
+.fecha-ayuda{
+  display:none; position:absolute; left:0; top:0; bottom:0; align-items:center;
+  padding-left:13px; font-size:16px; color:var(--cream-dim); pointer-events:none;
+}
+.hist-rango-field .fecha-ayuda{padding-left:11px;}
+.es-ios input[type=date][data-vacia]:not([hidden]) + .fecha-ayuda{display:flex;}
 .field-row{display:flex; gap:10px;}
 .field-row .field{flex:1;}
 
@@ -1413,6 +1457,10 @@ button{font-family:inherit;}
 .fecha-chip small{font-size:12px; color:var(--cream-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
 .fecha-chip small:empty{display:none;}
 .fecha-otra-input{margin-top:8px;}
+/* Hotfix H1: envuelto por initFechaAyuda(), el margen pasa al envoltorio para que el texto
+   de ayuda quede alineado con el campo. */
+.fecha-wrap > .fecha-otra-input{margin-top:0;}
+.fecha-wrap:has(> .fecha-otra-input:not([hidden])){margin-top:8px;}
 /* Categoría / fuente: chip con el ícono dentro de un círculo del color de la fuente única. */
 .cat-chips{display:flex; flex-wrap:wrap; gap:8px;}
 .cat-chips.cat-todas{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);}
@@ -2610,7 +2658,7 @@ button:active{ transform:scale(0.93); }
       <div class="monto-hero"><span class="monto-sim" aria-hidden="true">$</span><input type="text" id="gMonto" class="input-monto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <div class="chip-row chip-carousel chips-monto" id="montoChipsG"></div>
     </div>
-    <div class="field"><label for="gNombre">Nombre</label><input type="text" id="gNombre" placeholder="Ej: Supermercado, Bencina, Arriendo" autocomplete="off"></div>
+    <div class="field"><label for="gNombre">Nombre</label><input type="text" id="gNombre" enterkeyhint="done" placeholder="Ej: Supermercado, Bencina, Arriendo" autocomplete="off"></div>
     <div class="field">
       <label id="gFechaLbl">Fecha</label>
       <div class="fecha-chips" id="gFechaChips" role="group" aria-labelledby="gFechaLbl">
@@ -2680,7 +2728,7 @@ button:active{ transform:scale(0.93); }
       <div class="monto-hero"><span class="monto-sim" aria-hidden="true">$</span><input type="text" id="iMonto" class="input-monto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <div class="chip-row chip-carousel chips-monto" id="montoChipsI"></div>
     </div>
-    <div class="field"><label for="iNombre">Nombre</label><input type="text" id="iNombre" placeholder="Ej: Sueldo, Devolución, Venta" autocomplete="off"></div>
+    <div class="field"><label for="iNombre">Nombre</label><input type="text" id="iNombre" enterkeyhint="done" placeholder="Ej: Sueldo, Devolución, Venta" autocomplete="off"></div>
     <div class="field">
       <label id="iFechaLbl">Fecha</label>
       <div class="fecha-chips" id="iFechaChips" role="group" aria-labelledby="iFechaLbl">
@@ -2731,7 +2779,7 @@ button:active{ transform:scale(0.93); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="metaTitle">Nueva meta</h2>
-    <div class="field"><label>Nombre</label><input type="text" id="mNombre" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
+    <div class="field"><label>Nombre</label><input type="text" id="mNombre" enterkeyhint="done" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
     <div class="field" id="mFechaField"><label>Fecha límite</label><input type="date" id="mFecha"></div>
     <label class="check-row">
       <input type="checkbox" id="mIndef">
@@ -5390,6 +5438,9 @@ function cerrarDeskAddMenu(devolverFoco){
   }
   appEl.addEventListener('pointerdown', e=>{
     if(e.pointerType !== 'touch') return;
+    // Hotfix iOS H1: con pinch-zoom permitido, un 2º dedo (isPrimary false: el 1º sigue
+    // apoyado) es un pellizco: se cancela el swipe en curso y no se sigue a ninguno.
+    if(!e.isPrimary){ hClear(); return; }
     if(hId !== null) hClear();                                  // reset defensivo: gesto anterior sin cerrar
     if(document.querySelector('.sheet-overlay.open')) return;   // hay un sheet abierto: no navegar
     hId = e.pointerId;
@@ -5445,6 +5496,7 @@ function cerrarDeskAddMenu(devolverFoco){
     // swipe horizontal no lo disparan y no se roba el scroll hacia arriba.
     sheet.addEventListener('pointerdown', e=>{
       if(e.pointerType !== 'touch') return;
+      if(!e.isPrimary){ vClear(); return; }                     // 2º dedo = pellizco (Hotfix H1): no se arrastra
       if(vId !== null) vClear();                                // reset defensivo
       if(sheet.scrollTop > 0) return;
       vId = e.pointerId; vy0 = e.clientY; vx0 = e.clientX; vt0 = Date.now();
@@ -5493,6 +5545,44 @@ function cerrarDeskAddMenu(devolverFoco){
   window.addEventListener('resize', schedule);
   window.addEventListener('orientationchange', ()=> setTimeout(apply, 250));
 })();
+
+/* ==================== TEXTO DE AYUDA EN FECHAS VACÍAS (Hotfix iOS H1) ==================== */
+// Sin apariencia nativa, iOS muestra en blanco un input[type=date] vacío. Cada uno se
+// envuelve en .fecha-wrap con un «Elige una fecha» superpuesto (solo se ve con .es-ios,
+// ver CSS). El valor del campo no cambia: [data-vacia] se recalcula en input/change y en
+// cada asignación por código a .value (el setter propio delega en el nativo).
+(function initFechaAyuda(){
+  const nativo = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  document.querySelectorAll('input[type=date]').forEach(inp=>{
+    const wrap = document.createElement('span');
+    wrap.className = 'fecha-wrap';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+    const ayuda = document.createElement('span');
+    ayuda.className = 'fecha-ayuda';
+    ayuda.setAttribute('aria-hidden', 'true');
+    ayuda.textContent = 'Elige una fecha';
+    wrap.appendChild(ayuda);
+    const sync = ()=> inp.toggleAttribute('data-vacia', !nativo.get.call(inp));
+    Object.defineProperty(inp, 'value', {
+      configurable: true,
+      get(){ return nativo.get.call(this); },
+      set(v){ nativo.set.call(this, v); sync(); }
+    });
+    inp.addEventListener('input', sync);
+    inp.addEventListener('change', sync);
+    sync();
+  });
+})();
+
+// Hotfix H1: nombres de gasto, ingreso y meta con enterkeyhint="done": Enter cierra el
+// teclado (blur), igual que la descripción, sin enviar nada.
+['gNombre', 'iNombre', 'mNombre'].forEach(id=>{
+  const el = document.getElementById(id);
+  el.addEventListener('keydown', e=>{
+    if(e.key === 'Enter' && !e.isComposing){ e.preventDefault(); el.blur(); }
+  });
+});
 
 /* ==================== SHEETS (modales) ==================== */
 // Tanda S · pto 1: `focusId` opcional — qué elemento recibe el foco al abrir. Lo usa

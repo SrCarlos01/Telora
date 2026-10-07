@@ -3652,6 +3652,111 @@ async function runTests(){
     }
   }
 
+  // ==================== Hotfix iOS H1: auto-zoom al enfocar campos ====================
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const raiz = d.documentElement;
+    const fsPrev = raiz.style.getPropertyValue('--font-scale');
+    const abiertas = [];
+    try{
+      // (1) Auditoría de 16px con --font-scale 1: cada hoja abierta (iframe con layout a 390px)
+      //     y cada campo de texto/número/fecha/correo/búsqueda/teléfono, <select> y <textarea>.
+      raiz.style.setProperty('--font-scale', '1');
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:390px; height:900px; border:0;';
+      void win.innerWidth; win.syncDeskLayout();
+      const SEL = 'input[type=text], input[type=number], input[type=date], input[type=email], input[type=search], input[type=tel], input:not([type]), select, textarea';
+      const visibles = [], bajos = [];
+      d.querySelectorAll('.sheet-overlay').forEach(ov => {
+        const yaAbierta = ov.classList.contains('open');
+        if(!yaAbierta){ ov.classList.add('open'); abiertas.push(ov); }
+        ov.querySelectorAll(SEL).forEach(el => {
+          if(!el.getClientRects().length) return;              // no visible en su hoja (sección cerrada, paso oculto…)
+          const px = parseFloat(win.getComputedStyle(el).fontSize);
+          visibles.push(el.id || el.className);
+          if(px < 16) bajos.push(`${ov.id} › ${el.id || el.className}: ${px}px`);
+        });
+        if(!yaAbierta){ ov.classList.remove('open'); abiertas.pop(); }
+      });
+      // Fuera de las hojas o en pasos ocultos (buscador del Historial, código de login,
+      // rangos): se mide el estilo calculado aunque no estén a la vista.
+      const fuera = ['hSearchInput', 'hKindSelect', 'hRangoDesde', 'hRangoHasta', 'inpLoginCorreo', 'inpLoginCodigo', 'gFecha', 'iFecha', 'expDesde', 'expHasta']
+        .map(id => [id, parseFloat(win.getComputedStyle($(id)).fontSize)]);
+      fuera.forEach(([id, px]) => { if(px < 16) bajos.push(`${id}: ${px}px`); });
+      const deben = ['gNombre', 'iNombre', 'mNombre', 'mFecha', 'tFecha', 'newCategoria', 'catEditarNombreInput', 'cfgInicioRegistro'];
+      assert(win.getComputedStyle(raiz).getPropertyValue('--font-scale').trim() === '1' && bajos.length === 0
+        && visibles.length >= 30 && deben.every(id => visibles.includes(id)),
+        'H1: con font-scale 1, ningún campo visible en su hoja (ni el buscador del Historial, el código de login o los rangos) queda bajo 16px',
+        `bajo 16px: ${bajos.join(' · ') || 'ninguno'} · medidos en hojas: ${visibles.length}`);
+
+      // (2) Fechas: sin apariencia nativa, ancho acotado, envueltas con el texto de ayuda;
+      //     [data-vacia] sigue al valor (también si se asigna por código) y el valor no cambia.
+      const fechas = [...d.querySelectorAll('input[type=date]')];
+      const mf = $('mFecha'), csF = win.getComputedStyle(mf);
+      mf.value = ''; const vaciaSinValor = mf.hasAttribute('data-vacia') && mf.value === '';
+      mf.value = '2026-12-31'; const llenaConValor = !mf.hasAttribute('data-vacia') && mf.value === '2026-12-31';
+      mf.value = '';
+      assert(fechas.length >= 9 && fechas.every(f => f.parentElement.classList.contains('fecha-wrap') && f.nextElementSibling.classList.contains('fecha-ayuda')
+          && f.nextElementSibling.textContent === 'Elige una fecha' && f.nextElementSibling.getAttribute('aria-hidden') === 'true')
+        && csF.appearance === 'none' && csF.display === 'block' && csF.minWidth === '0px' && csF.maxWidth === '100%'
+        && csF.backgroundImage.includes('svg') && vaciaSinValor && llenaConValor,
+        'H1: input[type=date] sin apariencia nativa (block, min-width 0, max-width 100%), con ícono de calendario y «Elige una fecha» que sigue al valor sin cambiarlo',
+        `fechas: ${fechas.length} · appearance: ${csF.appearance} · vacía: ${vaciaSinValor} · con valor: ${llenaConValor}`);
+
+      // (3) Fuera de iOS el viewport no limita el zoom; el pellizco queda permitido.
+      const vp = d.querySelector('meta[name="viewport"]').getAttribute('content');
+      const ta = ['#app', '.screen', '.sheet'].map(s => win.getComputedStyle(d.querySelector(s)).touchAction);
+      assert(!raiz.classList.contains('es-ios') && !vp.includes('maximum-scale') && ta.every(t => t === 'pan-y pinch-zoom')
+        && ['gNombre', 'iNombre', 'mNombre'].every(id => $(id).getAttribute('enterkeyhint') === 'done'),
+        'H1: fuera de iOS el viewport no lleva maximum-scale; #app/.screen/.sheet con touch-action «pan-y pinch-zoom»; enterkeyhint="done" en los nombres',
+        `viewport: ${vp} · touch-action: ${ta.join(' / ')}`);
+
+      // (4) Enter en gNombre / iNombre / mNombre: cierra el teclado (blur), no envía ni guarda nada.
+      const nGastos = win.eval('state.expenses.length'), nIngresos = win.eval('state.incomes.length'), nMetas = win.eval('state.goals.length');
+      const enter = [['gNombre', 'sheetGasto', 'openGastoForm'], ['iNombre', 'sheetIngreso', 'openIngresoForm'], ['mNombre', 'sheetMeta', 'openMetaForm']].map(([id, sh, abrir]) => {
+        const ov = $(sh); win[abrir]();
+        const el = $(id); el.focus();
+        const conFoco = d.activeElement === el;
+        const ev = new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        el.dispatchEvent(ev);
+        const r = { id, conFoco, prevenido: ev.defaultPrevented, sinFoco: d.activeElement !== el, sinForm: el.form === null, abierta: ov.classList.contains('open') };
+        win.closeSheet(sh);
+        return r;
+      });
+      assert(enter.every(r => r.conFoco && r.prevenido && r.sinFoco && r.sinForm && r.abierta)
+        && win.eval('state.expenses.length') === nGastos && win.eval('state.incomes.length') === nIngresos && win.eval('state.goals.length') === nMetas,
+        'H1: Enter en el nombre de gasto, ingreso y meta hace blur (como la descripción), sin enviar, guardar ni cerrar la hoja',
+        JSON.stringify(enter));
+
+      // (5) Swipe de pestañas: un gesto anterior sin pointerup no bloquea el siguiente swipe de
+      //     1 dedo (se limpia y se sigue el nuevo); un 2º dedo (isPrimary false = pellizco) lo cancela.
+      const app = $('app');
+      const pe = (tipo, id, x, y, primario) => new win.PointerEvent(tipo, { pointerId: id, pointerType: 'touch', isPrimary: primario !== false, clientX: x, clientY: y, bubbles: true });
+      win.switchScreen('resumen');
+      app.dispatchEvent(pe('pointerdown', 901, 300, 400));                 // gesto sin cerrar (sin pointerup)
+      app.dispatchEvent(pe('pointerdown', 902, 300, 400));                 // swipe nuevo de 1 dedo
+      win.dispatchEvent(pe('pointerup', 902, 180, 405));
+      const trasSinCerrar = win.eval('currentScreen');
+      win.switchScreen('resumen');
+      app.dispatchEvent(pe('pointerdown', 903, 300, 400));
+      app.dispatchEvent(pe('pointerdown', 904, 320, 420, false));          // 2º dedo: pellizco
+      win.dispatchEvent(pe('pointerup', 903, 180, 405));
+      win.dispatchEvent(pe('pointerup', 904, 200, 425));
+      const trasPellizco = win.eval('currentScreen');
+      win.switchScreen('resumen');
+      assert(trasSinCerrar === 'historial' && trasPellizco === 'resumen',
+        'H1: un gesto sin pointerup seguido de un swipe de 1 dedo cambia de pestaña normalmente; con un 2º dedo (pellizco) no cambia',
+        `tras gesto sin cerrar: ${trasSinCerrar} · tras pellizco: ${trasPellizco}`);
+    }catch(e){
+      assert(false, 'H1: excepción durante las pruebas del auto-zoom de iOS', e && e.stack || String(e));
+    }finally{
+      try{
+        abiertas.forEach(ov => ov.classList.remove('open'));
+        if(fsPrev) raiz.style.setProperty('--font-scale', fsPrev); else raiz.style.removeProperty('--font-scale');
+        iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+      }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
