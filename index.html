@@ -1335,6 +1335,88 @@ button{font-family:inherit;}
 }
 .toggle-opt.active{background:var(--burgundy); border-color:var(--burgundy); color:var(--on-burgundy);}
 .toggle-opt.ro-disabled{opacity:0.5; pointer-events:none;}
+/* ---------- Tanda P2 · Fase A: registro rápido v2 (sheetGasto / sheetIngreso) ----------
+   Solo presentación: los chips escriben en los inputs/selects de siempre (gFecha,
+   gCategoria, gMetodo, iFecha, iFuente), que siguen siendo la fuente de verdad. */
+/* Monto protagonista: cifra grande centrada; el «$» es decorativo (el input guarda solo
+   los dígitos con puntos, como siempre). El ancho del input sigue al contenido (JS). */
+.field-monto{text-align:center; margin-bottom:18px;}
+.field-monto > label{margin-bottom:0;}
+.monto-hero{display:flex; justify-content:center; align-items:baseline; gap:2px; max-width:100%;}
+.monto-sim{font-family:ui-serif,Georgia,serif; font-size:44px; line-height:1.15; color:var(--cream);}
+.field .monto-hero input.input-monto{
+  width:auto; min-width:1.2ch; max-width:calc(100% - 30px); padding:0 2px; background:none; border:none; border-radius:6px;
+  font-family:ui-serif,Georgia,serif; font-size:44px; line-height:1.15; color:var(--cream);
+  font-variant-numeric:tabular-nums; text-align:left; caret-color:var(--gold);
+}
+.field .monto-hero input.input-monto::placeholder{color:var(--cream-dim); opacity:.6;}
+.field .monto-hero input.input-monto:focus{box-shadow:none;}
+.monto-hero:focus-within{border-radius:8px; box-shadow:0 0 0 3px var(--focus-ring);}
+.field-monto .chip-row.chips-monto{margin-top:12px;}
+/* Etiqueta secundaria junto al rótulo («· frecuentes primero»). */
+.lbl-sub{font-weight:400; color:var(--cream-dim);}
+/* `hidden` manda sobre los display:flex/grid de los bloques nuevos de la hoja. */
+#sheetGasto [hidden], #sheetIngreso [hidden]{display:none !important;}
+/* Select que queda solo como fuente de verdad (lo reemplazan los chips). */
+.select-oculto{display:none !important;}
+/* Chips del formulario (fecha, categoría/fuente, método, «Todas»). */
+.form-chip{
+  font-family:inherit; cursor:pointer; color:var(--cream); background:var(--surface-2);
+  border:1px solid var(--border); transition:background .15s ease, border-color .15s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+.form-chip.active{border-color:var(--gold); background:rgba(201,166,107,0.12); background:color-mix(in srgb, var(--gold) 14%, transparent);}
+.form-chip:disabled{opacity:.5; cursor:default;}
+.form-chip:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+/* Fecha: Hoy / Ayer / Otra fecha (tres columnas iguales). */
+.fecha-chips{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px;}
+.fecha-chip{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  min-height:54px; padding:8px 6px; border-radius:var(--radius-sm); text-align:center;
+}
+.fecha-chip b{font-size:15px; font-weight:600;}
+.fecha-chip small{font-size:12px; color:var(--cream-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
+.fecha-chip small:empty{display:none;}
+.fecha-otra-input{margin-top:8px;}
+/* Categoría / fuente: chip con el ícono dentro de un círculo del color de la fuente única. */
+.cat-chips{display:flex; flex-wrap:wrap; gap:8px;}
+.cat-chips.cat-todas{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);}
+.cat-chip{display:inline-flex; align-items:center; gap:8px; max-width:100%; min-height:44px; padding:5px 13px 5px 8px; border-radius:22px; font-size:14px;}
+.cat-chip-ic{
+  flex:0 0 auto; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:var(--cc, var(--gold-dim)); color:var(--bg);
+}
+.cat-chip-ic .icon{width:16px; height:16px;}
+.cat-chip-ic .cat-emoji{font-size:15px; line-height:1;}
+.cat-chip-txt{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
+.cat-chip-todas{min-height:44px; padding:8px 14px; border-style:dashed; color:var(--gold); border-radius:22px; font-size:14px;}
+.cat-chip-todas[aria-expanded="true"]{border-style:solid;}
+/* Pagado con: chips de texto (si hay más de 5 métodos se usa el select). */
+.pay-chips{display:flex; flex-wrap:wrap; gap:8px;}
+.pay-chip{min-height:44px; padding:10px 16px; border-radius:22px; font-size:14.5px;}
+.pay-chips:empty{display:none;}
+/* Fijo: recuadro que agrupa la nota, la opción de rango, su resumen y el calendario. */
+.fijo-box{margin-top:10px; padding:12px 14px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-2);}
+.fijo-box .fijo-note{font-size:12.5px; color:var(--cream-dim); margin:0; line-height:1.45;}
+.fijo-box .check-row{margin:12px 0 0;}
+.rango-resumen{margin:10px 0 0; font-size:14px; color:var(--cream);}
+.rango-resumen b{color:var(--gold); font-weight:600;}
+/* Descripción: textarea de 2 líneas que crece con el texto (sin saltos de línea). */
+.field textarea.desc-area{resize:none; min-height:72px; line-height:1.4; overflow:hidden;}
+/* Guardar fijo al fondo de la hoja mientras se desplaza el formulario. */
+.sheet-footer{
+  position:sticky; bottom:calc(-24px - env(safe-area-inset-bottom)); z-index:2;
+  margin:10px -20px 0; padding:8px 20px calc(12px + env(safe-area-inset-bottom));
+  background:linear-gradient(to bottom, transparent, var(--surface) 14px);
+}
+.sheet-footer .btn-primary{margin-top:0;}
+:root.hc .form-chip{border-width:2px;}
+/* Alto contraste: el activo se invierte (fondo crema, texto oscuro) — con borde blanco en
+   todos los chips, solo el borde no alcanza para distinguirlo. */
+:root.hc .form-chip.active{border-color:var(--cream); background:var(--cream); color:var(--bg);}
+:root.hc .form-chip.active small{color:var(--bg);}
+:root.hc .fecha-chip small, :root.hc .lbl-sub, :root.hc .fijo-box .fijo-note{color:var(--cream);}
+:root.hc .fijo-box{border-width:2px;}
 .add-inline{
   display:flex; gap:8px; margin-top:10px; padding:8px; border-radius:var(--radius-sm);
   background:var(--surface-3); border:1px solid var(--border);
@@ -2486,45 +2568,33 @@ button:active{ transform:scale(0.93); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="gastoTitle">Nuevo gasto</h2>
-    <div class="field"><label>Fecha</label><input type="date" id="gFecha"></div>
-    <div class="field"><label>Nombre</label><input type="text" id="gNombre" placeholder="Ej: Supermercado, Bencina, Arriendo" autocomplete="off"></div>
-    <div class="field">
-      <label>Monto</label>
-      <input type="text" id="gMonto" placeholder="0" inputmode="numeric" autocomplete="off">
+    <!-- Tanda P2 · Fase A: registro rápido v2. Mismos ids de siempre (fuente de verdad);
+         los chips solo escriben en ellos y los repinta syncControlesGasto(). -->
+    <div class="field field-monto">
+      <label for="gMonto">Monto</label>
+      <div class="monto-hero"><span class="monto-sim" aria-hidden="true">$</span><input type="text" id="gMonto" class="input-monto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <div class="chip-row chip-carousel chips-monto" id="montoChipsG"></div>
     </div>
+    <div class="field"><label for="gNombre">Nombre</label><input type="text" id="gNombre" placeholder="Ej: Supermercado, Bencina, Arriendo" autocomplete="off"></div>
     <div class="field">
-      <label>Categoría</label>
-      <select id="gCategoria"></select>
-    </div>
-    <div class="field" id="favChipsField" style="display:none;">
-      <label>Categorías frecuentes</label>
-      <div class="chip-row chip-carousel" id="favChips"></div>
+      <label id="gFechaLbl">Fecha</label>
+      <div class="fecha-chips" id="gFechaChips" role="group" aria-labelledby="gFechaLbl">
+        <button type="button" class="form-chip fecha-chip" data-fecha="hoy" aria-pressed="false"><b>Hoy</b><small></small></button>
+        <button type="button" class="form-chip fecha-chip" data-fecha="ayer" aria-pressed="false"><b>Ayer</b><small></small></button>
+        <button type="button" class="form-chip fecha-chip" data-fecha="otra" aria-pressed="false" aria-controls="gFecha"><b>Otra fecha</b><small></small></button>
+      </div>
+      <input type="date" id="gFecha" class="fecha-otra-input" aria-label="Fecha del gasto" hidden>
     </div>
     <div class="field">
-      <label>Método de pago</label>
+      <label id="gCatLbl">Categoría <span class="lbl-sub" id="gCatSub"></span></label>
+      <div class="cat-chips" id="gCatChips" role="group" aria-labelledby="gCatLbl"></div>
+      <div class="cat-chips cat-todas" id="gCatTodas" role="group" aria-label="Todas las categorías" hidden></div>
+      <select id="gCategoria" class="select-oculto" tabindex="-1" aria-hidden="true"></select>
+    </div>
+    <div class="field">
+      <label id="gMetodoLbl">Pagado con</label>
+      <div class="pay-chips" id="gMetodoChips" role="group" aria-labelledby="gMetodoLbl"></div>
       <select id="gMetodo"></select>
-    </div>
-    <div class="field" id="gCuentaField" style="display:none;">
-      <label>Cuenta</label>
-      <select id="gCuenta"></select>
-    </div>
-    <div class="field"><label>Descripción (opcional)</label><input type="text" id="gDescripcion" placeholder="¿En qué fue? — opcional"></div>
-    <div class="field">
-      <label>Tipo</label>
-      <div class="toggle-row">
-        <div class="toggle-opt" data-tipo="Fijo">Fijo</div>
-        <div class="toggle-opt active" data-tipo="Casual">Casual</div>
-      </div>
-      <p id="fijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
-      <label class="check-row" id="gRangoWrap" style="display:none; margin-top:10px;">
-        <input type="checkbox" id="gRangoChk">
-        <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
-      </label>
-      <div class="field" id="gRangoField" style="display:none; margin:8px 0 0;">
-        <label>Hasta el día</label>
-        <div class="hasta-cal" id="gHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
-      </div>
     </div>
     <div class="cuota-fields" id="cuotaFields">
       <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
@@ -2534,7 +2604,31 @@ button:active{ transform:scale(0.93); }
         <span>Compartida <small>— las cuotas cuentan para todas las cuentas, no solo para la de la compra</small></span>
       </label>
     </div>
-    <button class="btn-primary" id="btnSaveGasto">Guardar gasto</button>
+    <div class="field" id="gCuentaField" style="display:none;">
+      <label>Cuenta</label>
+      <select id="gCuenta"></select>
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <div class="toggle-row">
+        <div class="toggle-opt" data-tipo="Fijo">Fijo</div>
+        <div class="toggle-opt active" data-tipo="Casual">Casual</div>
+      </div>
+      <div class="fijo-box" id="gFijoBox" hidden>
+        <p id="fijoNote" class="fijo-note">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
+        <label class="check-row" id="gRangoWrap" style="display:none;">
+          <input type="checkbox" id="gRangoChk">
+          <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
+        </label>
+        <p class="rango-resumen" id="gRangoResumen" aria-live="polite" hidden></p>
+        <div class="field" id="gRangoField" style="display:none; margin:8px 0 0;">
+          <label>Hasta el día</label>
+          <div class="hasta-cal" id="gHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
+        </div>
+      </div>
+    </div>
+    <div class="field"><label for="gDescripcion">Descripción</label><textarea id="gDescripcion" class="desc-area" rows="2" enterkeyhint="done" placeholder="¿En qué fue? (opcional)"></textarea></div>
+    <div class="sheet-footer"><button class="btn-primary" id="btnSaveGasto">Guardar gasto</button></div>
     <button class="btn-danger" id="btnDeleteGasto" style="display:none;">Eliminar gasto</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
@@ -2545,39 +2639,53 @@ button:active{ transform:scale(0.93); }
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="ingresoTitle">Nuevo ingreso</h2>
-    <div class="field"><label>Fecha</label><input type="date" id="iFecha"></div>
-    <div class="field"><label>Nombre</label><input type="text" id="iNombre" placeholder="Ej: Sueldo, Devolución, Venta" autocomplete="off"></div>
+    <!-- Tanda P2 · Fase A: mismo patrón que el gasto; los chips los repinta syncControlesIngreso(). -->
+    <div class="field field-monto">
+      <label for="iMonto">Monto</label>
+      <div class="monto-hero"><span class="monto-sim" aria-hidden="true">$</span><input type="text" id="iMonto" class="input-monto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+      <div class="chip-row chip-carousel chips-monto" id="montoChipsI"></div>
+    </div>
+    <div class="field"><label for="iNombre">Nombre</label><input type="text" id="iNombre" placeholder="Ej: Sueldo, Devolución, Venta" autocomplete="off"></div>
     <div class="field">
-      <label>Fuente</label>
-      <select id="iFuente"></select>
+      <label id="iFechaLbl">Fecha</label>
+      <div class="fecha-chips" id="iFechaChips" role="group" aria-labelledby="iFechaLbl">
+        <button type="button" class="form-chip fecha-chip" data-fecha="hoy" aria-pressed="false"><b>Hoy</b><small></small></button>
+        <button type="button" class="form-chip fecha-chip" data-fecha="ayer" aria-pressed="false"><b>Ayer</b><small></small></button>
+        <button type="button" class="form-chip fecha-chip" data-fecha="otra" aria-pressed="false" aria-controls="iFecha"><b>Otra fecha</b><small></small></button>
+      </div>
+      <input type="date" id="iFecha" class="fecha-otra-input" aria-label="Fecha del ingreso" hidden>
     </div>
     <div class="field">
-      <label>Monto</label>
-      <input type="text" id="iMonto" placeholder="0" inputmode="numeric" autocomplete="off">
-      <div class="chip-row chip-carousel chips-monto" id="montoChipsI"></div>
+      <label id="iFuenteLbl">Fuente</label>
+      <div class="cat-chips" id="iFuenteChips" role="group" aria-labelledby="iFuenteLbl"></div>
+      <div class="cat-chips cat-todas" id="iFuenteTodas" role="group" aria-label="Todas las fuentes" hidden></div>
+      <select id="iFuente" class="select-oculto" tabindex="-1" aria-hidden="true"></select>
     </div>
     <div class="field" id="iCuentaField" style="display:none;">
       <label>Cuenta</label>
       <select id="iCuenta"></select>
     </div>
-    <div class="field"><label>Descripción (opcional)</label><input type="text" id="iDescripcion" placeholder="Opcional"></div>
     <div class="field">
       <label>Tipo</label>
       <div class="toggle-row">
         <div class="toggle-opt" data-itipo="Fijo">Fijo</div>
         <div class="toggle-opt active" data-itipo="Casual">Casual</div>
       </div>
-      <p id="iFijoNote" style="font-size:11.5px; color:var(--cream-dim); margin:8px 0 0; display:none;">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
-      <label class="check-row" id="iRangoWrap" style="display:none; margin-top:10px;">
-        <input type="checkbox" id="iRangoChk">
-        <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
-      </label>
-      <div class="field" id="iRangoField" style="display:none; margin:8px 0 0;">
-        <label>Hasta el día</label>
-        <div class="hasta-cal" id="iHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
+      <div class="fijo-box" id="iFijoBox" hidden>
+        <p id="iFijoNote" class="fijo-note">Se repetirá automáticamente cada mes, el mismo día, hasta que lo edites o elimines.</p>
+        <label class="check-row" id="iRangoWrap" style="display:none;">
+          <input type="checkbox" id="iRangoChk">
+          <span>No sé el día exacto (dar un rango) <small>(cae entre la fecha de arriba y un día posterior del mismo mes)</small></span>
+        </label>
+        <p class="rango-resumen" id="iRangoResumen" aria-live="polite" hidden></p>
+        <div class="field" id="iRangoField" style="display:none; margin:8px 0 0;">
+          <label>Hasta el día</label>
+          <div class="hasta-cal" id="iHastaCal" role="grid" aria-label="Elige hasta qué día del mes llega el rango"></div>
+        </div>
       </div>
     </div>
-    <button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button>
+    <div class="field"><label for="iDescripcion">Descripción</label><textarea id="iDescripcion" class="desc-area" rows="2" enterkeyhint="done" placeholder="¿En qué fue? (opcional)"></textarea></div>
+    <div class="sheet-footer"><button class="btn-primary" id="btnSaveIngreso">Guardar ingreso</button></div>
     <button class="btn-danger" id="btnDeleteIngreso" style="display:none;">Eliminar ingreso</button>
     <button class="btn-ghost" data-close>Cancelar</button>
   </div>
@@ -3579,7 +3687,11 @@ const CAT_ICONS = {
   // Pulido P1 · pto nuevo: categorías por defecto actuales (DEFAULTS.categorias) que
   // caían en 'tag'. Solo íconos ya existentes en ICONS (no hay factura ni rayo: «calc»).
   "Arriendo/Vivienda":"home","Cuentas y Servicios":"calc","Salud":"health",
-  "Cuidado personal":"droplet","Vestimenta":"bag","Entretenimiento":"star"
+  "Cuidado personal":"droplet","Vestimenta":"bag","Entretenimiento":"star",
+  // Tanda P2 · Fase A: fuentes de ingreso por defecto (DEFAULTS.fuentes), para los chips
+  // de Fuente del formulario de ingreso. Solo íconos ya existentes en ICONS.
+  "Sueldo":"dollar","Trabajos extra":"plus","Ventas":"cart","Bono":"gift",
+  "Mesada":"users","Interés":"bars","Otros":"dots"
 };
 // Set de íconos ofrecidos en el selector de ícono por categoría.
 const CAT_ICON_SET = ["coffee","home","truck","book-open","book","bag","star","droplet","users","gift","dollar","dots","tag","target","cart","heart","phone","car","plane","health","paw","music"];
@@ -4220,11 +4332,22 @@ function markNewRow(box){
 function fieldError(el){
   if(!el) return;
   const field = (el.closest && el.closest('.field')) || el;
+  enfocarCampoConChips(field);   // Tanda P2 · Fase A: con pie fijo, llevar la vista al campo
   if(prefersReducedMotion()) return;
   field.classList.remove('field-shake');
   void field.offsetWidth;                       // reinicia la animación si se repite
   field.classList.add('field-shake');
   setTimeout(()=> field.classList.remove('field-shake'), 500);
+}
+// Tanda P2 · Fase A: si el campo rechazado se elige con chips (categoría, fuente,
+// método…), su <select>/<input> fuente de verdad está oculto y el Guardar fijo al fondo
+// puede taparlo: se centra el .field en la hoja y se enfoca su primer chip. Campos sin
+// chips no cambian (solo el sacudón de siempre).
+function enfocarCampoConChips(field){
+  const chip = field && field.querySelector && field.querySelector('.form-chip:not(:disabled)');
+  if(!chip) return;
+  try{ field.scrollIntoView({ block:'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' }); }catch(_){}
+  try{ chip.focus({ preventScroll:true }); }catch(_){ chip.focus(); }
 }
 function fieldOk(el){
   if(!el || prefersReducedMotion()) return;
@@ -5544,6 +5667,14 @@ function renderHastaCal(calId, fechaId, sel){
           + ` aria-pressed="${hayRango && d === hasta ? 'true' : 'false'}">${d}</button>`;
   }
   cal.innerHTML = html;
+  // Tanda P2 · Fase A: resumen legible encima del calendario (gRangoResumen / iRangoResumen).
+  const res = document.getElementById(calId.replace('HastaCal', 'RangoResumen'));
+  if(res){
+    res.hidden = false;
+    res.innerHTML = hayRango
+      ? `Entre el <b>${startDay}</b> y el <b>${hasta}</b> de cada mes`
+      : 'Elige en el calendario hasta qué día llega.';
+  }
 }
 document.getElementById('gHastaCal').addEventListener('click', e => {
   const btn = e.target.closest('[data-hc-day]');
@@ -5579,6 +5710,10 @@ function syncGastoRango(){
   if(!esFijo){ chk.checked = false; gHastaSel = null; }
   const mostrar = esFijo && chk.checked;
   document.getElementById('gRangoField').style.display = mostrar ? 'block' : 'none';
+  // Tanda P2 · Fase A: el recuadro agrupa nota + rango y solo se ve con Fijo.
+  document.getElementById('gFijoBox').hidden = !esFijo;
+  document.getElementById('fijoNote').style.display = esFijo ? 'block' : 'none';
+  if(!mostrar) document.getElementById('gRangoResumen').hidden = true;
   if(mostrar) renderHastaCal('gHastaCal', 'gFecha', gHastaSel);
 }
 document.querySelectorAll('#sheetGasto [data-tipo]').forEach(el=>{
@@ -5604,6 +5739,7 @@ function syncCuotaFields(){
     wrap.style.display = mostrar ? '' : 'none';
     if(!mostrar) document.getElementById('gCuotaCompartida').checked = false;
   }
+  syncControlesGasto();   // Tanda P2 · Fase A: el chip de método refleja gMetodo
 }
 document.getElementById('gMetodo').addEventListener('change', syncCuotaFields);
 // Nueva cuota = formulario de gasto ya en «Crédito». Lo usan el Paso 5 del onboarding y
@@ -5624,6 +5760,10 @@ function syncIngresoRango(){
   if(!esFijo){ chk.checked = false; iHastaSel = null; }
   const mostrar = esFijo && chk.checked;
   document.getElementById('iRangoField').style.display = mostrar ? 'block' : 'none';
+  // Tanda P2 · Fase A: el recuadro agrupa nota + rango y solo se ve con Fijo.
+  document.getElementById('iFijoBox').hidden = !esFijo;
+  document.getElementById('iFijoNote').style.display = esFijo ? 'block' : 'none';
+  if(!mostrar) document.getElementById('iRangoResumen').hidden = true;
   if(mostrar) renderHastaCal('iHastaCal', 'iFecha', iHastaSel);
 }
 document.querySelectorAll('#sheetIngreso [data-itipo]').forEach(el=>{
@@ -5641,6 +5781,196 @@ function fillSelect(id, options, selected){
   const sel = document.getElementById(id);
   sel.innerHTML = options.map(o=>`<option value="${o}" ${o===selected?'selected':''}>${o}</option>`).join('');
 }
+
+/* ==================== Tanda P2 · Fase A: registro rápido v2 ====================
+   Solo presentación. Los inputs/selects de siempre (gFecha, gCategoria, gMetodo,
+   gDescripcion, iFecha, iFuente, iDescripcion) siguen siendo la fuente de verdad: los
+   chips solo escriben en ellos, y syncControlesGasto() / syncControlesIngreso() son la
+   ÚNICA vía de repintado (leen los inputs y dibujan los chips). Quien escriba en esos
+   inputs por código (openGastoForm, openCuotaForm, onboarding…) llama a la sync
+   correspondiente o a una función que ya la llama (syncCuotaFields). */
+const FORM_CHIPS_MAX = 6;                       // chips de categoría/fuente visibles antes de «Todas»
+const fechaOtra = { g:false, i:false };         // «Otra fecha» elegida a mano (aunque coincida con hoy/ayer)
+let gCatBase = null, gCatFrecuentes = false, gFavMetodo = {};   // chips iniciales del gasto
+let iFuenteBase = null;                         // chips iniciales del ingreso
+
+function fechaAyerLocalISO(){
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+// "mar 6 oct" — subtítulo de los chips de fecha.
+function fechaChipTxt(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if(!m) return '';
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return ['dom','lun','mar','mié','jue','vie','sáb'][d.getDay()] + ' ' + d.getDate() + ' ' + MESES[d.getMonth()].slice(0,3).toLowerCase();
+}
+function syncFechaChips(prefix){
+  const inp = document.getElementById(prefix + 'Fecha');
+  const box = document.getElementById(prefix + 'FechaChips');
+  if(!inp || !box) return;
+  const v = inp.value, hoy = fechaHoyLocalISO(), ayer = fechaAyerLocalISO();
+  const activo = (fechaOtra[prefix] || (v !== hoy && v !== ayer)) ? 'otra' : (v === hoy ? 'hoy' : 'ayer');
+  box.querySelectorAll('[data-fecha]').forEach(b=>{
+    const k = b.dataset.fecha, on = k === activo;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.disabled = isReadOnly();
+    b.querySelector('small').textContent = k === 'hoy' ? fechaChipTxt(hoy) : k === 'ayer' ? fechaChipTxt(ayer) : (on ? fechaChipTxt(v) : '');
+  });
+  inp.hidden = activo !== 'otra';
+}
+// Primeros chips: los preferidos (frecuentes) que sigan en la lista y luego la lista en orden, máx. 6.
+function chipsBaseLista(lista, preferidos){
+  const out = [];
+  (preferidos || []).forEach(n=>{ if(lista.includes(n) && !out.includes(n) && out.length < FORM_CHIPS_MAX) out.push(n); });
+  lista.forEach(n=>{ if(out.length < FORM_CHIPS_MAX && !out.includes(n)) out.push(n); });
+  return out;
+}
+// Chip con el ícono de la fuente única (catIcon → categoriaIconos > CAT_ICONS > 'tag')
+// dentro de un círculo del color de la fuente única (colorDeCategoria / colorDeFuente).
+function catChipHtml(nombre, color, activo){
+  return `<button type="button" class="form-chip cat-chip${activo ? ' active' : ''}" data-val="${escHtml(nombre)}" aria-pressed="${activo ? 'true' : 'false'}"${isReadOnly() ? ' disabled' : ''}>`
+    + `<span class="cat-chip-ic" style="--cc:${color}" aria-hidden="true">${catIcon(nombre)}</span>`
+    + `<span class="cat-chip-txt">${escHtml(nombre)}</span></button>`;
+}
+// Fila de chips + «Todas ▾» (grilla en la misma hoja, aria-expanded/aria-controls).
+// La seleccionada siempre se ve: si no está entre los iniciales, se agrega al final.
+function pintarChipsLista(boxId, todasId, lista, base, valor, colorFn){
+  const box = document.getElementById(boxId), todas = document.getElementById(todasId);
+  if(!box || !todas) return;
+  const visibles = base.filter(n=> lista.includes(n));
+  if(valor && lista.includes(valor) && !visibles.includes(valor)) visibles.push(valor);
+  const hayMas = lista.some(n=> !visibles.includes(n));
+  if(!hayMas) todas.hidden = true;
+  const abierta = !todas.hidden;
+  box.innerHTML = visibles.map(n=> catChipHtml(n, colorFn(n), n === valor)).join('')
+    + (hayMas ? `<button type="button" class="form-chip cat-chip-todas" data-todas aria-expanded="${abierta ? 'true' : 'false'}" aria-controls="${todasId}"${isReadOnly() ? ' disabled' : ''}>Todas ${abierta ? '▴' : '▾'}</button>` : '');
+  todas.innerHTML = abierta ? lista.map(n=> catChipHtml(n, colorFn(n), n === valor)).join('') : '';
+}
+function syncMetodoChips(){
+  const sel = document.getElementById('gMetodo'), box = document.getElementById('gMetodoChips');
+  if(!sel || !box) return;
+  const lista = (state.config && state.config.metodos) || [];
+  const usarChips = lista.length > 0 && lista.length <= 5;   // con más de 5 métodos se usa el select
+  sel.classList.toggle('select-oculto', usarChips);
+  // El rótulo apunta al select solo si se ve; con chips basta el aria-labelledby del grupo.
+  const lbl = document.getElementById('gMetodoLbl');
+  if(lbl){ if(usarChips) lbl.removeAttribute('for'); else lbl.setAttribute('for', 'gMetodo'); }
+  box.innerHTML = usarChips ? lista.map(m=>
+    `<button type="button" class="form-chip pay-chip${m === sel.value ? ' active' : ''}" data-val="${escHtml(m)}" aria-pressed="${m === sel.value ? 'true' : 'false'}"${isReadOnly() ? ' disabled' : ''}>${escHtml(m)}</button>`
+  ).join('') : '';
+}
+// Monto protagonista: el ancho del input sigue a la cifra para que el «$» quede pegado.
+function ajustarMontoHero(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const n = (el.value || el.placeholder || '0').length;
+  el.style.width = `calc(${Math.max(1, n)}ch + 6px)`;
+}
+// Descripción: textarea que crece con el texto (solo si la hoja está visible).
+function autoGrowDesc(el){
+  if(!el) return;
+  if(!el.offsetParent){ el.style.height = ''; return; }
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
+}
+function syncControlesGasto(){
+  try{
+    syncFechaChips('g');
+    const lista = (state.config && state.config.categorias) || [];
+    pintarChipsLista('gCatChips', 'gCatTodas', lista, gCatBase || chipsBaseLista(lista, []),
+      document.getElementById('gCategoria').value, colorDeCategoria);
+    document.getElementById('gCatSub').textContent = gCatFrecuentes ? '· frecuentes primero' : '';
+    syncMetodoChips();
+    ajustarMontoHero('gMonto');
+    autoGrowDesc(document.getElementById('gDescripcion'));
+  }catch(err){
+    console.warn('syncControlesGasto falló, el formulario sigue usable con los campos base:', err);
+  }
+}
+function syncControlesIngreso(){
+  try{
+    syncFechaChips('i');
+    const lista = (state.config && state.config.fuentes) || [];
+    pintarChipsLista('iFuenteChips', 'iFuenteTodas', lista, iFuenteBase || chipsBaseLista(lista, []),
+      document.getElementById('iFuente').value, colorDeFuente);
+    ajustarMontoHero('iMonto');
+    autoGrowDesc(document.getElementById('iDescripcion'));
+  }catch(err){
+    console.warn('syncControlesIngreso falló, el formulario sigue usable con los campos base:', err);
+  }
+}
+// Elegir categoría: escribe gCategoria (y el método dominante si la categoría es una
+// frecuente, como hacían los chips «Categorías frecuentes»), cierra «Todas» y repinta.
+function elegirCategoriaGasto(cat){
+  fillSelect('gCategoria', state.config.categorias, cat);
+  const m = gFavMetodo[cat];
+  if(m && state.config.metodos.includes(m)) fillSelect('gMetodo', state.config.metodos, m);
+  document.getElementById('gCatTodas').hidden = true;
+  syncCuotaFields();   // Crédito abre las cuotas; termina repintando con syncControlesGasto()
+}
+function elegirFuenteIngreso(f){
+  document.getElementById('iFuente').value = f;
+  document.getElementById('iFuenteTodas').hidden = true;
+  syncControlesIngreso();
+}
+(function initRegistroRapidoV2(){
+  const $id = id => document.getElementById(id);
+  // Fecha: Hoy / Ayer escriben en el input; «Otra fecha» lo muestra y lo enfoca.
+  [['g', syncControlesGasto], ['i', syncControlesIngreso]].forEach(([px, sync])=>{
+    const inp = $id(px + 'Fecha');
+    $id(px + 'FechaChips').addEventListener('click', e=>{
+      const b = e.target.closest('[data-fecha]');
+      if(!b || b.disabled) return;
+      if(b.dataset.fecha === 'otra'){
+        fechaOtra[px] = true;
+        syncFechaChips(px);
+        try{ inp.focus(); if(typeof inp.showPicker === 'function') inp.showPicker(); }catch(_){}
+        return;
+      }
+      fechaOtra[px] = false;
+      inp.value = b.dataset.fecha === 'hoy' ? fechaHoyLocalISO() : fechaAyerLocalISO();
+      inp.dispatchEvent(new Event('change'));   // reencuadra el calendario de rango si está abierto
+    });
+    inp.addEventListener('change', ()=> syncFechaChips(px));
+    // Descripción: sin saltos de línea (Enter = listo; un salto pegado pasa a espacio).
+    const ta = $id(px + 'Descripcion');
+    ta.addEventListener('keydown', e=>{
+      if(e.key === 'Enter' && !e.isComposing){ e.preventDefault(); ta.blur(); }
+    });
+    ta.addEventListener('input', ()=>{
+      if(/[\r\n]/.test(ta.value)) ta.value = ta.value.replace(/[ \t]*[\r\n]+[ \t]*/g, ' ');
+      autoGrowDesc(ta);
+    });
+    // Monto: el ancho sigue a la cifra (al escribir y al tocar un monto rápido).
+    const mId = px === 'g' ? 'gMonto' : 'iMonto';
+    $id(mId).addEventListener('input', ()=> ajustarMontoHero(mId));
+    $id(px === 'g' ? 'montoChipsG' : 'montoChipsI').addEventListener('click', ()=> ajustarMontoHero(mId));
+  });
+  // Categoría / fuente: chips iniciales, «Todas ▾» y grilla completa.
+  [['gCatChips', 'gCatTodas', v=> elegirCategoriaGasto(v), syncControlesGasto],
+   ['iFuenteChips', 'iFuenteTodas', v=> elegirFuenteIngreso(v), syncControlesIngreso]].forEach(([boxId, todasId, elegir, sync])=>{
+    const onClick = e=>{
+      const t = e.target.closest('[data-todas]');
+      if(t){ if(t.disabled) return; $id(todasId).hidden = !$id(todasId).hidden; sync(); return; }
+      const b = e.target.closest('[data-val]');
+      if(!b || b.disabled) return;
+      elegir(b.dataset.val);
+    };
+    $id(boxId).addEventListener('click', onClick);
+    $id(todasId).addEventListener('click', onClick);
+  });
+  // Pagado con: escribe gMetodo y corre la misma lógica que el select (cuotas de Crédito).
+  $id('gMetodoChips').addEventListener('click', e=>{
+    const b = e.target.closest('[data-val]');
+    if(!b || b.disabled) return;
+    fillSelect('gMetodo', state.config.metodos, b.dataset.val);
+    syncCuotaFields();
+  });
+  $id('gCategoria').addEventListener('change', syncControlesGasto);
+  $id('iFuente').addEventListener('change', syncControlesIngreso);
+})();
 
 /* Tanda C3: selector de cuenta de los formularios de gasto/ingreso. `selId` es el
    <select>, `fieldId` el .field contenedor (se oculta si sólo hay una cuenta viva y el
@@ -5802,41 +6132,27 @@ function openGastoForm(expenseId){
   }
   syncGastoRango();
 
-  // Chips de categorías frecuentes: solo al crear un gasto nuevo, no al editar.
-  // Aislado en try/catch: pase lo que pase aquí, el formulario debe abrirse igual.
+  // Tanda P2 · Fase A: chips de categoría. Al crear: frecuentes primero (gastosFavoritos,
+  // máx. 6, con su método dominante) y luego la lista en orden; al editar: la lista en
+  // orden. La categoría elegida siempre se ve (pintarChipsLista). Aislado en try/catch:
+  // pase lo que pase aquí, el formulario debe abrirse igual.
+  fechaOtra.g = false;
+  document.getElementById('gCatTodas').hidden = true;
   try{
-    const favField = document.getElementById('favChipsField');
-    const favBox = document.getElementById('favChips');
     const favs = expenseId ? [] : gastosFavoritos();
-    if(favs.length){
-      favBox.innerHTML = favs.map((f,idx)=>
-        `<button type="button" class="chip" data-fav="${idx}">${catIcon(f.category)}${escHtml(f.category)}</button>`
-      ).join('');
-      favField.style.display = 'block';
-      favBox.querySelectorAll('[data-fav]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const f = favs[parseInt(btn.dataset.fav, 10)];
-          // Pre-llena solo Categoría (y Método si hay uno dominante). Monto y
-          // Descripción los completa el usuario.
-          fillSelect('gCategoria', state.config.categorias, f.category);
-          if(f.method && state.config.metodos.includes(f.method)){
-            fillSelect('gMetodo', state.config.metodos, f.method);
-          }
-          syncCuotaFields();
-        });
-      });
-    } else {
-      favBox.innerHTML = '';
-      favField.style.display = 'none';
-    }
+    gFavMetodo = {};
+    favs.forEach(f=>{ if(f.method) gFavMetodo[f.category] = f.method; });
+    gCatBase = chipsBaseLista(state.config.categorias, favs.map(f=> f.category));
+    gCatFrecuentes = favs.some(f=> state.config.categorias.includes(f.category));
   }catch(err){
-    console.warn('No se pudieron renderizar los chips de categorías frecuentes:', err);
-    document.getElementById('favChipsField').style.display = 'none';
+    console.warn('No se pudieron calcular las categorías frecuentes:', err);
+    gCatBase = null; gCatFrecuentes = false; gFavMetodo = {};
   }
 
-  syncCuotaFields();
+  syncCuotaFields();   // también repinta los chips (syncControlesGasto)
   applyReadOnlyLock('sheetGasto');
   openSheet('sheetGasto');
+  autoGrowDesc(document.getElementById('gDescripcion'));
 }
 
 let confirmarMetodoSinCuotas = false;   // Tanda W: "Sí" del aviso de gasto-a-cuotas con método sin cuotas
@@ -6145,8 +6461,15 @@ function openIngresoForm(incomeId){
     document.getElementById('btnDeleteIngreso').style.display = 'block';
   }
   syncIngresoRango();
+  // Tanda P2 · Fase A: chips de fuente (las primeras de la lista; sin fuente activa al
+  // crear — se mantiene el «Elige una fuente…» obligatorio del select).
+  fechaOtra.i = false;
+  document.getElementById('iFuenteTodas').hidden = true;
+  iFuenteBase = chipsBaseLista(state.config.fuentes || [], []);
+  syncControlesIngreso();
   applyReadOnlyLock('sheetIngreso');
   openSheet('sheetIngreso');
+  autoGrowDesc(document.getElementById('iDescripcion'));
 }
 // Tanda F: el aviso de posible duplicado se implementó SOLO para gastos (btnSaveGasto).
 // Los ingresos quedan fuera de esta tanda a propósito: un doble sueldo o dos ventas del
@@ -11168,6 +11491,7 @@ function applyReadOnlyLock(sheetId){
   const locked = isReadOnly();
   sheet.querySelectorAll('input, select, textarea').forEach(el=> el.disabled = locked);
   sheet.querySelectorAll('.toggle-opt').forEach(el=> el.classList.toggle('ro-disabled', locked));
+  sheet.querySelectorAll('.form-chip').forEach(el=> el.disabled = locked);   // Tanda P2 · Fase A
   // Guardar: se oculta al bloquear y se restaura al desbloquear.
   sheet.querySelectorAll('.btn-primary').forEach(el=> el.style.display = locked ? 'none' : '');
   // Eliminar: solo se oculta al bloquear; su visibilidad normal la fija openGastoForm /

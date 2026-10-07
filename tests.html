@@ -3370,6 +3370,220 @@ async function runTests(){
     }
   }
 
+  // ==================== Tanda P2 · Fase A: registro rápido v2 (gasto e ingreso) ====================
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const stOrig = win.eval('JSON.stringify(state)');
+    const orig = { saveState: win.saveState, flash: win.flashSaveButton };
+    const isoLocal = dt => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    const hoyIso = isoLocal(HOY_PRUEBAS);
+    const ayerD = new Date(HOY_PRUEBAS); ayerD.setDate(ayerD.getDate() - 1);
+    const ayerIso = isoLocal(ayerD);
+    const cerrar = () => [...d.querySelectorAll('.sheet-overlay.open')].forEach(o => win.closeSheet(o.id));
+    const clic = sel => { const el = d.querySelector(sel); if(!el) throw new Error('no existe ' + sel); el.click(); };
+    const activos = box => [...d.querySelectorAll('#' + box + ' .active')].map(b => b.dataset.val || b.dataset.fecha);
+    try{
+      // Sin escrituras reales: saveState y la animación del botón quedan como espías.
+      win.saveState = () => true;
+      win.flashSaveButton = () => {};
+      const st = fixtureBase();
+      st.config.fuentes = ['Sueldo','Trabajos extra','Ventas','Bono','Mesada','Interés','Otros'];
+      for(let k = 0; k < 3; k++) st.expenses.push({ id:'fq'+k, date:isoRel(-1, 3+k), amount:1000, tipo:'Casual', category:'Salud', method:'Débito', nombre:'Farmacia', description:'', cuentaId:'acc1' });
+      st.expenses.push({ id:'viejo', date:'2026-03-14', amount:4500, tipo:'Casual', category:'Regalos', method:'Efectivo', nombre:'Regalo', description:'Para la abuela', cuentaId:'acc1' });
+      st.incomes.push({ id:'iviejo', date:'2026-03-02', amount:9000, tipo:'Casual', source:'Ventas', nombre:'Venta', description:'', cuentaId:'acc1' });
+      setState(win, st); resetCaches(win);
+
+      // (1) Fecha: Hoy al crear; Ayer escribe ayer; edición con fecha antigua → «Otra fecha».
+      cerrar(); win.openGastoForm(null);
+      const gHoy = { v: $('gFecha').value, act: activos('gFechaChips').join(), oculto: $('gFecha').hidden };
+      clic('#gFechaChips [data-fecha="ayer"]');
+      const gAyer = { v: $('gFecha').value, act: activos('gFechaChips').join(), oculto: $('gFecha').hidden };
+      clic('#gFechaChips [data-fecha="hoy"]');
+      const gVuelta = $('gFecha').value;
+      cerrar(); win.openGastoForm('viejo');
+      const gEd = { v: $('gFecha').value, act: activos('gFechaChips').join(), visible: !$('gFecha').hidden };
+      assert(gHoy.v === hoyIso && gHoy.act === 'hoy' && gHoy.oculto && gAyer.v === ayerIso && gAyer.act === 'ayer' && gAyer.oculto
+        && gVuelta === hoyIso && gEd.v === '2026-03-14' && gEd.act === 'otra' && gEd.visible,
+        'P2 A: Gasto — Hoy/Ayer escriben gFecha (reloj de pruebas); en edición con fecha antigua queda activo «Otra fecha» con el input visible',
+        JSON.stringify({ gHoy, gAyer, gVuelta, gEd }));
+      cerrar(); win.openIngresoForm(null);
+      const iHoy = { v: $('iFecha').value, act: activos('iFechaChips').join() };
+      clic('#iFechaChips [data-fecha="ayer"]');
+      const iAyer = $('iFecha').value;
+      clic('#iFechaChips [data-fecha="otra"]');
+      const iOtra = { act: activos('iFechaChips').join(), visible: !$('iFecha').hidden, v: $('iFecha').value };
+      cerrar(); win.openIngresoForm('iviejo');
+      const iEd = { v: $('iFecha').value, act: activos('iFechaChips').join(), visible: !$('iFecha').hidden };
+      assert(iHoy.v === hoyIso && iHoy.act === 'hoy' && iAyer === ayerIso && iOtra.act === 'otra' && iOtra.visible && iOtra.v === ayerIso
+        && iEd.v === '2026-03-02' && iEd.act === 'otra' && iEd.visible,
+        'P2 A: Ingreso — Hoy/Ayer/Otra fecha escriben y reflejan iFecha (también en edición)', JSON.stringify({ iHoy, iAyer, iOtra, iEd }));
+
+      // (2) Categoría: frecuentes primero; el chip escribe gCategoria con ícono y color de la fuente única.
+      cerrar(); win.openGastoForm(null);
+      const primeros = [...d.querySelectorAll('#gCatChips [data-val]')].map(b => b.dataset.val);
+      clic('#gCatChips [data-val="Transporte"]');
+      const chipT = d.querySelector('#gCatChips [data-val="Transporte"]');
+      const icT = chipT.querySelector('.cat-chip-ic');
+      const tmp = d.createElement('span'); tmp.innerHTML = win.catIcon('Transporte');
+      assert(primeros[0] === 'Salud' && $('gCatSub').textContent.includes('frecuentes') && primeros.length <= 6
+        && $('gCategoria').value === 'Transporte' && chipT.classList.contains('active')
+        && icT.style.getPropertyValue('--cc') === win.colorDeCategoria('Transporte') && icT.innerHTML === tmp.innerHTML,
+        'P2 A: chips de categoría — frecuentes primero (máx. 6), el chip escribe gCategoria y usa catIcon + colorDeCategoria',
+        `primeros: ${primeros.join(', ')} · gCategoria: ${$('gCategoria').value} · --cc: ${icT.style.getPropertyValue('--cc')}`);
+      // «Todas ▾»: grilla en la misma hoja con aria-expanded/aria-controls; se colapsa al elegir.
+      clic('#gCatChips [data-todas]');
+      const todasBtn = d.querySelector('#gCatChips [data-todas]');
+      const abierta = { hidden: $('gCatTodas').hidden, exp: todasBtn.getAttribute('aria-expanded'), ctrl: todasBtn.getAttribute('aria-controls'), n: $('gCatTodas').querySelectorAll('[data-val]').length };
+      clic('#gCatTodas [data-val="Varios"]');
+      const tras = { cat: $('gCategoria').value, hidden: $('gCatTodas').hidden, exp: d.querySelector('#gCatChips [data-todas]').getAttribute('aria-expanded'), visible: !!d.querySelector('#gCatChips [data-val="Varios"].active') };
+      assert(!abierta.hidden && abierta.exp === 'true' && abierta.ctrl === 'gCatTodas' && abierta.n === win.eval('state.config.categorias.length')
+        && tras.cat === 'Varios' && tras.hidden && tras.exp === 'false' && tras.visible,
+        'P2 A: «Todas ▾» abre la grilla completa (aria-expanded/aria-controls) y se colapsa al elegir; la elegida queda visible y activa',
+        JSON.stringify({ abierta, tras }));
+      // Edición: la categoría del gasto se ve activa aunque no esté entre los iniciales.
+      cerrar(); win.openGastoForm('viejo');
+      assert($('gCategoria').value === 'Regalos' && !!d.querySelector('#gCatChips [data-val="Regalos"].active') && activos('gMetodoChips').join() === 'Efectivo',
+        'P2 A: en edición quedan activos los chips de la categoría y el método guardados');
+      // Ingreso: sin fuente activa al crear («Elige una fuente…» obligatorio); el chip escribe iFuente con colorDeFuente.
+      cerrar(); win.openIngresoForm(null);
+      const sinFuente = { v: $('iFuente').value, act: activos('iFuenteChips').length };
+      clic('#iFuenteChips [data-val="Sueldo"]');
+      const icS = d.querySelector('#iFuenteChips [data-val="Sueldo"] .cat-chip-ic');
+      const iconosFuentes = win.eval(`DEFAULTS.fuentes.filter(f=> !CAT_ICONS[f] || !ICONS[CAT_ICONS[f]] || CAT_ICONS[f] === 'tag')`);
+      assert(sinFuente.v === '' && sinFuente.act === 0 && $('iFuente').value === 'Sueldo' && icS.style.getPropertyValue('--cc') === win.colorDeFuente('Sueldo')
+        && icS.innerHTML.includes('<svg') && iconosFuentes.length === 0,
+        'P2 A: chips de fuente — sin fuente activa al crear; el chip escribe iFuente con colorDeFuente; las fuentes por defecto tienen ícono propio',
+        JSON.stringify({ sinFuente, sinIcono: iconosFuentes }));
+
+      // (3) Pagado con: chips (≤ 5 métodos); Crédito abre las cuotas; openCuotaForm marca Crédito.
+      cerrar(); win.openGastoForm(null);
+      const selOculto = $('gMetodo').classList.contains('select-oculto');
+      clic('#gMetodoChips [data-val="Crédito"]');
+      const conCredito = { m: $('gMetodo').value, cuotas: $('cuotaFields').classList.contains('open') };
+      clic('#gMetodoChips [data-val="Efectivo"]');
+      const sinCredito = { m: $('gMetodo').value, cuotas: $('cuotaFields').classList.contains('open') };
+      cerrar(); win.openCuotaForm();
+      const viaCuota = { m: $('gMetodo').value, chip: activos('gMetodoChips').join(), cuotas: $('cuotaFields').classList.contains('open') };
+      const orden = [...d.querySelectorAll('#sheetGasto .sheet > *')].map(e => e.id || '');
+      const iPago = orden.indexOf('cuotaFields'), iMetodo = [...d.querySelectorAll('#sheetGasto .sheet > .field')].indexOf($('gMetodoChips').closest('.field'));
+      assert(selOculto && conCredito.m === 'Crédito' && conCredito.cuotas && sinCredito.m === 'Efectivo' && !sinCredito.cuotas
+        && viaCuota.m === 'Crédito' && viaCuota.chip === 'Crédito' && viaCuota.cuotas
+        && $('cuotaFields').previousElementSibling === $('gMetodoChips').closest('.field') && iPago > 0 && iMetodo >= 0,
+        'P2 A: «Pagado con» en chips escribe gMetodo; Crédito abre cuotaFields (justo debajo) y openCuotaForm sigue funcionando',
+        JSON.stringify({ selOculto, conCredito, sinCredito, viaCuota }));
+      win.eval(`state.config.metodos = ['Efectivo','Débito','Crédito','Transferencia','Cheque','Vale'];`);
+      cerrar(); win.openGastoForm(null);
+      const conSelect = { visible: !$('gMetodo').classList.contains('select-oculto'), chips: $('gMetodoChips').children.length, forAttr: $('gMetodoLbl').getAttribute('for') };
+      win.eval(`state.config.metodos = ['Efectivo','Débito','Crédito','Transferencia'];`);
+      cerrar(); win.openGastoForm(null);
+      const conChips = { forAttr: $('gMetodoLbl').hasAttribute('for'), grupo: $('gMetodoChips').getAttribute('aria-labelledby') };
+      assert(conSelect.visible && conSelect.chips === 0 && conSelect.forAttr === 'gMetodo' && !conChips.forAttr && conChips.grupo === 'gMetodoLbl',
+        'P2 A: con más de 5 métodos se mantiene el select (el rótulo lleva for="gMetodo"); con chips, sin for y con aria-labelledby del grupo',
+        JSON.stringify({ conSelect, conChips }));
+
+      // (4) Fijo con rango: el formulario nuevo guarda EXACTAMENTE lo mismo que el flujo previo.
+      const fechaRango = isoRel(0, 6);
+      const CAMPOS = ['date','nombre','amount','category','method','description','tipo','diaHasta','cuentaId'];
+      const derivado = r => { const o = win.applyFixedRangeMeta(r, mesRel(0, 1)); return { esRangoFijo: o.esRangoFijo, ini: o.rangoDiaInicio, fin: o.rangoDiaFin, date: o.date }; };
+      // Flujo previo: los inputs se llenan a mano (como el alta en bloque del onboarding) y se guarda.
+      cerrar(); win.openGastoForm(null);
+      $('gFecha').value = fechaRango; $('gNombre').value = 'Arriendo'; win.setMonto('gMonto', 250000);
+      win.fillSelect('gCategoria', win.eval('state.config.categorias'), 'Arriendo/Vivienda');
+      win.fillSelect('gMetodo', win.eval('state.config.metodos'), 'Transferencia');
+      $('gDescripcion').value = 'Depto';
+      d.querySelectorAll('#sheetGasto [data-tipo]').forEach(x => x.classList.toggle('active', x.dataset.tipo === 'Fijo'));
+      $('gRangoChk').checked = true; win.eval('gHastaSel = 24;');
+      $('btnSaveGasto').onclick();
+      const gA = win.eval('JSON.stringify(state.expenses[state.expenses.length - 1])');
+      // Flujo nuevo: chips de fecha, categoría, método, Tipo, casilla y calendario.
+      cerrar(); win.openGastoForm(null);
+      clic('#gFechaChips [data-fecha="otra"]'); $('gFecha').value = fechaRango; $('gFecha').dispatchEvent(new win.Event('change'));
+      $('gNombre').value = 'Arriendo'; win.setMonto('gMonto', 250000);
+      clic('#gCatChips [data-todas]'); clic('#gCatTodas [data-val="Arriendo/Vivienda"]');
+      clic('#gMetodoChips [data-val="Transferencia"]');
+      $('gDescripcion').value = 'Depto';
+      clic('#sheetGasto [data-tipo="Fijo"]');
+      const cajaFijo = !$('gFijoBox').hidden;
+      clic('#gRangoChk');
+      clic('#gHastaCal [data-hc-day="24"]');
+      const resumen = $('gRangoResumen').textContent;
+      $('btnSaveGasto').onclick();
+      const gB = win.eval('JSON.stringify(state.expenses[state.expenses.length - 1])');
+      const ga = JSON.parse(gA), gb = JSON.parse(gB);
+      const difG = CAMPOS.filter(k => JSON.stringify(ga[k]) !== JSON.stringify(gb[k]));
+      const llavesIguales = Object.keys(ga).sort().join() === Object.keys(gb).sort().join();
+      assert(ga.id !== gb.id && difG.length === 0 && llavesIguales && gb.diaHasta === 24 && gb.tipo === 'Fijo' && cajaFijo
+        && JSON.stringify(derivado(ga)) === JSON.stringify(derivado(gb)) && derivado(gb).esRangoFijo === true && derivado(gb).ini === 6 && derivado(gb).fin === 24
+        && resumen === 'Entre el 6 y el 24 de cada mes',
+        'P2 A: Gasto Fijo con rango — mismos campos guardados (diaHasta) y misma derivación de applyFixedRangeMeta que el flujo previo; resumen «Entre el 6 y el 24 de cada mes»',
+        `diferencias: ${difG.join(',') || 'ninguna'} · derivado: ${JSON.stringify(derivado(gb))} · resumen: ${resumen}`);
+      cerrar(); win.openIngresoForm(null);
+      $('iFecha').value = fechaRango; $('iNombre').value = 'Sueldo'; win.setMonto('iMonto', 900000);
+      $('iFuente').value = 'Sueldo'; $('iDescripcion').value = '';
+      d.querySelectorAll('#sheetIngreso [data-itipo]').forEach(x => x.classList.toggle('active', x.dataset.itipo === 'Fijo'));
+      $('iRangoChk').checked = true; win.eval('iHastaSel = 24;');
+      $('btnSaveIngreso').onclick();
+      const iA = JSON.parse(win.eval('JSON.stringify(state.incomes[state.incomes.length - 1])'));
+      cerrar(); win.openIngresoForm(null);
+      clic('#iFechaChips [data-fecha="otra"]'); $('iFecha').value = fechaRango; $('iFecha').dispatchEvent(new win.Event('change'));
+      $('iNombre').value = 'Sueldo'; win.setMonto('iMonto', 900000);
+      clic('#iFuenteChips [data-val="Sueldo"]');
+      clic('#sheetIngreso [data-itipo="Fijo"]'); clic('#iRangoChk'); clic('#iHastaCal [data-hc-day="24"]');
+      $('btnSaveIngreso').onclick();
+      const iB = JSON.parse(win.eval('JSON.stringify(state.incomes[state.incomes.length - 1])'));
+      const CAMPOS_I = ['date','nombre','amount','source','description','tipo','diaHasta','cuentaId'];
+      const difI = CAMPOS_I.filter(k => JSON.stringify(iA[k]) !== JSON.stringify(iB[k]));
+      assert(iA.id !== iB.id && difI.length === 0 && Object.keys(iA).sort().join() === Object.keys(iB).sort().join() && iB.diaHasta === 24
+        && JSON.stringify(derivado(iA)) === JSON.stringify(derivado(iB)) && derivado(iB).esRangoFijo === true,
+        'P2 A: Ingreso Fijo con rango — mismos campos y misma derivación que el flujo previo', `diferencias: ${difI.join(',') || 'ninguna'}`);
+
+      // (4b) Validación con pie fijo: Ingreso sin fuente → el foco queda en un chip de fuente.
+      // El iframe se hace visible (fuera de pantalla) para que el foco sea real.
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:390px; height:844px; border:0;'; void win.innerWidth; win.syncDeskLayout();
+      cerrar(); win.openIngresoForm(null);
+      $('iNombre').value = 'Venta feria'; win.setMonto('iMonto', 15000);
+      const nIngresos = win.eval('state.incomes.length');
+      $('btnSaveIngreso').onclick();
+      const foco = d.activeElement;
+      const focoOk = !!foco && foco.classList.contains('form-chip') && !!foco.closest('#iFuenteChips');
+      const sinGuardar = win.eval('state.incomes.length') === nIngresos;
+      cerrar();
+      iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+      assert(focoOk && sinGuardar,
+        'P2 A: Ingreso sin fuente — no se guarda y el foco queda en un chip de fuente (campo centrado bajo el pie fijo)',
+        `foco: ${foco && (foco.id || foco.className)} · dentro de iFuenteChips: ${!!(foco && foco.closest && foco.closest('#iFuenteChips'))}`);
+
+      // (5) Descripción: textarea sin saltos de línea; Enter no inserta salto; enterkeyhint=done.
+      cerrar(); win.openGastoForm(null);
+      const ta = $('gDescripcion');
+      ta.value = 'uno\ndos\r\ntres'; ta.dispatchEvent(new win.Event('input'));
+      const ev = new win.KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+      ta.dispatchEvent(ev);
+      assert(ta.tagName === 'TEXTAREA' && $('iDescripcion').tagName === 'TEXTAREA' && ta.value === 'uno dos tres' && ev.defaultPrevented
+        && ta.getAttribute('enterkeyhint') === 'done' && $('iDescripcion').getAttribute('enterkeyhint') === 'done',
+        'P2 A: Descripción en textarea (gasto e ingreso) — un salto pegado pasa a espacio y Enter no inserta salto', `valor: ${JSON.stringify(ta.value)}`);
+
+      // (6) Solo lectura: los chips nuevos quedan deshabilitados al ver un registro.
+      win.eval('state.config.readOnly = true;');
+      cerrar(); win.openGastoForm('viejo');
+      const chipsG = [...d.querySelectorAll('#sheetGasto .form-chip')];
+      cerrar(); win.openIngresoForm('iviejo');
+      const chipsI = [...d.querySelectorAll('#sheetIngreso .form-chip')];
+      win.eval('state.config.readOnly = false;');
+      assert(chipsG.length > 5 && chipsG.every(b => b.disabled) && chipsI.length > 3 && chipsI.every(b => b.disabled),
+        'P2 A: en modo solo lectura todos los chips del formulario quedan deshabilitados', `gasto: ${chipsG.length} · ingreso: ${chipsI.length}`);
+    }catch(e){
+      assert(false, 'P2 A: excepción durante las pruebas del registro rápido v2', e && e.stack || String(e));
+    }finally{
+      try{
+        cerrar();
+        if(iframe.style.display !== 'none'){ iframe.style.cssText = 'display:none'; win.syncDeskLayout(); }
+        win.saveState = orig.saveState; win.flashSaveButton = orig.flash;
+        win.eval('state = ' + stOrig + '; editingExpenseId = null; editingIncomeId = null;'); resetCaches(win);
+      }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
