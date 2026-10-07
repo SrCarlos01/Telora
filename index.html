@@ -645,6 +645,41 @@ button{font-family:inherit;}
   background:rgba(125,155,105,0.16); color:var(--success); display:inline-block; margin-top:2px;
 }
 .metas-add{margin-bottom:18px;}
+/* ---------- Tanda P2 · Fase B: Metas sin datos ----------
+   Estado vacío con anillo ilustrativo, dos sugerencias de METAS_SUGERIDAS como
+   botones-fila y la acción principal. Solo cuando la vista no tiene metas. */
+.metas-vacio{display:flex; flex-direction:column; align-items:center; text-align:center; max-width:440px; margin:0 auto; padding:26px 2px 8px;}
+.mv-anillo{width:118px; height:118px; margin:0 0 22px;}
+.mv-titulo{font-size:26px; font-weight:400; line-height:1.22; color:var(--cream); margin:0 0 10px; text-wrap:balance;}
+.mv-texto{font-size:15px; line-height:1.5; color:var(--cream-dim); margin:0 0 22px; text-wrap:pretty;}
+.mv-sugerencias{width:100%; display:flex; flex-direction:column; gap:10px; margin:0 0 16px;}
+.mv-sug{
+  display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:12px 16px;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  color:var(--cream); font-family:inherit; font-size:15.5px; text-align:left; cursor:pointer;
+  transition:border-color .15s ease, background .15s ease; -webkit-tap-highlight-color:transparent;
+}
+.mv-sug:active{background:var(--surface-2); border-color:var(--gold-dim);}
+.mv-sug:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+.mv-sug-ic{display:flex; color:var(--gold); flex:0 0 auto;}
+.mv-sug-ic .icon{width:20px; height:20px;}
+.mv-sug-txt{flex:1; min-width:0;}
+.mv-sug-tag{font-size:13px; color:var(--cream-dim); flex:0 0 auto;}
+.metas-vacio .btn-primary{margin-top:0;}
+.mv-limite{font-size:14.5px; line-height:1.5; color:var(--cream-dim); margin:0;}
+.mv-limite + .mv-limite{margin-top:8px;}
+/* Pantallas bajas (p. ej. 320×640): todo el estado vacío, incluida «Crear mi primera
+   meta», cabe sobre la barra inferior sin desplazar. */
+@media (max-height:700px){
+  .metas-vacio{padding-top:6px;}
+  .mv-anillo{width:80px; height:80px; margin-bottom:12px;}
+  .mv-titulo{font-size:22px; margin-bottom:6px;}
+  .mv-texto{font-size:14px; margin-bottom:14px;}
+  .mv-sugerencias{gap:8px; margin-bottom:12px;}
+  .mv-sug{min-height:46px; padding:9px 14px; font-size:15px;}
+}
+:root.hc .mv-texto, :root.hc .mv-sug-tag, :root.hc .mv-limite{color:var(--cream);}
+:root.hc .mv-sug{border-width:2px;}
 .debt-manual-note.paused{color:var(--danger);}
 /* Etiqueta "Sin confirmar": cuota que la fecha da por pagada pero el usuario nunca confirmó (Tanda M). */
 .cuota-sinconf{
@@ -6739,6 +6774,11 @@ document.querySelectorAll('#sheetMeta [data-mautotipo]').forEach(el=>{
 let editingGoalId = null;
 // Nº de metas que cuentan para el límite freemium: solo las que NO fueron eliminadas.
 function activeGoalsCount(){ return state.goals.filter(g=> g.goalEndMonthKey == null).length; }
+// Texto único del límite de metas de la versión gratuita (openMetaForm, guardado de la
+// meta y estado vacío de Metas — Tanda P2 · Fase B).
+function textoLimiteMetas(){
+  return `La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`;
+}
 
 function openMetaForm(goalId){
   // A diferencia de gasto/ingreso, la tarjeta de la meta ya muestra su detalle
@@ -6748,7 +6788,7 @@ function openMetaForm(goalId){
   editingGoalId = goalId || null;
 
   if(!editingGoalId && activeGoalsCount() >= GOALS_FREE_LIMIT){
-    showToast(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`, 'error');
+    showToast(textoLimiteMetas(), 'error');
     return;
   }
 
@@ -6873,7 +6913,7 @@ document.getElementById('btnSaveMeta').onclick = ()=>{
   }
 
   if(activeGoalsCount() >= GOALS_FREE_LIMIT){
-    showToast(`La versión gratuita permite hasta ${GOALS_FREE_LIMIT} metas activas. Elimina una meta existente para crear otra.`, 'error');
+    showToast(textoLimiteMetas(), 'error');
     return;
   }
   state.goals.push({
@@ -7095,11 +7135,62 @@ function renderRachaRegistro(){
 }
 
 /* ==================== RENDER: METAS ==================== */
+/* ==================== Tanda P2 · Fase B: Metas sin datos ====================
+   Se muestra cuando la vista (cuenta activa o Total) no tiene metas. Las sugerencias
+   salen de METAS_SUGERIDAS (0 = Fondo de emergencia, 1 = Vacaciones/Viaje) y solo
+   precargan sheetMeta (editable): no se crea nada hasta confirmar con Guardar. La
+   acción vive en el propio estado vacío, así que btnNuevaMeta y tgMetas se ocultan.
+   Si el límite gratuito ya está cubierto por metas de otras cuentas, no se ofrece crear:
+   se muestra el mismo texto de límite que usa openMetaForm(). */
+const ICONO_META_SUGERIDA = { 'Fondo de emergencia':'archive', 'Vacaciones/Viaje':'plane' };
+function renderMetasVacio(box){
+  document.getElementById('btnNuevaMeta').style.display = 'none';
+  document.getElementById('tgMetas').style.display = 'none';
+  // Anillo ilustrativo: pista completa + arco de 100° desde las 12, círculo interior y punto.
+  const anillo = `<svg class="mv-anillo" viewBox="0 0 120 120" aria-hidden="true" focusable="false">`
+    + `<circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface-3)" stroke-width="10"/>`
+    + `<path d="M60 10 A50 50 0 0 1 109.24 68.68" fill="none" stroke="var(--gold)" stroke-width="10" stroke-linecap="round"/>`
+    + `<circle cx="60" cy="60" r="28" fill="none" stroke="var(--border)" stroke-width="2"/>`
+    + `<circle cx="60" cy="60" r="6" fill="var(--gold)"/></svg>`;
+  if(activeGoalsCount() >= GOALS_FREE_LIMIT){
+    box.innerHTML = `<div class="metas-vacio">${anillo}`
+      + `<p class="mv-limite">${textoLimiteMetas()}</p>`
+      + `<p class="mv-limite">Tus metas activas están en otras cuentas; elige «Total» para verlas.</p></div>`;
+    return;
+  }
+  const sugeridas = METAS_SUGERIDAS.slice(0, 2);
+  box.innerHTML = `<div class="metas-vacio">${anillo}`
+    + `<h2 class="mv-titulo">Ponle nombre a lo que quieres lograr</h2>`
+    + `<p class="mv-texto">Define un monto y una fecha, y Telora te dice cuánto apartar cada mes.</p>`
+    + `<div class="mv-sugerencias">`
+    + sugeridas.map((m, i)=>
+        `<button type="button" class="mv-sug" data-sug="${i}">`
+        + `<span class="mv-sug-ic" aria-hidden="true">${icon(ICONO_META_SUGERIDA[m.nombre] || 'target')}</span>`
+        + `<span class="mv-sug-txt">${escHtml(m.nombre)}</span>`
+        + (i === 0 ? `<span class="mv-sug-tag">Sugerida</span>` : '')
+        + `</button>`).join('')
+    + `</div>`
+    + `<button type="button" class="btn-primary" id="btnPrimeraMeta">Crear mi primera meta</button></div>`;
+  box.querySelectorAll('[data-sug]').forEach(b=>{
+    b.addEventListener('click', ()=> abrirMetaSugerida(sugeridas[parseInt(b.dataset.sug, 10)]));
+  });
+  document.getElementById('btnPrimeraMeta').addEventListener('click', ()=> openMetaForm());
+}
+// Mismo patrón que el onboarding («elegir-meta»): abre la hoja en modo crear y precarga
+// nombre y monto sugeridos. Si openMetaForm no abrió (solo lectura / límite), no toca nada.
+function abrirMetaSugerida(m){
+  if(!m) return;
+  openMetaForm(null);
+  if(!document.getElementById('sheetMeta').classList.contains('open')) return;
+  document.getElementById('mNombre').value = m.nombre;
+  if(m.monto != null) setMonto('mMonto', m.monto);
+}
 function renderMetas(){
   const box = document.getElementById('mList');
   const chartBox = document.getElementById('mChart');
   document.getElementById('btnNuevaMeta').style.display =
     activeGoalsCount() >= GOALS_FREE_LIMIT ? 'none' : 'block';
+  document.getElementById('tgMetas').style.display = '';   // Tanda P2 · Fase B: solo se oculta en el estado vacío
   syncChartToggle('metas');
 
   // La pestaña Metas es independiente del selector de mes: muestra SIEMPRE las metas
@@ -7115,7 +7206,7 @@ function renderMetas(){
 
   if(visibles.length === 0){
     box.style.display = ''; chartBox.style.display = 'none';
-    box.innerHTML = `<div class="empty-state">${icon('target')}<p>Aún no tienes metas de ahorro.<br>Crea una para seguir tu progreso mes a mes.</p></div>`;
+    renderMetasVacio(box);
     return;
   }
 

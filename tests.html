@@ -3584,6 +3584,74 @@ async function runTests(){
     }
   }
 
+  // ==================== Tanda P2 · Fase B: Metas sin datos ====================
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const stOrig = win.eval('JSON.stringify(state)');
+    const cerrar = () => [...d.querySelectorAll('.sheet-overlay.open')].forEach(o => win.closeSheet(o.id));
+    const visible = el => !!el && el.style.display !== 'none';
+    const meta = (id, cuentaId) => ({ id, name:'Meta ' + id, montoObjetivo:100000, fechaLimite:isoRel(6, 1), aportes:[], aporteAutomatico:{ activo:false, tipo:'monto', monto:0, valor:0, diaDelMes:1 }, cuentaId, goalEndMonthKey:null });
+    try{
+      // (1) 0 metas: estado vacío con título, texto, 2 sugerencias de METAS_SUGERIDAS y la acción; sin btnNuevaMeta ni tgMetas.
+      const st = fixtureBase(); setState(win, st); resetCaches(win);
+      win.renderMetas();
+      const vac = $('mList').querySelector('.metas-vacio');
+      const sugs = [...$('mList').querySelectorAll('.mv-sug')];
+      const nombres = sugs.map(b => b.querySelector('.mv-sug-txt').textContent);
+      const esperados = win.eval('METAS_SUGERIDAS.slice(0,2).map(m=> m.nombre)');
+      assert(!!vac && vac.querySelector('.mv-titulo').textContent === 'Ponle nombre a lo que quieres lograr'
+        && vac.querySelector('.mv-texto').textContent === 'Define un monto y una fecha, y Telora te dice cuánto apartar cada mes.'
+        && JSON.stringify(nombres) === JSON.stringify(esperados) && !!sugs[0].querySelector('.mv-sug-tag') && !sugs[1].querySelector('.mv-sug-tag')
+        && !!$('btnPrimeraMeta') && !visible($('btnNuevaMeta')) && !visible($('tgMetas')) && !!vac.querySelector('svg.mv-anillo'),
+        'P2 B: Metas con 0 metas — estado vacío (anillo, título, texto), 2 sugerencias de METAS_SUGERIDAS («Sugerida» en la 1ª) y sin btnNuevaMeta/tgMetas',
+        `sugerencias: ${nombres.join(' / ')} · btnNuevaMeta: ${$('btnNuevaMeta').style.display} · tgMetas: ${$('tgMetas').style.display}`);
+      // (2) La sugerencia precarga sheetMeta (editable) sin crear registros.
+      cerrar(); sugs[0].click();
+      const pre = { abierta: $('sheetMeta').classList.contains('open'), nombre: $('mNombre').value, monto: $('mMonto').value, titulo: $('metaTitle').textContent, metas: win.eval('state.goals.length') };
+      cerrar(); $('btnPrimeraMeta').click();
+      const vacia = { abierta: $('sheetMeta').classList.contains('open'), nombre: $('mNombre').value, monto: $('mMonto').value, metas: win.eval('state.goals.length') };
+      cerrar();
+      const m0 = win.eval('METAS_SUGERIDAS[0]');
+      assert(pre.abierta && pre.nombre === m0.nombre && win.parseMonto($('mMonto')) !== undefined && pre.monto === win.formatMiles(String(m0.monto))
+        && pre.titulo === 'Nueva meta' && pre.metas === 0 && vacia.abierta && vacia.nombre === '' && vacia.monto === '' && vacia.metas === 0,
+        'P2 B: la sugerencia abre sheetMeta precargada (nombre y monto) sin crear nada; «Crear mi primera meta» la abre vacía',
+        JSON.stringify({ pre, vacia }));
+      // (3) Solo lectura: tocar una sugerencia no abre la hoja.
+      win.eval('state.config.readOnly = true;'); win.renderMetas();
+      $('mList').querySelector('.mv-sug').click();
+      const roAbierta = $('sheetMeta').classList.contains('open');
+      win.eval('state.config.readOnly = false;'); cerrar();
+      assert(!roAbierta, 'P2 B: en modo solo lectura la sugerencia no abre ni precarga sheetMeta');
+      // (4) Con ≥ 1 meta: lista normal, btnNuevaMeta y tgMetas visibles.
+      const st1 = fixtureBase(); st1.goals.push(meta('g1', 'acc1')); setState(win, st1); resetCaches(win);
+      win.renderMetas();
+      assert(!$('mList').querySelector('.metas-vacio') && visible($('btnNuevaMeta')) && visible($('tgMetas')),
+        'P2 B: con 1 meta o más no hay estado vacío y btnNuevaMeta/tgMetas vuelven a verse',
+        `btnNuevaMeta: ${$('btnNuevaMeta').style.display} · tgMetas: ${$('tgMetas').style.display}`);
+      // (5) Vista de una cuenta sin metas pero con el límite gratuito cubierto por otra cuenta:
+      //     estado vacío sin sugerencias ni botón, con el texto de límite de openMetaForm.
+      const st2 = fixtureBase();
+      st2.accounts.push({ id:'acc2', nombre:'Ahorros', orden:1, archivada:false });
+      st2.config.cuentaActiva = 'acc2';
+      const limite = win.eval('GOALS_FREE_LIMIT');
+      for(let k = 0; k < limite; k++) st2.goals.push(meta('gl' + k, 'acc1'));
+      setState(win, st2); resetCaches(win);
+      win.renderMetas();
+      const vacL = $('mList').querySelector('.metas-vacio');
+      assert(win.ctaVista() === 'acc2' && !!vacL && !vacL.querySelector('.mv-sug') && !$('btnPrimeraMeta')
+        && JSON.stringify([...vacL.querySelectorAll('.mv-limite')].map(p => p.textContent)) === JSON.stringify([win.textoLimiteMetas(), 'Tus metas activas están en otras cuentas; elige «Total» para verlas.'])
+        && win.textoLimiteMetas() === `La versión gratuita permite hasta ${limite} metas activas. Elimina una meta existente para crear otra.`
+        && !win.openMetaForm.toString().includes('otras cuentas') && win.openMetaForm.toString().includes('textoLimiteMetas()')
+        && !visible($('btnNuevaMeta')) && !visible($('tgMetas')),
+        'P2 B: cuenta sin metas con el límite alcanzado — estado vacío sin sugerencias ni botón, con textoLimiteMetas() + la frase de «Total» (que openMetaForm no usa)',
+        `ctaVista: ${win.ctaVista()} · texto: ${vacL && vacL.textContent}`);
+    }catch(e){
+      assert(false, 'P2 B: excepción durante las pruebas de Metas sin datos', e && e.stack || String(e));
+    }finally{
+      try{ cerrar(); win.eval('state = ' + stOrig + '; editingGoalId = null;'); resetCaches(win); win.renderMetas(); }catch(_){}
+    }
+  }
+
   renderResultados();
   checkLocalStorage();
 }
