@@ -1111,6 +1111,8 @@ button{font-family:inherit;}
    inline con tamaños (12.5 / 13.5px) y márgenes (12–18px) distintos en cada sheet;
    unificado aquí a la escala de texto secundario del resto de la app (13px). */
 .sheet-note{font-size:13px; color:var(--cream-dim); line-height:1.5; margin:-8px 0 18px;}
+/* T11 · 0b: hoja abierta cuyo contenido cambió en otra pestaña. */
+.aviso-otra-pestana{margin:0 0 14px; padding:10px 12px; border:1px solid var(--danger); border-radius:12px; background:var(--surface-2); color:var(--cream); font-size:13px; line-height:1.45;}
 :root.hc .sheet-note{color:var(--cream);}
 /* Enlaces a las páginas legales (cuenta de usuario y pie de Configuración). */
 .legal-link{color:var(--gold); text-decoration:underline; text-underline-offset:2px;}
@@ -3946,6 +3948,10 @@ function loadState(){
   // arranca igual con el estado por defecto en vez de romperse en el primer render.
   let s = null;
   try{ s = localStorage.getItem('misfinanzas_data'); }catch(_){ s = null; }
+  // T11 · 0b: el texto exacto que se leyó, antes de migrar (ver escribirEstado). La clave
+  // misfinanzas_gen solo existió en copias locales de prueba de un borrador de la 0b.
+  __rawCargado = s;
+  try{ localStorage.removeItem('misfinanzas_gen'); }catch(_){}
   if(s){
     const parsed = JSON.parse(s);
     // Tanda T11: si `parsed.schemaVersion` no viene o no es un número válido, es un
@@ -4106,6 +4112,58 @@ function loadState(){
        acción que debe tomar el usuario es distinta. */
 let __lastGoodStateJSON = null;
 
+/* ==================== VARIAS PESTAÑAS: guardado condicionado al contenido (T11 · Fase 0b) ====================
+   Cada pestaña tiene su `state` en memoria. Sin esto, una pestaña con el estado viejo pisaba
+   lo que otra había guardado y, con la sincronización, el diff contra la base compartida lo
+   borraba también de la nube. Cada pestaña recuerda el texto EXACTO de misfinanzas_data que
+   leyó (o que escribió por última vez): solo escribe si lo guardado sigue siendo ese texto; si
+   no, relee el estado (sin escribir). Una sola clave: no hay ventana entre dos escrituras y
+   el formato de misfinanzas_data (y del respaldo JSON) no cambia.
+   LIMITACIÓN CONOCIDA: no hay bloqueo para localStorage entre pestañas y comparar y escribir
+   NO es atómico. Si dos guardados caen en el mismo instante, gana el último y el cambio del
+   otro se pierde sin aviso. La consistencia la recupera después el evento storage (que relee
+   el estado en la otra pestaña); la relectura tras escribir casi nunca lo detecta (ver
+   escribirEstado). */
+let __rawCargado = null;              // texto de misfinanzas_data que esta pestaña leyó/escribió (null = no había)
+let ultimoGuardadoRechazado = 0;      // marca de tiempo: showToast calla los toasts de éxito 1500 ms
+const AVISO_OTRA_PESTANA = 'Esto cambió en otra pestaña. Ciérrala y vuelve a abrirla para no perder datos.';
+// null si no hay datos o si el almacenamiento no se puede leer (setItem fallará después con
+// su error de siempre).
+function leerEstadoGuardadoRaw(){
+  try{ return localStorage.getItem('misfinanzas_data'); }catch(_){ return null; }
+}
+// 'ok' | 'rechazado' (otra pestaña guardó antes: no se escribe nada) | 'carrera' (la relectura
+// no devuelve lo escrito). En Chrome la relectura tras setItem devuelve lo que ESTA pestaña
+// escribió (lo de otras pestañas llega después, por IPC), así que 'carrera' casi nunca se
+// activa: es solo una red de seguridad. Lanza los errores de almacenamiento (cuota, bloqueo),
+// igual que setItem.
+function escribirEstado(json){
+  if(leerEstadoGuardadoRaw() !== __rawCargado) return 'rechazado';
+  localStorage.setItem('misfinanzas_data', json);
+  __rawCargado = json;
+  return leerEstadoGuardadoRaw() === json ? 'ok' : 'carrera';
+}
+// Relee `state` desde localStorage (lo que dejó la otra pestaña) y repinta las pantallas. No
+// toca las hojas abiertas: sus campos quedan como el usuario los dejó (ver
+// marcarHojasDesactualizadas). `avisar` = el guardado de esta pestaña se rechazó.
+function recargarPorOtraPestana(avisar){
+  if(avisar) ultimoGuardadoRechazado = Date.now();
+  try{ state = loadState(); }
+  catch(e){ console.warn('[Pestañas] no se pudo releer el estado guardado', e); return; }
+  try{ __lastGoodStateJSON = JSON.stringify(state); }catch(_){}
+  try{ sembrarUltimoDoneVistoSiFalta(); }catch(_){}
+  try{ renderAll(); }catch(_){}
+  if(avisar) showToast('Los datos cambiaron en otra pestaña; vuelve a intentarlo.', 'error', 5000);
+}
+// Antes de leer `state` para sincronizar: si otra pestaña guardó, se relee primero.
+// false = estaba viejo (ya quedó al día).
+function asegurarEstadoVigente(){
+  if(leerEstadoGuardadoRaw() === __rawCargado) return true;
+  console.info('[Pestañas] otra pestaña guardó: se relee el estado antes de seguir.');
+  recargarPorOtraPestana(false);
+  return false;
+}
+
 function classifyStorageError(e){
   const name = (e && e.name) || '';
   const code = e && e.code;
@@ -4122,7 +4180,9 @@ function saveState(){
   try{ json = JSON.stringify(state); }
   catch(_){ return false; }   // ciclo en el estado: no debería ocurrir
   try{
-    localStorage.setItem('misfinanzas_data', json);
+    const r = escribirEstado(json);
+    if(r === 'rechazado'){ recargarPorOtraPestana(true); return false; }
+    if(r === 'carrera'){ console.warn('[Pestañas] carrera: otra pestaña guardó en el mismo instante; se relee el estado.'); recargarPorOtraPestana(true); return false; }
     __lastGoodStateJSON = json;
     alGuardarEstadoSync();   // Tanda 4a: escritura continua a la nube (activa desde 4ef6696; solo actúa en el dispositivo escritor)
     return true;
@@ -4139,10 +4199,14 @@ function saveState(){
 // Guardado silencioso: mismo intento de escritura pero sin aviso bloqueante ni
 // reversión. Para procesos internos (marcar fecha de respaldo, snooze) donde un
 // fallo no debe abrir el diálogo — el diálogo ya salió, o saldrá, por otra vía.
+// T11 · 0b: un rechazo por otra pestaña relee el estado sin aviso (son guardados internos) y
+// no calla los toasts de éxito: eso es solo para el guardado que hace el usuario (saveState).
 function saveStateQuiet(){
   try{
     const json = JSON.stringify(state);
-    localStorage.setItem('misfinanzas_data', json);
+    const r = escribirEstado(json);
+    if(r === 'rechazado'){ recargarPorOtraPestana(false); return false; }
+    if(r === 'carrera'){ console.warn('[Pestañas] carrera: otra pestaña guardó en el mismo instante; se relee el estado.'); recargarPorOtraPestana(false); return false; }
     __lastGoodStateJSON = json;
     alGuardarEstadoSync();   // Tanda 4a: ídem saveState()
     return true;
@@ -4324,6 +4388,9 @@ function prefersReducedMotion(){ return !!(reduceMotionMQ && reduceMotionMQ.matc
    `action` (todos los llamados existentes) se comportan exactamente igual que antes. */
 function showToast(msg, type, ms, action){
   try{
+    // T11 · 0b: tras un guardado rechazado por otra pestaña, el «guardado» de quien llamó
+    // sería falso. Errores y el aviso de otra pestaña sí se muestran.
+    if(type === 'success' && Date.now() - ultimoGuardadoRechazado < 1500) return;
     let host = document.getElementById('toastHost');
     if(!host){
       host = document.createElement('div');
@@ -5608,6 +5675,10 @@ function sheetTopMost(){
 function dismissSheet(el, devolverFoco){
   if(!el) return;
   el.classList.remove('open'); el.style.zIndex = '';
+  if(el.hasAttribute('data-desactualizada')){   // T11 · 0b: al reabrirla toma el estado nuevo
+    el.removeAttribute('data-desactualizada');
+    el.querySelectorAll('.aviso-otra-pestana').forEach(n => n.remove());
+  }
   const origen = el._focoOrigen;
   el._focoOrigen = null;
   if(devolverFoco && origen && origen.isConnected && origen.offsetParent !== null && typeof origen.focus === 'function'){
@@ -16453,6 +16524,7 @@ async function calcularYEncolarSync(){
   const ctx = syncCtx;
   if(!syncHabilitada() || syncPausada) return;
   if(ctx.multi) return conCandadoSync(() => calcularYEncolarSyncMulti(ctx));
+  asegurarEstadoVigente();   // T11 · 0b: el diff nunca parte de un `state` que otra pestaña ya reemplazó
   if(!asegurarIdsSync()) return;
   const base = syncAlmacen.leerBase(ctx.userId);
   let ops, conteos, actual;
@@ -16467,6 +16539,7 @@ async function calcularYEncolarSync(){
     const idsNube = {};
     for(const t of SYNC_TABLAS_CON_ID) idsNube[t] = await syncTransporte.leerIds(t, ctx.userId);
     if(syncCtx !== ctx) return;   // se cerró sesión mientras se leía
+    asegurarEstadoVigente();
     actual = construirSnapshot(state, ctx.userId, ctx.deviceId);   // después del await: la foto más reciente
     ops = opsResync(actual, idsNube);
     conteos = {};
@@ -16509,6 +16582,7 @@ function opcionesSnapshotSync(ctx){
 
 async function calcularYEncolarSyncMulti(ctx){
   if(syncCtx !== ctx || !syncHabilitada() || syncPausada || ctx.inicialBloqueada) return;
+  asegurarEstadoVigente();   // T11 · 0b (el candado pudo esperar)
   if(!asegurarIdsSync()) return;
   const base = syncAlmacen.leerBase(ctx.userId);
   if(!base || !syncAlmacen.leerRevs(ctx.userId)){
@@ -16516,6 +16590,7 @@ async function calcularYEncolarSyncMulti(ctx){
     if(!(await sincronizacionInicialMulti(ctx, base))) return;
     if(syncCtx !== ctx) return;
   }
+  asegurarEstadoVigente();   // después del await
   const baseActual = syncAlmacen.leerBase(ctx.userId) || {};
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId, opcionesSnapshotSync(ctx));
   const ops = diffSnapshots(baseActual, actual);
@@ -16533,6 +16608,7 @@ async function sincronizacionInicialMulti(ctx, base){
   if(res.error || !res.data){ console.warn('[Sync] varios escritores: no se pudo leer la nube completa', res.error); return false; }
   const nube = indexarNube(res.data.filas, ctx.userId);
   const cursor = res.data.cursor;
+  asegurarEstadoVigente();   // T11 · 0b: después del await (fusionInicial y reemplazarLocalConNube leen `state`)
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
   const cola = syncAlmacen.leerCola(ctx.userId);
   const f = fusionInicial({ local: actual, base, nube, cola });
@@ -16572,10 +16648,12 @@ function reemplazarLocalConNube(ctx, nube, cursor){
     }
   }
   const previo = state;
-  state = migrateBackup(estadoDesdeNube(state, nube));
+  const nuevo = migrateBackup(estadoDesdeNube(state, nube));
+  state = nuevo;
   sembrarUltimoDoneVistoSiFalta();
   asegurarIds(state, uid);
-  if(!saveStateQuiet()){ state = previo; return false; }
+  // T11 · 0b: rechazo por otra pestaña -> `state` ya se releyó; no se restaura el viejo.
+  if(!saveStateQuiet()){ if(state === nuevo) state = previo; return false; }
   syncAlmacen.guardarBase(ctx.userId, baseDesdeNube(nube));
   syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
   syncAlmacen.guardarCursor(ctx.userId, cursor);
@@ -16672,7 +16750,10 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
   if(efectivas.some(a => a.accion === 'aplicar' || a.accion === 'aplicarBorrado')){
     const previo = state;
     state = r.estado;
-    if(!saveStateQuiet()){ state = previo; console.warn('[Sync] no se pudo guardar el estado con los cambios remotos'); return false; }
+    // Si no se guardó, NADA de lo de abajo avanza (base, revs, choques, cursor): lo remoto se
+    // vuelve a leer y aplicar en la próxima puesta al día. T11 · 0b: si el rechazo fue por otra
+    // pestaña, saveStateQuiet ya releyó `state` (y `previo` es el estado viejo: no se restaura).
+    if(!saveStateQuiet()){ if(state === r.estado) state = previo; console.warn('[Sync] no se pudo guardar el estado con los cambios remotos'); return false; }
     try{ renderAll(); }catch(_){}
   }
   const nb = actualizarBaseYRevs(base, revs, efectivas);
@@ -16708,6 +16789,7 @@ async function puestaAlDiaSync(ctx){
   const base = syncAlmacen.leerBase(ctx.userId) || {};
   const revs = syncAlmacen.leerRevs(ctx.userId) || {};
   const pendientes = new Set(syncAlmacen.leerCola(ctx.userId).map(claveOpSync));
+  asegurarEstadoVigente();   // T11 · 0b: después de los await (aplicarAccionesSync parte de este `state`)
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
   const acciones = planPuestaAlDia({ local: actual, base, revs, nube, pendientes, completa });
   const n = contarAcciones(acciones);
@@ -16961,6 +17043,10 @@ async function subirDatosIniciales(userId, deviceId){
     const { error: errResiduo } = await supa.from('config_compartida').delete().eq('user_id', userId);
     if(errResiduo) throw new Error('config_compartida (residuo): ' + (errResiduo.message || 'error desconocido'));
 
+    // T11 · 0b: una sola foto del estado vigente para toda la subida (otra pestaña puede
+    // guardar durante los await; lo que cambie después lo sube el resync de la activación).
+    asegurarEstadoVigente();
+    const cfgSubida = state.config || {};
     const accounts  = Array.isArray(state.accounts)  ? state.accounts  : [];
     const transfers = Array.isArray(state.transfers) ? state.transfers : [];
     const expenses  = Array.isArray(state.expenses)  ? state.expenses  : [];
@@ -16982,7 +17068,7 @@ async function subirDatosIniciales(userId, deviceId){
     const aportes = goals.flatMap((g, idx) => filasAportes(g, userId, filasGoals[idx].id));
     await insertarPorLotes('goal_aportes', aportes);
 
-    await insertarPorLotes('config_compartida', [filaConfigCompartida(userId)]);
+    await insertarPorLotes('config_compartida', [filaConfigCompartida(userId, cfgSubida)]);
     // Tanda 4a.1: quien sube queda como escritor único. La fila recién insertada tiene el
     // escritor en null, así que el reclamo solo falla si no hay red (se revierte todo).
     if(ESCRITURA_CONTINUA_ACTIVA){
@@ -16990,7 +17076,7 @@ async function subirDatosIniciales(userId, deviceId){
       if(rol !== 'gano') throw new Error('config_compartida: no se pudo reclamar el rol de escritor (' + rol + ')');
     }
 
-    const { error: errDisp } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId));
+    const { error: errDisp } = await supa.from('config_dispositivo').insert(filaConfigDispositivo(userId, deviceId, cfgSubida));
     if(errDisp) throw new Error('config_dispositivo: ' + (errDisp.message || 'error desconocido'));
 
     quitarMarcaSubidaPendiente();
@@ -17111,6 +17197,7 @@ async function intentarSubidaInicial(session){
     // Caso A: nadie ha confirmado todavía. Tanda L1: sin datos financieros locales no hay
     // nada que atribuir, así que no se pregunta: se asocia el dispositivo directamente
     // (mismo resultado que «Sí, son míos» con una base vacía). Con datos, se pregunta.
+    asegurarEstadoVigente();   // T11 · 0b: la decisión se toma con el estado vigente (hubo await)
     if(sinDatosFinancieros(state)){
       marcarDuenoConfirmado(userId);
       await subirDatosIniciales(userId, deviceId);
@@ -17126,7 +17213,7 @@ async function intentarSubidaInicial(session){
 
 // S1 · T7: dispositivo sin datos financieros que entra a una cuenta con datos en modo varios
 // escritores. Con datos locales y sin candado sigue el camino de siempre (pregunta de T11).
-function entraSinDatosAMulti(){ return multiActiva() && sinDatosFinancieros(state); }
+function entraSinDatosAMulti(){ asegurarEstadoVigente(); return multiActiva() && sinDatosFinancieros(state); }
 
 let subidaDuenoCtx = null;   // { userId, deviceId }
 document.getElementById('btnConfirmarDueno').onclick = async ()=>{
@@ -17169,6 +17256,7 @@ async function ofrecerDispositivoLegado(userId, deviceId){
   legadoCtx = { userId, deviceId };
   abrirCuandoLibre(()=>{
     if(!legadoCtx || legadoCtx.userId !== userId) return;   // se cerró sesión mientras esperaba
+    asegurarEstadoVigente();   // T11 · 0b: el usuario decide con los conteos vigentes
     const n = k => Array.isArray(state[k]) ? state[k].length : 0;   // local al momento de mostrar
     document.getElementById('legadoConteoLocal').textContent =
       textoConteosLegado({ expenses: n('expenses'), incomes: n('incomes'), debts: n('debts'), goals: n('goals') });
@@ -17774,6 +17862,93 @@ function debeRecargarPorBorradoLocal(e){
 }
 function recargarPorBorradoLocal(){ location.reload(); }
 window.addEventListener('storage', e => { if(debeRecargarPorBorradoLocal(e)) recargarPorBorradoLocal(); });
+
+/* ---- T11 · 0b: otra pestaña guardó (experiencia; la corrección es escribirEstado) ----
+   Se relee `state` y se repintan las pantallas, pero las hojas abiertas NO se repintan (el
+   usuario perdería lo que escribía): las de edición se marcan, muestran el aviso y su botón
+   de guardar queda bloqueado hasta cerrarlas (dismissSheet quita la marca). «Tu cuenta», las
+   de lectura y Configuración sin nada escrito no se marcan. El borrado (newValue null) lo
+   atiende el listener de arriba. */
+// Toda hoja con un botón que coincida con SELECTOR_GUARDAR_HOJA está en UNA de estas tres listas
+// (lo verifica una prueba de inventario en tests.html).
+// Se marcan siempre: guardan (o confirman algo que guarda) sobre registros de `state`.
+const HOJAS_EDICION = ['sheetGasto','sheetIngreso','sheetMeta','sheetAportar','sheetAutoMeta','sheetTransferir',
+  'sheetCuentaEditar','sheetCuentaBorrar','sheetCatEditar','sheetCatIcon','sheetCatColor','sheetCfgMigrar',
+  'sheetMigrarCuotasMetas','sheetGastoMetodoAviso','sheetGastoDuplicado','sheetConfirmarFechaFijo',
+  'sheetConfirmGoal','sheetConfirmDebt'];
+// Se marcan solo si el usuario tiene texto escrito (agregar o renombrar un ítem): sin cambios
+// pendientes no hay nada que perder y sus listas se rearman al volver a abrirlas.
+const HOJAS_EDICION_CON_TEXTO = ['cfgHojaCategorias','cfgHojaMetodos','cfgHojaFuentes','cfgHojaCuentas'];
+// Nunca se marcan, aunque tengan un botón principal:
+const HOJAS_SIN_MARCA = [
+  'sheetCuenta',             // «Tu cuenta»: sesión y login; no edita `state`
+  'sheetBienvenidaCuenta',   // invitación a crear cuenta; no edita `state`
+  'sheetOnboarding',         // primer uso: corre antes de que existan otros datos que pisar
+  'sheetCierreMes',          // pantalla de lectura del mes cerrado
+  'sheetConfirmRestore',     // reemplaza TODO el estado por un archivo elegido: no depende de lo leído
+  'sheetConfirmarDueno',     // sube a la nube; asegurarEstadoVigente() relee antes de la foto
+  'sheetSyncBorradoMasivo',  // confirma ops ya calculadas; procesarCambiosSync rehace el diff con el estado vigente
+  'sheetLegadoEscritor',     // reclama el rol de escritor; no edita `state`
+  'sheetEliminarCuenta',     // borra la cuenta en el servidor; no edita `state`
+  'sheetBackupShare',        // compartir/descargar un archivo ya armado
+  'sheetExportar',           // exporta a Excel (solo lee)
+  'sheetResumenImg',         // imagen del resumen (solo lee)
+  'sheetInteres',            // calculadora ilustrativa (solo lee)
+  'sheetCuotaProyeccion',    // fila virtual de cuota: solo lee; su botón abre la compra original
+  'sheetChoice',             // elegir gasto o ingreso: solo abre otra hoja
+  'sheetConfig',             // menú de Configuración: sus filas abren hojas hijas
+  'cfgHojaApariencia','cfgHojaNotif','cfgHojaInicio','cfgHojaRespaldo'   // preferencias de un toque, sin texto que perder
+];
+const SELECTOR_GUARDAR_HOJA = '.btn-primary, .btn-danger, button[type="submit"], .small-btn, .cfg-rename-ok, [data-addlist], '
+  + '#btnCuentaEditarArchivar, #btnCatIconDefault, #btnCatColorDefault, #catIconGrid button, #catColorGrid button';
+// Cerrar nunca se bloquea: [data-close] (incluye «Cancelar»), «‹ Configuración», la X.
+const SELECTOR_CERRAR_HOJA = '[data-close], .cfg-volver, .hoja-cerrar';
+function hojaConTextoEscrito(el){
+  return [...el.querySelectorAll('input:not([type]), input[type="text"], input[type="number"], textarea')].some(i => String(i.value).trim() !== '');
+}
+function hojaEsDeEdicion(el){
+  return HOJAS_EDICION.includes(el.id) || (HOJAS_EDICION_CON_TEXTO.includes(el.id) && hojaConTextoEscrito(el));
+}
+function marcarHojasDesactualizadas(){
+  const marcadas = [];
+  document.querySelectorAll('.sheet-overlay.open').forEach(el => {
+    if(!hojaEsDeEdicion(el)) return;
+    marcadas.push(el.id);
+    if(el.hasAttribute('data-desactualizada')) return;
+    el.setAttribute('data-desactualizada', '');
+    const p = document.createElement('p');
+    p.className = 'aviso-otra-pestana';
+    p.setAttribute('role', 'alert');
+    p.textContent = AVISO_OTRA_PESTANA;
+    const hoja = el.querySelector('.sheet') || el;
+    const asa = hoja.querySelector('.sheet-handle');
+    if(asa) asa.after(p); else hoja.prepend(p);
+  });
+  return marcadas;
+}
+function bloquearGuardarDesactualizado(e){
+  const hoja = e.target && e.target.closest && e.target.closest('.sheet-overlay[data-desactualizada]');
+  if(!hoja) return;
+  if(e.type === 'click'){
+    if(e.target.closest(SELECTOR_CERRAR_HOJA)) return;
+    const btn = e.target.closest(SELECTOR_GUARDAR_HOJA);
+    if(!btn || !hoja.contains(btn)) return;
+  }
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  showToast(AVISO_OTRA_PESTANA, 'error', 5000);
+}
+document.addEventListener('click', bloquearGuardarDesactualizado, true);
+document.addEventListener('submit', bloquearGuardarDesactualizado, true);
+// El evento storage nunca llega a la pestaña que escribió: si llega, escribió otra. Siempre se
+// marca y se relee (sin comparar nada: una comparación aquí podría ignorar justo el evento que
+// corrige un estado viejo).
+window.addEventListener('storage', e => {
+  if(!e || e.key !== 'misfinanzas_data' || e.newValue === null) return;
+  if(e.storageArea && e.storageArea !== localStorage) return;
+  marcarHojasDesactualizadas();
+  recargarPorOtraPestana(false);
+});
 
 // Toast pendiente de una recarga tras borrar los datos locales.
 try{

@@ -1799,7 +1799,8 @@ async function runTests(){
         try{
           const st = fx(); st.schemaVersion = win.eval('CURRENT_SCHEMA_VERSION');
           setState(win, st);
-          const reg = { fecha: new Date().toISOString(), contenido: win.eval('JSON.stringify(state)') };   // lo que guarda reemplazarLocalConNube
+          // Con el reloj del iframe (el que usa descargarRespaldoPrevioMulti): con ?hoy= el de esta ventana es otro.
+          const reg = { fecha: win.eval('new Date().toISOString()'), contenido: win.eval('JSON.stringify(state)') };   // lo que guarda reemplazarLocalConNube
           const prep = win.prepararRespaldoPrevioMulti(reg);
           const textoPrevio = await prep.backup.blob.text();
           const textoNormal = await win.buildBackupFile().blob.text();
@@ -3757,8 +3758,450 @@ async function runTests(){
     }
   }
 
+  // ==================== T11 · un solo dispositivo con dos pestañas (va al final) ====================
+  // Dos iframes nuevos de index.html (líder y no líder) con el mismo localStorage y un servidor
+  // falso en memoria con las reglas de compare-and-set de M2. Va al final porque al restaurar el
+  // localStorage la pestaña principal puede recargarse (debeRecargarPorBorradoLocal).
+  {
+    // Inventario: toda hoja con un botón de guardar está clasificada (y las listas no nombran hojas inexistentes).
+    {
+      const d = win.document;
+      const listas = { edicion: win.eval('HOJAS_EDICION'), conTexto: win.eval('HOJAS_EDICION_CON_TEXTO'), sinMarca: win.eval('HOJAS_SIN_MARCA') };
+      const selG = win.eval('SELECTOR_GUARDAR_HOJA'), selC = win.eval('SELECTOR_CERRAR_HOJA');
+      const clasificadas = new Set([].concat(listas.edicion, listas.conTexto, listas.sinMarca));
+      const conGuardar = [...d.querySelectorAll('.sheet-overlay')]
+        .filter(o => [...o.querySelectorAll(selG)].some(b => !b.closest(selC)))
+        .map(o => o.id);
+      const sinClasificar = conGuardar.filter(id => !clasificadas.has(id));
+      const inexistentes = [...clasificadas].filter(id => !d.getElementById(id) || !d.getElementById(id).classList.contains('sheet-overlay'));
+      const repetidas = [...clasificadas].filter(id => [listas.edicion, listas.conTexto, listas.sinMarca].filter(l => l.includes(id)).length > 1);
+      assert(conGuardar.length > 0 && sinClasificar.length === 0 && inexistentes.length === 0 && repetidas.length === 0,
+        'T11 · 0b: inventario de hojas: cada hoja con un botón de guardar está en HOJAS_EDICION, HOJAS_EDICION_CON_TEXTO o HOJAS_SIN_MARCA (sin repetir ni nombrar hojas que no existen)',
+        `con botón de guardar: ${conGuardar.length} · sin clasificar: ${sinClasificar.join(', ') || 'ninguna'} · inexistentes: ${inexistentes.join(', ') || 'ninguna'} · repetidas: ${repetidas.join(', ') || 'ninguna'}`);
+    }
+    const correr = async (fn, o) => { try{ return await fn(o); }catch(e){ return { error: (e && e.stack) || String(e) }; } };
+    const fin = r => r && !r.error && r.choques === 0 && r.cola === 0 && r.fallidas === 0 && r.nubeIgualLocal
+      && r.enviosNoLider === 0 && r.enviosLider > 0 && r.h1Borrado && r.h2Vivo && r.h3Vivo && r.h2Monto === 4500;
+    let r = await correr(escenarioUnDispositivo, {});
+    assert(fin(r) && r.h1TrasB === 'vivo 1500' && r.borradosAntesBaja.length === 0,
+      'T11 · un dispositivo, dos pestañas: alta → edición (no líder) → baja → cola sin conexión → recarga → en línea → envío termina con 0 choques, la cola vacía y la nube igual a lo local',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { bSinRecargar: true });
+    assert(fin(r) && r.h1TrasB === 'vivo 1000' && r.borradosAntesBaja.length === 0 && r.e1Monto === 2100,
+      'T11 · 0b: la pestaña no líder edita sin releer a mano -> el evento storage ya la puso al día: h1 sigue vivo en la nube, 0 choques y 0 borrados',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { eventoPerdido: true });
+    const ep = r && r.eventoPerdido;
+    assert(fin(r) && ep && ep.opsH1.length === 0 && ep.guardo === false && ep.bReleyo && ep.h1Guardado && ep.e1Guardado === 2000
+      && r.h1TrasB === 'vivo 1500' && r.borradosAntesBaja.length === 0,
+      'T11 · 0b: evento storage perdido (bfcache / iOS): «online» en la pestaña con el estado viejo no genera ops (relee antes del diff) y su guardado se rechaza sin escribir; h1 sigue vivo',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { rechazoAplicar: true });
+    assert(r && !r.error && r.p1 === false && r.sinCambios && r.e1Tras1 === 2000 && r.p2 === true && r.e1Tras2 === 2500
+      && r.e1Guardado === 2500 && r.revE1 === r.revServidor && r.paletaOtra && r.choques === 0,
+      'T11 · 0b: guardado rechazado durante aplicarAccionesSync -> base, revs, cursor, choques y cola sin cambios; la siguiente puesta al día aplica la fila remota',
+      JSON.stringify(r));
+
+    const p = await correr(pruebasPestanas);
+    assert(p && !p.error && p.existentes.rawCargado && p.existentes.genBorrada && p.existentes.primerGuardado === true && p.existentes.p1Guardado,
+      'T11 · 0b: datos ya guardados -> la pestaña recuerda el texto leído y el primer guardado funciona; misfinanzas_gen (borrador) se borra al cargar',
+      JSON.stringify(p && (p.error || p.existentes)));
+    assert(p && !p.error && p.paralelo.r1 === true && p.paralelo.r2 === false && p.paralelo.paleta === 'mar' && !p.paralelo.p2Guardado && p.paralelo.t2Releyo,
+      'T11 · 0b: dos pestañas guardan en el mismo instante -> gana la primera; la segunda no escribe y relee el estado',
+      JSON.stringify(p && (p.error || p.paralelo)));
+    assert(p && !p.error && p.toasts.exito === 0 && p.toasts.aviso && p.toasts.exitoDespues === 1 && p.toasts.quietRechazado && p.toasts.exitoTrasQuiet === 2,
+      'T11 · 0b: tras un rechazo de saveState no sale ningún toast de éxito durante 1500 ms; el aviso de otra pestaña sí (y pasado el plazo vuelven); un rechazo de saveStateQuiet no los calla',
+      JSON.stringify(p && (p.error || p.toasts)));
+    assert(p && !p.error && p.identico.idem === true && p.identico.sinCambio && p.identico.r4 === true && p.identico.p4Guardado,
+      'T11 · 0b: otra pestaña escribe un contenido idéntico al guardado -> no hay rechazo',
+      JSON.stringify(p && (p.error || p.identico)));
+    const h = p && p.hoja;
+    assert(p && !p.error && h.marca && h.aviso === 'Esto cambió en otra pestaña. Ciérrala y vuelve a abrirla para no perder datos.'
+      && h.textoIntacto && !h.cuentaMarcada && h.releyo && h.tras.abierta && h.tras.gastos === h.nGastos + 1 && h.tras.guardados === h.tras.gastos,
+      'T11 · 0b: hoja de gasto abierta con texto -> tras el evento storage el texto sigue intacto, la hoja muestra el aviso y Guardar queda bloqueado; «Tu cuenta» no se marca',
+      JSON.stringify(p && (p.error || h)));
+    assert(p && !p.error && h.cerrada && h.sinMarcaAlCerrar,
+      'T11 · 0b: cerrar nunca se bloquea: un clic real en el control de cierre de la hoja marcada la cierra y le quita la marca',
+      JSON.stringify(p && (p.error || { control: h.control, cerrada: h.cerrada, sinMarca: h.sinMarcaAlCerrar })));
+  }
+
   renderResultados();
   checkLocalStorage();
+}
+
+// ---- T11 · escenario de un solo dispositivo (dos pestañas reales + servidor falso) ----
+// Servidor en memoria con las reglas de sync_aplicar_lote / sync_aplicar_config (M2):
+// compare-and-set por rev, tombstones, ya_aplicado del mismo dispositivo, padre_* de aportes.
+function servidorSyncFalso(userId){
+  const META = ['user_id','rev','txid','deleted_at','modificado_por','updated_at','created_at','dispositivo_escritor'];
+  const filas = {};   // { tabla: { clave: fila } }
+  let rev = 0;
+  const srv = { filas, offline: false, perderRespuestas: 0, llamadas: [], borrados: [] };
+  // Otro dispositivo escribe por RPC (rev nuevo, modificado_por ajeno).
+  srv.cambiarRemoto = (t, clave, cambios, device) => Object.assign(tabla(t)[clave], cambios,
+    { rev: ++rev, txid: String(rev), modificado_por: device || 'dev-otro', updated_at: sello() });
+  const tabla = t => (filas[t] = filas[t] || {});
+  const cols = fila => Object.keys(fila || {}).filter(k => !META.includes(k) && k !== 'id');
+  const igual = (fila, cur) => cols(fila).every(k => JSON.stringify(fila[k] ?? null) === JSON.stringify(cur[k] ?? null));
+  const sello = () => new Date().toISOString();
+  srv.sembrar = (t, clave, fila) => { tabla(t)[clave] = { ...fila, user_id: userId, rev: ++rev, txid: String(rev), deleted_at: null, modificado_por: null, updated_at: sello() }; };
+  const sinRed = () => ({ data: null, error: { message: 'Failed to fetch' }, status: 0 });
+  const responder = data => {
+    if(srv.perderRespuestas > 0){ srv.perderRespuestas--; return sinRed(); }   // se aplicó, pero la respuesta no llegó
+    return { data, error: null, status: 200 };
+  };
+  const unaOp = (device, op, i) => {
+    const T = tabla(op.tabla), cur = T[op.id] || null;
+    const base = op.base_rev == null ? null : Number(op.base_rev);
+    const r0 = { i, tabla: op.tabla, clave: op.id };
+    let padre = null;
+    if(op.tipo === 'upsert' && op.tabla === 'goal_aportes'){
+      const g = tabla('goals')[(op.fila && op.fila.goal_id) || (cur && cur.goal_id)];
+      padre = g ? { deleted_at: g.deleted_at } : null;
+    }
+    const padreMalo = op.tipo === 'upsert' && op.tabla === 'goal_aportes' && (!padre || padre.deleted_at != null);
+    const motivoPadre = !padre ? 'padre_inexistente' : 'padre_eliminado';
+    if(!cur){
+      if(op.tipo === 'delete') return { ...r0, estado: 'ok', rev: null, ya_aplicado: true };
+      if(base != null) return { ...r0, estado: 'choque', motivo: 'no_existe', servidor: null };
+      if(padreMalo) return { ...r0, estado: 'choque', motivo: motivoPadre, servidor: null };
+      T[op.id] = { ...op.fila, id: op.id, user_id: userId, rev: ++rev, txid: String(rev), deleted_at: null, modificado_por: device, updated_at: sello() };
+      return { ...r0, estado: 'ok', rev };
+    }
+    if(cur.rev === base){
+      if(op.tipo === 'delete'){
+        if(cur.deleted_at != null) return { ...r0, estado: 'ok', rev: cur.rev, ya_aplicado: true };
+        Object.assign(cur, { deleted_at: sello(), modificado_por: device, rev: ++rev, txid: String(rev) });
+        srv.borrados.push(op.tabla + ' ' + op.id);
+        return { ...r0, estado: 'ok', rev };
+      }
+      if(padreMalo) return { ...r0, estado: 'choque', motivo: motivoPadre, servidor: { ...cur } };
+      const f = {}; cols(op.fila).forEach(k => { f[k] = op.fila[k]; });
+      Object.assign(cur, f, { deleted_at: null, modificado_por: device, rev: ++rev, txid: String(rev), updated_at: sello() });
+      return { ...r0, estado: 'ok', rev };
+    }
+    const mismo = op.tipo === 'upsert' && cur.deleted_at == null && cur.modificado_por === device && igual(op.fila, cur);
+    if((op.tipo === 'delete' && cur.deleted_at != null) || mismo) return { ...r0, estado: 'ok', rev: cur.rev, ya_aplicado: true };
+    return { ...r0, estado: 'choque', motivo: cur.deleted_at != null ? 'eliminado' : 'version', servidor: { ...cur } };
+  };
+  srv.lote = async (pestana, device, ops) => {
+    srv.llamadas.push(pestana);
+    if(srv.offline) return sinRed();
+    return responder(ops.map((op, i) => unaOp(device, op, i)));
+  };
+  srv.config = async (pestana, device, baseRev, fila) => {
+    srv.llamadas.push(pestana);
+    if(srv.offline) return sinRed();
+    const r = unaOp(device, { tabla: 'config_compartida', id: userId, tipo: 'upsert', base_rev: baseRev, fila }, 0);
+    delete r.i; delete r.clave;
+    return responder(r);
+  };
+  const volcar = desde => {
+    const out = {};
+    Object.keys(filas).forEach(t => { out[t] = Object.values(filas[t]).filter(f => f.rev > desde).map(f => ({ ...f })); });
+    return { filas: out, cursor: String(rev), truncado: false };
+  };
+  srv.desde = async cursor => srv.offline ? sinRed() : { data: volcar(Number(cursor) || 0), error: null, status: 200 };
+  srv.completa = async () => srv.offline ? sinRed() : { data: volcar(-1), error: null, status: 200 };
+  return srv;
+}
+
+// opts.bSinRecargar: la pestaña no líder actúa sin releer localStorage a mano (la relee el evento storage).
+// opts.eventoPerdido: la pestaña no líder se queda con el `state` y el texto leído de antes del alta de
+//   h1 (como si el evento storage no hubiera llegado: bfcache, iOS); recibe «online» e intenta guardar.
+// opts.rechazoAplicar: otra pestaña guarda mientras la puesta al día aplica una fila remota.
+// opts.perderRespuesta: la respuesta del alta de h4 se pierde y h4 se vuelve a editar antes de reenviar.
+async function escenarioUnDispositivo(opts){
+  opts = opts || {};
+  const U = 'u-t11-un-dispositivo', D = 'dev-t11-un-dispositivo';
+  const tick = ms => new Promise(r => setTimeout(r, ms));
+  const lsAntes = {};
+  for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+  const srv = servidorSyncFalso(U);
+  const marcos = [];
+  // Espera el load y, además, que el script de index.html haya corrido (el motor existe).
+  const cargar = f => new Promise(res => {
+    f.addEventListener('load', async () => {
+      for(let n = 0; n < 250; n++){
+        try{ if(typeof f.contentWindow.procesarCambiosSync === 'function' && f.contentWindow.document.readyState === 'complete') break; }catch(_){}
+        await tick(20);
+      }
+      setTimeout(res, 50);
+    }, { once: true });
+  });
+  const nuevaPestana = async () => {
+    const f = document.createElement('iframe');
+    f.style.display = 'none'; f.src = 'index.html';
+    const p = cargar(f); document.body.appendChild(f); await p;
+    marcos.push(f); return f;
+  };
+  const instalar = (f, nombre, lider) => {
+    const w = f.contentWindow;
+    w.__supaFalso = { auth: { getSession: async () => ({ data: { session: { user: { id: U } } } }) }, removeChannel(){} };
+    w.eval('supa = window.__supaFalso;');
+    w.leerDuenoConfirmado = () => U;
+    w.esPestanaLiderSync = () => lider;
+    w.showToast = () => {};
+    Object.defineProperty(w.navigator, 'onLine', { configurable: true, get: () => !srv.offline });
+    const tr = w.eval('syncTransporte');
+    tr.aplicarLote = (dev, ops) => srv.lote(nombre, dev, ops);
+    tr.aplicarConfig = (dev, baseRev, fila) => srv.config(nombre, dev, baseRev, fila);
+    tr.cambiosDesde = c => srv.desde(c);
+    tr.lecturaCompleta = () => srv.completa();
+    tr.upsert = async () => { srv.llamadas.push(nombre + ':directo'); return srv.offline ? { error: { message: 'Failed to fetch' }, status: 0 } : { error: null, status: 201 }; };
+    tr.borrar = tr.upsert;
+    w.eval('syncCtx = { userId: "' + U + '", deviceId: "' + D + '", esEscritor: false, multi: true };');
+    return w;
+  };
+  const ocupado = w => w.eval('syncProcesando || syncVaciando || syncTimerDiff !== null');
+  const quieto = async (...ws) => {
+    for(let n = 0; n < 200; n++){ await tick(20); if(!ws.some(ocupado)) { await tick(30); if(!ws.some(ocupado)) return; } }
+  };
+  const procesar = async (w, ...otras) => {
+    w.eval('clearTimeout(syncTimerDiff); syncTimerDiff = null;');
+    await w.procesarCambiosSync();
+    await quieto(w, ...otras);
+  };
+  const releer = w => w.eval('state = loadState();');
+  const editar = (w, codigo) => { w.eval(codigo); w.eval('saveState();'); };
+  const gasto = (id, monto) => `{ id:'${id}', date:'2026-09-03', nombre:'${id}', amount:${monto}, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' }`;
+  try{
+    // Estado inicial: el de las pruebas, ya subido a la nube (la nube = lo local).
+    Object.keys(localStorage).filter(k => k.endsWith(':' + U)).forEach(k => localStorage.removeItem(k));
+    const st = fixtureBase();
+    st.expenses.push({ id:'e1', date:'2026-09-01', nombre:'Pan', amount:2000, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+    localStorage.setItem('misfinanzas_data', JSON.stringify(st));
+    let fA = await nuevaPestana(), fB = await nuevaPestana();
+    let A = instalar(fA, 'A', true), B = instalar(fB, 'B', false);
+    const snapA = A.construirSnapshot(A.eval('state'), U, D);
+    Object.keys(snapA).filter(t => t !== 'config_dispositivo').forEach(t => {
+      Object.keys(snapA[t]).forEach(k => srv.sembrar(t, k, { ...JSON.parse(snapA[t][k]), ...(t === 'config_compartida' ? { dispositivo_escritor: 'multi:v2' } : {}) }));
+    });
+    await procesar(A);                      // sincronización inicial: «adoptar»
+    await procesar(B, A);
+    const inicial = { revs: !!A.eval('syncAlmacen').leerRevs(U), choques: A.eval('syncAlmacen').leerChoques(U).length };
+
+    // Rechazo durante aplicarAccionesSync: otra pestaña guarda justo antes de que la puesta al
+    // día guarde lo remoto. Nada avanza; la siguiente puesta al día lo aplica.
+    if(opts.rechazoAplicar){
+      const alm = A.eval('syncAlmacen'), ctxA = A.eval('syncCtx');
+      srv.cambiarRemoto('expenses', 'e1', { amount: 2500 });
+      const antes = { base: JSON.stringify(alm.leerBase(U)), revs: JSON.stringify(alm.leerRevs(U)), cursor: alm.leerCursor(U),
+                      choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length };
+      const origAplicar = A.aplicarFilasAEstado;
+      A.aplicarFilasAEstado = (st, acc) => {
+        const r = origAplicar(st, acc);
+        const otra = JSON.parse(localStorage.getItem('misfinanzas_data'));   // la otra pestaña guarda en este instante
+        otra.config.paleta = 'otra-pestana';
+        localStorage.setItem('misfinanzas_data', JSON.stringify(otra));
+        return r;
+      };
+      let p1;
+      try{ p1 = await A.puestaAlDiaSync(ctxA); } finally { A.aplicarFilasAEstado = origAplicar; }
+      const despues1 = { base: JSON.stringify(alm.leerBase(U)), revs: JSON.stringify(alm.leerRevs(U)), cursor: alm.leerCursor(U),
+                         choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length };
+      const e1Tras1 = A.eval('state.expenses.find(e => e.id === "e1").amount');
+      const p2 = await A.puestaAlDiaSync(ctxA);
+      return {
+        p1, p2, e1Tras1, sinCambios: JSON.stringify(antes) === JSON.stringify(despues1),
+        e1Tras2: A.eval('state.expenses.find(e => e.id === "e1").amount'),
+        e1Guardado: JSON.parse(localStorage.getItem('misfinanzas_data')).expenses.find(e => e.id === 'e1').amount,
+        revE1: (alm.leerRevs(U).expenses || {}).e1, revServidor: srv.filas.expenses.e1.rev,
+        paletaOtra: A.eval('state.config.paleta') === 'otra-pestana', choques: alm.leerChoques(U).length
+      };
+    }
+
+    // alta (A) -> edición (B, no líder) -> baja (A)
+    const viejoB = B.eval('JSON.stringify(state)'), rawViejoB = B.eval('__rawCargado');
+    editar(A, `state.expenses.push(${gasto('h1', 1000)});`);
+    await procesar(A, B);
+    let eventoPerdido = null;
+    if(opts.eventoPerdido){
+      // B se queda con lo de antes del alta, como si el evento storage no hubiera llegado.
+      const volverAlViejo = () => B.eval('state = JSON.parse(' + JSON.stringify(viejoB) + '); __rawCargado = ' + JSON.stringify(rawViejoB) + ';');
+      volverAlViejo();
+      B.dispatchEvent(new Event('online'));                       // diff disparado SIN un guardado
+      await quieto(B, A);
+      const opsH1 = A.eval('syncAlmacen').leerCola(U).filter(o => o.clave === 'h1').map(o => o.tipo);
+      volverAlViejo();
+      const guardo = B.eval('state.expenses[0].amount = 2100; saveState()');
+      await quieto(B, A);
+      eventoPerdido = {
+        opsH1, guardo, bReleyo: B.eval('state.expenses.some(e => e.id === "h1")'),
+        h1Guardado: JSON.parse(localStorage.getItem('misfinanzas_data')).expenses.some(e => e.id === 'h1'),
+        e1Guardado: JSON.parse(localStorage.getItem('misfinanzas_data')).expenses.find(e => e.id === 'e1').amount
+      };
+    }
+    if(!opts.bSinRecargar) releer(B);
+    editar(B, opts.bSinRecargar ? `state.expenses[0].amount = 2100;` : `state.expenses.find(e => e.id === 'h1').amount = 1500;`);
+    await procesar(B, A);                   // B encola; A vacía por el evento storage
+    const h1TrasB = srv.filas.expenses.h1 ? (srv.filas.expenses.h1.deleted_at ? 'borrado' : 'vivo ' + srv.filas.expenses.h1.amount) : 'no existe';
+    const borradosAntesBaja = srv.borrados.slice();
+    releer(A);
+    editar(A, `state.expenses = state.expenses.filter(e => e.id !== 'h1');`);
+    await procesar(A, B);
+
+    // Variante: respuesta perdida de un alta y otra edición antes del reenvío.
+    if(opts.perderRespuesta){
+      srv.perderRespuestas = 1;
+      editar(A, `state.expenses.push(${gasto('h4', 100)});`);
+      await procesar(A, B);
+      editar(A, `state.expenses.find(e => e.id === 'h4').amount = 200;`);
+      A.eval('adelantarReintentosSync("' + U + '");');
+      await procesar(A, B);
+    }
+
+    // Sin conexión: A da de alta y edita h2; B (releída) da de alta h3. Todo queda en la cola.
+    srv.offline = true;
+    releer(A);
+    editar(A, `state.expenses.push(${gasto('h2', 4000)});`);
+    await procesar(A, B);
+    editar(A, `state.expenses.find(e => e.id === 'h2').amount = 4500;`);
+    await procesar(A, B);
+    releer(B);
+    editar(B, `state.expenses.push(${gasto('h3', 3000)});`);
+    await procesar(B, A);
+    const colaSinRed = A.eval('syncAlmacen').leerCola(U).map(o => o.tipo + ' ' + o.clave);
+
+    // Recarga de las dos pestañas (sin red), vuelve la conexión y se envía.
+    const recargar = async f => { const p = cargar(f); f.contentWindow.location.reload(); await p; };
+    await recargar(fA); await recargar(fB);
+    A = instalar(fA, 'A', true); B = instalar(fB, 'B', false);
+    await procesar(A, B);
+    srv.offline = false;
+    A.dispatchEvent(new Event('online')); B.dispatchEvent(new Event('online'));
+    await quieto(A, B);
+    await procesar(A, B);
+
+    const alm = A.eval('syncAlmacen');
+    const choques = alm.leerChoques(U);
+    const nube = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+    const local = A.construirSnapshot(A.eval('loadState()'), U, D);
+    const distintas = [];
+    A.eval('SYNC_TABLAS_MULTI').forEach(t => {
+      const vivas = Object.keys(nube[t] || {}).filter(k => !nube[t][k].borrada);
+      const claves = new Set(vivas.concat(Object.keys(local[t] || {})));
+      claves.forEach(k => { if(!nube[t] || !nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
+    });
+    const e = srv.filas.expenses || {};
+    return {
+      inicial, h1TrasB, borradosAntesBaja, eventoPerdido, colaSinRed,
+      choques: choques.length, detalleChoques: choques.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave),
+      cola: alm.leerCola(U).length, fallidas: alm.leerFallidas(U).length,
+      nubeIgualLocal: distintas.length === 0, distintas,
+      enviosLider: srv.llamadas.filter(x => x === 'A').length, enviosNoLider: srv.llamadas.filter(x => x === 'B').length,
+      h1Borrado: !!(e.h1 && e.h1.deleted_at), h2Vivo: !!(e.h2 && !e.h2.deleted_at), h3Vivo: !!(e.h3 && !e.h3.deleted_at),
+      h2Monto: e.h2 && e.h2.amount, e1Monto: e.e1 && e.e1.amount, gastosNube: Object.keys(e).filter(k => !e[k].deleted_at)
+    };
+  }finally{
+    marcos.forEach(f => { try{ f.contentWindow.eval('syncCtx = null;'); }catch(_){} f.remove(); });
+    Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+    Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+  }
+}
+
+// ---- T11 · 0b: guardado condicionado al contenido entre dos pestañas reales (sin sincronización) ----
+async function pruebasPestanas(){
+  const tick = ms => new Promise(r => setTimeout(r, ms));
+  const lsAntes = {};
+  for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+  const marcos = [];
+  const nuevaPestana = () => new Promise(res => {
+    const f = document.createElement('iframe');
+    f.style.display = 'none'; f.src = 'index.html';
+    f.addEventListener('load', async () => {
+      for(let n = 0; n < 250; n++){
+        try{ if(typeof f.contentWindow.saveState === 'function' && f.contentWindow.document.readyState === 'complete') break; }catch(_){}
+        await tick(20);
+      }
+      setTimeout(() => res(f.contentWindow), 50);
+    }, { once: true });
+    document.body.appendChild(f); marcos.push(f);
+  });
+  const guardado = () => JSON.parse(localStorage.getItem('misfinanzas_data'));
+  const gasto = id => `{ id:'${id}', date:'2026-09-03', nombre:'${id}', amount:100, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' }`;
+  const out = {};
+  try{
+    // (1) Datos ya guardados (de antes de la 0b): el primer guardado funciona. La clave
+    //     misfinanzas_gen de un borrador de la 0b se borra al cargar.
+    const datosExistentes = JSON.stringify(fixtureBase());
+    localStorage.setItem('misfinanzas_data', datosExistentes);
+    localStorage.setItem('misfinanzas_gen', '3:borrador');
+    const T1 = await nuevaPestana(), T2 = await nuevaPestana();
+    out.existentes = {
+      rawCargado: T1.eval('__rawCargado') === datosExistentes,
+      genBorrada: localStorage.getItem('misfinanzas_gen') === null,
+      primerGuardado: T1.eval(`state.expenses.push(${gasto('p1')}); saveState()`),
+      p1Guardado: guardado().expenses.some(e => e.id === 'p1')
+    };
+    await tick(80);                                     // T2 recibe el evento y relee
+
+    // (2) Dos pestañas guardan en paralelo (mismo instante, antes de que llegue el evento):
+    //     gana la primera; la segunda no escribe y relee.
+    const r1 = T1.eval(`state.config.paleta = 'mar'; saveState()`);
+    const r2 = T2.eval(`state.expenses.push(${gasto('p2')}); saveState()`);
+    const g = guardado();
+    out.paralelo = { r1, r2, paleta: g.config.paleta, p2Guardado: g.expenses.some(e => e.id === 'p2'),
+      t2Releyo: T2.eval('state.config.paleta') === 'mar' && !T2.eval('state.expenses.some(e => e.id === "p2")') };
+
+    // (3) Rechazo: ningún toast de éxito durante 1500 ms; el aviso sí aparece.
+    T2.showToast('Gasto guardado', 'success');
+    out.toasts = {
+      exito: T2.document.querySelectorAll('#toastHost .toast.success').length,
+      aviso: [...T2.document.querySelectorAll('#toastHost .toast.error')].some(t => t.textContent.includes('cambiaron en otra pestaña'))
+    };
+    await tick(1600);
+    T2.showToast('Gasto guardado', 'success');
+    out.toasts.exitoDespues = T2.document.querySelectorAll('#toastHost .toast.success').length;
+    // Un rechazo de saveStateQuiet (sync en segundo plano) NO calla el «guardado» del usuario.
+    const otra = guardado(); otra.config.paleta = 'quiet';
+    localStorage.setItem('misfinanzas_data', JSON.stringify(otra));
+    out.toasts.quietRechazado = T2.eval('saveStateQuiet()') === false;
+    T2.showToast('Gasto guardado', 'success');
+    out.toasts.exitoTrasQuiet = T2.document.querySelectorAll('#toastHost .toast.success').length;
+
+    // (4) Otra pestaña escribe un contenido IDÉNTICO al guardado: no hay rechazo.
+    await tick(80);
+    T1.eval('state = loadState();');
+    const idem = T1.eval('saveState()');                // mismo estado: el mismo texto
+    const sinCambio = localStorage.getItem('misfinanzas_data') === T2.eval('__rawCargado');
+    const r4 = T2.eval(`state.expenses.push(${gasto('p4')}); saveState()`);
+    out.identico = { idem, sinCambio, r4, p4Guardado: guardado().expenses.some(e => e.id === 'p4') };
+
+    // (5) Hoja abierta con texto escrito: el evento storage relee `state` pero no toca la hoja;
+    //     la marca, muestra el aviso y bloquea Guardar hasta cerrarla. «Tu cuenta» no se marca.
+    await tick(80);
+    T1.eval('state = loadState();');
+    T2.openGastoForm();
+    T2.document.getElementById('gNombre').value = 'Escribiendo algo';
+    T2.document.getElementById('gMonto').value = '1234';
+    T2.openSheet('sheetCuenta');
+    const nGastos = T2.eval('state.expenses.length');
+    T1.eval(`state.expenses.push(${gasto('p5')}); saveState()`);
+    await tick(150);
+    const hoja = T2.document.getElementById('sheetGasto');
+    const marca = hoja.hasAttribute('data-desactualizada');
+    const aviso = !!hoja.querySelector('.aviso-otra-pestana') && hoja.querySelector('.aviso-otra-pestana').textContent;
+    const textoIntacto = T2.document.getElementById('gNombre').value === 'Escribiendo algo' && T2.document.getElementById('gMonto').value === '1234';
+    const cuentaMarcada = T2.document.getElementById('sheetCuenta').hasAttribute('data-desactualizada');
+    const releyo = T2.eval('state.expenses.some(e => e.id === "p5")');
+    T2.closeSheet('sheetCuenta');
+    T2.document.getElementById('btnSaveGasto').click();
+    await tick(50);
+    const tras = { gastos: T2.eval('state.expenses.length'), guardados: guardado().expenses.length, abierta: hoja.classList.contains('open') };
+    // Cerrar NUNCA se bloquea: clic real en el control de cierre de la hoja marcada.
+    const cierre = hoja.querySelector('[data-close]');
+    cierre.click();
+    await tick(50);
+    out.hoja = { marca, aviso, textoIntacto, cuentaMarcada, releyo, nGastos, tras, control: cierre.textContent.trim(),
+      cerrada: !hoja.classList.contains('open'),
+      sinMarcaAlCerrar: !hoja.hasAttribute('data-desactualizada') && !hoja.querySelector('.aviso-otra-pestana') };
+    return out;
+  }finally{
+    marcos.forEach(f => f.remove());
+    Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+    Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+  }
 }
 
 // Verifica que abrir este harness no haya escrito nada en el localStorage real de este
