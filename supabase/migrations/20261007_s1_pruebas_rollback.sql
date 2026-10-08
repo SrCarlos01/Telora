@@ -3,7 +3,7 @@
    --------------------------------------------------------------------------------------------
    Cómo correrlo (SQL Editor de Supabase):
      1. Reemplazar <UID_PRUEBA> (UNA sola vez, línea marcada) por el uid de la cuenta de prueba
-        DESECHABLE. Nunca la de MARCADOR_CORREO_ELIMINADO (el script aborta si el correo empieza así).
+        DESECHABLE. Nunca la cuenta real del titular (el script aborta si md5 del correo coincide).
      2. Ejecutar TODO el script de una vez.
      3. El resultado sale como un ERROR a propósito: «RESULTADOS T7 …» con una línea por caso.
         Ese error es lo que garantiza el rollback aunque el editor confirmara solo; la línea
@@ -31,7 +31,8 @@ begin
   end if;
   select email into v_email from auth.users where id = current_setting('telora.uid_prueba')::uuid;
   if v_email is null then raise exception 'El uid de prueba no existe en auth.users'; end if;
-  if v_email ilike 'MARCADOR_CORREO_ELIMINADO%' then raise exception 'ABORTADO: es la cuenta MARCADOR_CORREO_ELIMINADO'; end if;
+  -- md5(lower(correo)) de la cuenta real: el repositorio es público y no guarda la dirección.
+  if md5(lower(v_email)) = '99d019b8b5e81b34bf8ce94d968a4713' then raise exception 'ABORTADO: es la cuenta real del titular'; end if;
   if not exists (select 1 from pg_proc where proname = 'sync_aplicar_lote') then
     raise exception 'M2 no está instalada';
   end if;
