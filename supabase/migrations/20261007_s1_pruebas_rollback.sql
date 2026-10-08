@@ -3,7 +3,8 @@
    --------------------------------------------------------------------------------------------
    Cómo correrlo (SQL Editor de Supabase):
      1. Reemplazar <UID_PRUEBA> (UNA sola vez, línea marcada) por el uid de la cuenta de prueba
-        DESECHABLE. Nunca la cuenta real del titular (el script aborta si md5 del correo coincide).
+        DESECHABLE. Nunca la cuenta real del titular: el script aborta si el uid es el de esa
+        cuenta o si la parte local del correo no tiene «+» (solo se aceptan alias de prueba).
      2. Ejecutar TODO el script de una vez.
      3. El resultado sale como un ERROR a propósito: «RESULTADOS T7 …» con una línea por caso.
         Ese error es lo que garantiza el rollback aunque el editor confirmara solo; la línea
@@ -31,8 +32,15 @@ begin
   end if;
   select email into v_email from auth.users where id = current_setting('telora.uid_prueba')::uuid;
   if v_email is null then raise exception 'El uid de prueba no existe en auth.users'; end if;
-  -- md5(lower(correo)) de la cuenta real: el repositorio es público y no guarda la dirección.
-  if md5(lower(v_email)) = '99d019b8b5e81b34bf8ce94d968a4713' then raise exception 'ABORTADO: es la cuenta real del titular'; end if;
+  -- (a) uid de la cuenta real (auth.users.id; el repositorio es público y no guarda correos).
+  if current_setting('telora.uid_prueba')::uuid = '36b31576-4346-4974-9ce4-a0c079b375f9'::uuid then
+    raise exception 'ABORTADO: es la cuenta real del titular';
+  end if;
+  -- (b) lista blanca: solo alias de prueba («+» en la parte local). v_email no es NULL acá:
+  -- la guarda de arriba ya abortó si el uid no existe.
+  if position('+' in split_part(v_email, '@', 1)) = 0 then
+    raise exception 'ABORTADO: solo cuentas de prueba (alias con «+» en el correo)';
+  end if;
   if not exists (select 1 from pg_proc where proname = 'sync_aplicar_lote') then
     raise exception 'M2 no está instalada';
   end if;
