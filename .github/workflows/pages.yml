@@ -27,6 +27,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Red de seguridad: el repositorio es público y no debe contener documentos de
+      # Office (se purgaron del historial el 2026-10-07). Si alguno vuelve a entrar,
+      # el deploy se detiene para que se note de inmediato.
+      - name: Rechazar documentos de Office versionados
+        run: |
+          if git ls-files -- '*.docx' '*.xlsx' '*.doc' '*.xls' '*.pptx' | grep .; then
+            echo "::error::Hay documentos de Office versionados (lista arriba). Sácalos del repo."
+            exit 1
+          fi
+
       # LISTA PERMITIDA: se publica SOLO lo que el sitio necesita, copiado a _site/.
       # Antes se subía el árbol completo (path: .) quitando solo tests.html, y así
       # quedaron públicos en telora.cl documentos internos (Documentos/*.docx,

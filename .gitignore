@@ -18,3 +18,12 @@ CLAUDE.md
 
 # Resúmenes diarios: viven en el Proyecto, el repositorio es público
 docs/**/Dia*_Resumen.*
+
+# Documentos de Office: nunca se versionan (el repositorio es público).
+# Los originales viven fuera del repo, en ../TELORA_privado/.
+*.docx
+*.xlsx
+*.doc
+*.xls
+*.pptx
+bases/
