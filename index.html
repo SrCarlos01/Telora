@@ -16338,6 +16338,9 @@ function combinarChoques(actuales, nuevos, ahoraIso){
   return Array.from(m.values());
 }
 // Las filas en choque quedan en pausa: sus ops siguen en la cola, pero no se envían.
+// T11 · Fase 2: si el usuario edita una fila en pausa, el diff encola la op nueva y coalescerOps
+// la junta con la pendiente (misma clave): sigue en pausa y el choque se mantiene, con la versión
+// de la nube que tenía. Al resolverlo con «conservar» sale lo último que el usuario dejó.
 function opsNoPausadas(ops, choques){
   const pausadas = new Set((choques || []).map(c => c.tabla + '|' + c.clave));
   return (ops || []).filter(o => !pausadas.has(claveOpSync(o)));
@@ -16508,6 +16511,54 @@ function agruparChoquesPorMeta(choques, local){
     m.get(goalId).push(c);
   });
   return m;
+}
+/* ---- T11 · Fase 2: higiene de choques (núcleo puro) ----
+   Un choque guarda la fila de la nube REDUCIDA a las columnas que usan la UI y la resolución:
+   las de datos de cada tabla (las mismas que escribe su filaX, así canonicoFilaNube de la fila
+   reducida = la de la fila completa) más rev, deleted_at, modificado_por y updated_at. */
+const COLUMNAS_CHOQUE = {
+  cuentas_financieras: ['id','nombre','orden','archivada'],
+  transfers: ['id','origen','destino','monto','fecha','nombre'],
+  expenses: ['id','date','amount','category','method','description','nombre','tipo','debt_id','cuenta_id','dia_hasta','fechas_confirmadas','fixed_end_month_key'],
+  incomes: ['id','date','amount','source','description','nombre','tipo','cuenta_id','dia_hasta','fechas_confirmadas','fixed_end_month_key'],
+  debts: ['id','purchase_date','total_amount','num_cuotas','description','category','cuenta_id','manual_paid_month_keys','manual_unpaid_month_keys'],
+  goals: ['id','name','indefinida','monto_objetivo','fecha_limite','fecha_creacion','cuenta_id','aporte_automatico','fecha_cumplida','ultimo_done_visto','goal_end_month_key'],
+  goal_aportes: ['id','goal_id','monto','fecha','tipo'],
+  config_compartida: ['categorias','metodos','fuentes','categoria_iconos','categoria_topes','categoria_colores','mes_inicio_registro','read_only']
+};
+const COLUMNAS_CHOQUE_META = ['rev','deleted_at','modificado_por','updated_at'];
+function reducirFilaChoque(tabla, fila){
+  if(!fila || typeof fila !== 'object') return fila == null ? null : fila;
+  const cols = COLUMNAS_CHOQUE[tabla];
+  if(!cols) return fila;
+  const r = {};
+  cols.concat(COLUMNAS_CHOQUE_META).forEach(k => { if(tieneClave(fila, k)) r[k] = fila[k]; });
+  return r;
+}
+// Limpieza (Fase 2). p = { choques, cola, local, base, userId }. Un choque se quita solo si:
+//   igual_nube: lo local equivale a la versión de la nube que guarda el choque (viva e igual, o
+//               borrada en los dos lados) -> rev y base pasan a ser los del servidor y sobran sus ops;
+//   sin_op:     no queda ninguna op en la cola para la clave Y lo local es lo de la base (no hay
+//               un cambio local sin encolar).
+// Nunca se quita un choque con un cambio local pendiente distinto de la nube.
+function planLimpiezaChoques(p){
+  const quitar = [], conservar = [];
+  (p.choques || []).forEach(c => {
+    const t = c.tabla, k = c.clave;
+    const L = ((p.local || {})[t] || {})[k], B = ((p.base || {})[t] || {})[k];
+    const s = c.servidor;
+    const sVivo = !!s && s.deleted_at == null;
+    const sJson = sVivo ? canonicoFilaNube(t, s, p.userId) : undefined;
+    const hayOp = (p.cola || []).some(o => o.tabla === t && o.clave === k);
+    if(s && ((sVivo && L === sJson) || (!sVivo && L === undefined))){
+      const rev = c.rev != null ? Number(c.rev) : (s.rev != null ? Number(s.rev) : null);
+      quitar.push({ tabla: t, clave: k, regla: 'igual_nube', rev, base: sVivo ? sJson : null });
+      return;
+    }
+    if(!hayOp && L === B){ quitar.push({ tabla: t, clave: k, regla: 'sin_op' }); return; }
+    conservar.push(c);
+  });
+  return { quitar, conservar };
 }
 // Parche de revs/base: null borra la clave.
 function aplicarParcheSync(obj, parche){
@@ -17036,6 +17087,15 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
   syncAlmacen.guardarRevs(ctx.userId, nb.revs);
   const choques = efectivas.filter(a => a.accion === 'choque');
   if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia' })));
+  // T11 · Fase 2 (c): una fila con choque que llega de nuevo (adoptarRev: p. ej. ahora igual a lo
+  // local) actualiza la versión de la nube que guarda el choque; limpiarChoquesSync decide después.
+  const vigentes = leerChoquesVigentes(ctx.userId);
+  if(vigentes.length){
+    const nuevas = new Map(efectivas.filter(a => a.accion === 'adoptarRev' && !a.soloRev && a.fila).map(a => [a.tabla + '|' + a.clave, a]));
+    const refrescar = vigentes.filter(c => nuevas.has(c.tabla + '|' + c.clave))
+      .map(c => { const a = nuevas.get(c.tabla + '|' + c.clave); return { ...c, servidor: a.fila, rev: a.rev }; });
+    if(refrescar.length) registrarChoquesSync(ctx.userId, refrescar, true);
+  }
   if(r.omitidas.length) console.info('[Sync] ' + r.omitidas.length + ' fila(s) remota(s) sin aplicar todavía (aporte sin su meta): se releen después.');
   if(cursor != null && !r.omitidas.length && !acciones.some(a => a.accion === 'diferir')) syncAlmacen.guardarCursor(ctx.userId, cursor);
   return true;
@@ -17076,13 +17136,80 @@ async function puestaAlDiaSync(ctx){
   return aplicarAccionesSync(ctx, acciones, base, revs, res.data.cursor);
 }
 
-function registrarChoquesSync(userId, nuevos){
-  syncAlmacen.guardarChoques(userId, combinarChoques(syncAlmacen.leerChoques(userId), nuevos, new Date().toISOString()));
-  nuevos.forEach(c => console.warn('[Sync] choque (' + c.motivo + ') en ' + c.tabla + ' ' + c.clave
-    + ': la fila queda en pausa hasta resolverlo. Choques pendientes: ' + syncAlmacen.leerChoques(userId).length + '.'));
+// T11 · Fase 2: NUNCA se descarta un choque sin resolverlo (si se descartara, su op volvería a
+// salir y el choque se repetiría). Con más de CHOQUES_TOPE_AVISO, o si guardarChoques falla
+// (espacio lleno), se marca syncCtx.choquesDesborde y se avisa por consola; si no se pudo guardar,
+// la lista queda en memoria (syncCtx.choquesEnMemoria) y sigue pausando sus filas en esta carga.
+const CHOQUES_TOPE_AVISO = 200;
+function choquesEnMemoriaDe(userId){
+  return (syncCtx && syncCtx.userId === userId && Array.isArray(syncCtx.choquesEnMemoria)) ? syncCtx.choquesEnMemoria : null;
+}
+// Lo guardado más lo que quedó en memoria (si guardar falló): lo que pausa y lo que se resuelve.
+function leerChoquesVigentes(userId){
+  const guardados = syncAlmacen.leerChoques(userId);
+  const mem = choquesEnMemoriaDe(userId);
+  return mem ? guardados.concat(mem.filter(c => !guardados.some(g => g.tabla === c.tabla && g.clave === c.clave))) : guardados;
+}
+function registrarChoquesSync(userId, nuevos, silencioso){
+  const lista = combinarChoques(leerChoquesVigentes(userId),
+    (nuevos || []).map(c => ({ ...c, servidor: reducirFilaChoque(c.tabla, c.servidor) })), new Date().toISOString());
+  const guardado = syncAlmacen.guardarChoques(userId, lista);
+  if(syncCtx && syncCtx.userId === userId){
+    syncCtx.choquesEnMemoria = guardado ? null : lista;
+    syncCtx.choquesDesborde = !guardado || lista.length > CHOQUES_TOPE_AVISO;
+  }
+  if(!guardado || lista.length > CHOQUES_TOPE_AVISO){
+    console.warn('[Sync] choques pendientes: ' + lista.length + (guardado ? '' : ' (no se pudieron guardar: quedan en memoria y siguen en pausa hasta cerrar la app)')
+      + '. Ninguno se descarta: hay que resolverlos.');
+  }
+  if(!silencioso) (nuevos || []).forEach(c => console.warn('[Sync] choque (' + c.motivo + ') en ' + c.tabla + ' ' + c.clave
+    + ': la fila queda en pausa hasta resolverlo. Choques pendientes: ' + lista.length + '.'));
+}
+function quitarChoqueSync(userId, tabla, clave){
+  const ok = syncAlmacen.quitarChoque(userId, tabla, clave);
+  const mem = choquesEnMemoriaDe(userId);
+  if(mem){
+    const resto = mem.filter(c => !(c.tabla === tabla && c.clave === clave));
+    syncCtx.choquesEnMemoria = resto.length ? resto : null;   // vacía = ya no queda nada en memoria
+  }
+  if(syncCtx && syncCtx.userId === userId && !choquesEnMemoriaDe(userId)) {
+    // sin memoria pendiente: el aviso de desborde sigue solo si todavía hay más del tope
+    syncCtx.choquesDesborde = syncAlmacen.leerChoques(userId).length > CHOQUES_TOPE_AVISO;
+  }
+  return ok;
+}
+// Para la Fase 3 (UI): cuántos choques hay y si se superó el tope o quedaron en memoria.
+function estadoChoquesSync(){
+  if(!syncCtx) return { total: 0, desborde: false, enMemoria: false };
+  return { total: leerChoquesVigentes(syncCtx.userId).length, desborde: !!syncCtx.choquesDesborde, enMemoria: !!choquesEnMemoriaDe(syncCtx.userId) };
 }
 // Contador consultable (la interfaz de choques es de T11): contarChoquesSync() en la consola.
-function contarChoquesSync(){ return syncCtx ? syncAlmacen.leerChoques(syncCtx.userId).length : 0; }
+function contarChoquesSync(){ return syncCtx ? leerChoquesVigentes(syncCtx.userId).length : 0; }
+
+// Limpieza automática (Fase 2): al abrir la app y después de cada puesta al día, bajo el candado.
+function limpiarChoquesSync(ctx){
+  const choques = leerChoquesVigentes(ctx.userId);
+  if(!choques.length) return 0;
+  asegurarEstadoVigente();
+  const plan = planLimpiezaChoques({
+    choques, cola: syncAlmacen.leerCola(ctx.userId), local: construirSnapshot(state, ctx.userId, ctx.deviceId),
+    base: syncAlmacen.leerBase(ctx.userId) || {}, userId: ctx.userId
+  });
+  if(!plan.quitar.length) return 0;
+  const iguales = plan.quitar.filter(q => q.regla === 'igual_nube');
+  if(iguales.length){
+    let cola = syncAlmacen.leerCola(ctx.userId);
+    const base = {}, revs = {};
+    iguales.forEach(q => { cola = quitarOpsPorClave(cola, q.tabla, q.clave); fijarEnPlan(base, q.tabla, q.clave, q.base); fijarEnPlan(revs, q.tabla, q.clave, q.rev); });
+    if(!syncAlmacen.guardarCola(ctx.userId, cola)) return 0;
+    syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), base));
+    syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), revs));
+  }
+  plan.quitar.forEach(q => quitarChoqueSync(ctx.userId, q.tabla, q.clave));
+  console.info('[Sync] limpieza de choques: ' + plan.quitar.map(q => q.tabla + ' ' + q.clave + ' (' + q.regla + ')').join(', ') + '.');
+  try{ renderEstadoCuenta(); }catch(_){}
+  return plan.quitar.length;
+}
 
 /* ---- T11 · Fase 1: resolver choques (consola hoy; la UI de la Fase 3 después) ----
    resolverChoques(lista, decision): decision es una de DECISIONES_CHOQUE o 'local_todos' (cada
@@ -17112,7 +17239,7 @@ function aplicarResolucionChoques(ctx, choques, decision){
     base: syncAlmacen.leerBase(ctx.userId) || {},
     revs: syncAlmacen.leerRevs(ctx.userId) || {},
     cola: syncAlmacen.leerCola(ctx.userId),
-    choques: syncAlmacen.leerChoques(ctx.userId),
+    choques: leerChoquesVigentes(ctx.userId),
     userId: ctx.userId
   };
   // 1) Todos los planes, sin escribir nada (cualquier error corta aquí).
@@ -17135,7 +17262,7 @@ function aplicarResolucionChoques(ctx, choques, decision){
   if(!syncAlmacen.guardarCola(ctx.userId, cola)) throw errorSync('sin_guardar', 'No se pudo guardar la cola de sincronización.');
   syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), plan.base));
   syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), plan.revs));
-  plan.quitarChoques.forEach(q => syncAlmacen.quitarChoque(ctx.userId, q.tabla, q.clave));
+  plan.quitarChoques.forEach(q => quitarChoqueSync(ctx.userId, q.tabla, q.clave));
   try{ renderAll(); renderEstadoCuenta(); }catch(_){}
   console.info('[Sync] ' + choques.length + ' choque(s) resuelto(s) (' + decision + '): ' + plan.encolar.length + ' op(s) aseguradas, '
     + plan.estado.length + ' fila(s) aplicadas' + (plan.choquesDerivados.length ? ', ' + plan.choquesDerivados.length + ' derivado(s)' : '') + '.');
@@ -17279,7 +17406,7 @@ function programarReintentoSync(userId){
   clearTimeout(syncTimerReintento);
   let cola = syncAlmacen.leerCola(userId);
   // Las filas en choque no cuentan: con proximo 0 dispararían un vaciado inmediato sin fin.
-  if(syncCtx && syncCtx.multi) cola = opsNoPausadas(cola, syncAlmacen.leerChoques(userId));
+  if(syncCtx && syncCtx.multi) cola = opsNoPausadas(cola, leerChoquesVigentes(userId));
   if(!cola.length) return;
   const cuando = Math.min(...cola.map(o => o.proximo || 0));
   syncTimerReintento = setTimeout(vaciarColaSync, Math.max(0, cuando - Date.now()));
@@ -17302,7 +17429,13 @@ async function vaciarColaSync(){
     // sincronización inicial (la hace calcularYEncolarSync al activar).
     if(ctx.multi){
       if(!syncAlmacen.leerRevs(ctx.userId)) return;
-      const puesta = await conCandadoSync(() => puestaAlDiaSync(ctx));
+      // T11 · Fase 2: después de cada puesta al día (y así también al abrir la app), limpieza de
+      // choques bajo el mismo candado.
+      const puesta = await conCandadoSync(async () => {
+        const ok = await puestaAlDiaSync(ctx);
+        if(ok && syncCtx === ctx) limpiarChoquesSync(ctx);
+        return ok;
+      });
       if(syncCtx !== ctx) return;
       if(!puesta){
         clearTimeout(syncTimerReintento);
@@ -17313,7 +17446,7 @@ async function vaciarColaSync(){
     }
     while(syncCtx === ctx && syncHabilitada()){
       const cola = syncAlmacen.leerCola(ctx.userId);
-      const ordenadas = ordenarOps(ctx.multi ? opsNoPausadas(cola, syncAlmacen.leerChoques(ctx.userId)) : cola);
+      const ordenadas = ordenarOps(ctx.multi ? opsNoPausadas(cola, leerChoquesVigentes(ctx.userId)) : cola);
       if(!ordenadas.length) return;
       const lote = tomarLoteSync(ordenadas, Date.now());
       if(!lote.length){ programarReintentoSync(ctx.userId); return; }

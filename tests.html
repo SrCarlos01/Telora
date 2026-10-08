@@ -2046,6 +2046,137 @@ async function runTests(){
           win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
         }
       }
+      // T11 · Fase 2: fila reducida del choque y reglas de limpieza (núcleo puro)
+      {
+        const st = fx(), S = snap(st);
+        const cols = win.eval('COLUMNAS_CHOQUE');
+        const faltan = [];
+        let canonIgual = true;
+        Object.keys(S).filter(t => t !== 'config_dispositivo').forEach(t => {
+          Object.values(S[t]).forEach(j => {
+            const fila = JSON.parse(j);
+            Object.keys(fila).filter(k => k !== 'user_id').forEach(k => { if(!(cols[t] || []).includes(k)) faltan.push(t + '.' + k); });
+            const completa = meta(fila, 80, { created_at: TOMB, dispositivo_escritor: 'multi:v2' });
+            const red = win.reducirFilaChoque(t, completa);
+            if(win.canonicoFilaNube(t, red, USER) !== win.canonicoFilaNube(t, completa, USER)) canonIgual = false;
+            if('txid' in red || 'user_id' in red || 'created_at' in red || 'dispositivo_escritor' in red || !('rev' in red) || !('modificado_por' in red)) canonIgual = false;
+          });
+        });
+        assert(faltan.length === 0 && canonIgual,
+          'T11 · Fase 2: COLUMNAS_CHOQUE cubre todas las columnas que escribe cada filaX; la fila reducida da el mismo JSON canónico que la completa y deja fuera txid, user_id, created_at y dispositivo_escritor',
+          `faltan: ${faltan.join(', ') || 'ninguna'} · canónico igual y sin metadatos de más: ${canonIgual}`);
+
+        const editado = clon(st); editado.expenses[0].amount = 3000;
+        const SE = snap(editado);
+        const e1 = JSON.parse(S.expenses.e1);
+        const op = k => ({ tabla: 'expenses', clave: k, tipo: 'upsert', fila: {}, v: 'v' });
+        const L = win.planLimpiezaChoques;
+        const c = (servidor, rev) => ({ tabla: 'expenses', clave: 'e1', motivo: 'version', servidor, rev });
+        const r = [
+          ['viva e igual a lo local -> igual_nube', L({ choques: [c(meta({ ...e1, amount: 3000 }, 60), 60)], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'igual_nube'],
+          ['borrada allá y acá -> igual_nube', L({ choques: [c(meta(e1, 61, { deleted_at: TOMB }), 61)], cola: [], local: snap({ ...clon(st), expenses: [] }), base: {}, userId: USER }), 'igual_nube'],
+          ['sin op y sin cambio local -> sin_op', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [], local: S, base: S, userId: USER }), 'sin_op'],
+          ['con op y distinta -> se conserva', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'conservar'],
+          ['sin op pero con un cambio local sin encolar -> se conserva', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [], local: SE, base: S, userId: USER }), 'conservar'],
+          ['sin fila del servidor (no_existe) y con op -> se conserva', L({ choques: [{ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'conservar']
+        ].map(([n, plan, esp]) => [n, plan.quitar.length ? plan.quitar[0].regla : 'conservar', esp, plan]);
+        const igual = r[0][3].quitar[0];
+        assert(r.every(([, obt, esp]) => obt === esp) && igual.rev === 60 && igual.base === SE.expenses.e1 && r[1][3].quitar[0].base === null,
+          'T11 · Fase 2: limpieza: se quita si lo local equivale a la nube (rev y base del servidor) o si no queda op ni cambio local sin encolar; un choque con un cambio local pendiente distinto de la nube nunca se quita',
+          r.map(([n, obt, esp]) => `${n}: ${obt}${obt === esp ? '' : ' (esperado ' + esp + ')'}`).join(' · '));
+      }
+      // T11 · Fase 2: limpieza aplicada, regla (c), desborde y fallo de almacenamiento (iframe principal)
+      {
+        const U3 = 'u-t11-f2', D3 = 'dev-t11-f2';
+        const alm = win.eval('syncAlmacen');
+        const orig = { state: win.eval('JSON.stringify(state)'), guardarChoques: alm.guardarChoques, warn: win.console.warn };
+        const lsAntes = {};
+        for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+        const avisos = [];
+        try{
+          win.eval(`syncCtx = { userId: '${U3}', deviceId: '${D3}', esEscritor: false, multi: true };`);
+          const ctx = win.eval('syncCtx');
+          const S3 = st => win.construirSnapshot(st, U3, D3);
+          const filaS = (o, rev, extra) => ({ ...o, user_id: U3, rev, txid: '900', deleted_at: null, modificado_por: 'dev-otro', updated_at: '2026-10-07T12:00:00+00:00', ...(extra || {}) });
+          const st = fx(); st.expenses[0].amount = 3000; st.goals[0].name = 'Viaje local';
+          setState(win, st);
+          const S = S3(st);
+          const e1 = JSON.parse(S.expenses.e1), i1 = JSON.parse(S.incomes.i1), g1 = JSON.parse(S.goals.g1);
+          const opDe = (t, k) => ({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(S[t][k]), v: 'v0', intentos: 0, proximo: 0 });
+          alm.guardarBase(U3, S);
+          alm.guardarRevs(U3, { expenses: { e1: 50 }, incomes: { i1: 51 }, goals: { g1: 52 } });
+          alm.guardarCola(U3, [opDe('expenses', 'e1'), opDe('goals', 'g1')]);
+          alm.guardarChoques(U3, [
+            { tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS(e1, 60), rev: 60 },                          // igual a lo local
+            { tabla: 'incomes', clave: 'i1', motivo: 'version', servidor: filaS({ ...i1, amount: 5 }, 61), rev: 61 },         // sin op ni cambio local
+            { tabla: 'goals', clave: 'g1', motivo: 'version', servidor: filaS({ ...g1, name: 'Viaje nube' }, 62), rev: 62 }   // cambio pendiente: se conserva
+          ]);
+          const n = win.limpiarChoquesSync(ctx);
+          const quedan = alm.leerChoques(U3).map(c => c.tabla + ' ' + c.clave);
+          const cola = alm.leerCola(U3).map(o => o.tabla + ' ' + o.clave);
+          const revs = alm.leerRevs(U3);
+          // El usuario edita la fila en pausa: la op se coalesce y el choque sigue.
+          const st2 = JSON.parse(win.eval('JSON.stringify(state)')); st2.goals[0].name = 'Viaje local 2'; setState(win, st2);
+          alm.guardarCola(U3, win.coalescerOps(alm.leerCola(U3), win.diffSnapshots(alm.leerBase(U3), S3(st2)).filter(o => o.tabla === 'goals')));
+          alm.guardarBase(U3, S3(st2));
+          win.limpiarChoquesSync(ctx);
+          const tras = { choques: alm.leerChoques(U3).map(c => c.tabla + ' ' + c.clave), opsG1: alm.leerCola(U3).filter(o => o.clave === 'g1').length };
+          assert(n === 2 && quedan.join() === 'goals g1' && cola.join() === 'goals g1' && revs.expenses.e1 === 60
+            && tras.choques.join() === 'goals g1' && tras.opsG1 === 1,
+            'T11 · Fase 2: limpiarChoquesSync quita el choque igual a la nube (rev del servidor, sin op sobrante) y el que ya no tiene op; conserva el que tiene un cambio pendiente, también cuando el usuario edita la fila en pausa (una sola op, coalescida)',
+            `quitados=${n} · quedan=${quedan} · cola=${cola} · rev e1=${revs.expenses.e1} · tras editar: ${JSON.stringify(tras)}`);
+
+          // (c) La puesta al día trae una versión igual a lo local -> el choque se va.
+          const stC = fx(); stC.expenses[0].amount = 3000; setState(win, stC);
+          const SC = S3(stC), e1C = JSON.parse(SC.expenses.e1);
+          alm.guardarBase(U3, SC); alm.guardarRevs(U3, { expenses: { e1: 50 } });
+          alm.guardarCola(U3, [{ tabla: 'expenses', clave: 'e1', tipo: 'upsert', fila: e1C, v: 'v1', intentos: 0, proximo: 0 }]);
+          alm.guardarChoques(U3, [{ tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS({ ...e1C, amount: 2500 }, 60), rev: 60 }]);
+          const filaIgual = filaS(e1C, 70);
+          win.aplicarAccionesSync(ctx, [{ accion: 'adoptarRev', tabla: 'expenses', clave: 'e1', rev: 70, json: win.canonicoFilaNube('expenses', filaIgual, U3), fila: filaIgual, borrada: false }],
+            alm.leerBase(U3), alm.leerRevs(U3), null);
+          win.limpiarChoquesSync(ctx);
+          assert(alm.leerChoques(U3).length === 0 && alm.leerRevs(U3).expenses.e1 === 70 && alm.leerCola(U3).length === 0,
+            'T11 · Fase 2 (c): la puesta al día trae una versión de la nube igual a lo local -> el choque se quita, el rev pasa a ser el del servidor y la op sobrante sale de la cola',
+            `choques=${alm.leerChoques(U3).length} · rev=${alm.leerRevs(U3).expenses.e1} · cola=${alm.leerCola(U3).length}`);
+
+          // Desborde: 201 choques -> aviso y bandera; ninguno se descarta.
+          win.console.warn = (...a) => { avisos.push(a.join(' ')); };
+          alm.guardarChoques(U3, []);
+          ctx.choquesDesborde = false;
+          const muchos = Array.from({ length: 201 }, (_, i) => ({ tabla: 'expenses', clave: 'x' + i, motivo: 'version', servidor: filaS({ ...e1C, id: 'x' + i }, 100 + i, { txid: '1', created_at: 'x' }), rev: 100 + i }));
+          win.registrarChoquesSync(U3, muchos, true);
+          const est201 = win.estadoChoquesSync();
+          const guardados201 = alm.leerChoques(U3).length;
+          const guardadosReducidos = alm.leerChoques(U3).every(c => !('txid' in c.servidor) && !('created_at' in c.servidor));
+          const avisoDesborde = avisos.some(a => a.includes('choques pendientes: 201'));
+          // Fallo de almacenamiento: el choque queda en memoria y sigue pausando su op.
+          alm.guardarChoques(U3, []); ctx.choquesDesborde = false; ctx.choquesEnMemoria = null;
+          alm.guardarChoques = () => false;
+          win.registrarChoquesSync(U3, [{ tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS(e1C, 60), rev: 60 }], true);
+          const estMem = win.estadoChoquesSync();
+          const colaE1 = [{ tabla: 'expenses', clave: 'e1', tipo: 'upsert', fila: e1C, v: 'v1' }];
+          const pausada = win.opsNoPausadas(colaE1, win.leerChoquesVigentes(U3)).length === 0;
+          const avisoMemoria = avisos.some(a => a.includes('no se pudieron guardar'));
+          alm.guardarChoques = orig.guardarChoques;
+          win.quitarChoqueSync(U3, 'expenses', 'e1');
+          const trasQuitar = win.estadoChoquesSync();
+          assert(est201.total === 201 && est201.desborde && !est201.enMemoria && guardados201 === 201 && guardadosReducidos && avisoDesborde
+            && estMem.total === 1 && estMem.desborde && estMem.enMemoria && pausada && avisoMemoria
+            && trasQuitar.total === 0 && !trasQuitar.enMemoria,
+            'T11 · Fase 2: desborde: con 201 choques se guardan todos (reducidos), se marca choquesDesborde y se avisa; si guardarChoques falla, el choque queda en memoria, su op sigue en pausa y se avisa; nunca se descarta uno sin resolver',
+            `201: ${JSON.stringify(est201)} · memoria: ${JSON.stringify(estMem)} · pausada=${pausada} · tras resolver: ${JSON.stringify(trasQuitar)}`);
+        }catch(e){
+          assert(false, 'T11 · Fase 2: excepción en las pruebas de higiene de choques', (e && e.stack) || String(e));
+        }finally{
+          alm.guardarChoques = orig.guardarChoques;
+          win.console.warn = orig.warn;
+          win.eval('syncCtx = null; state = ' + orig.state + ';');
+          Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+          Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+          win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
+        }
+      }
       // C1: respaldo previo vigente 30 días
       {
         const ahora = Date.parse('2026-10-07T12:00:00Z');
