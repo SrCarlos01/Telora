@@ -16295,6 +16295,182 @@ function opsNoPausadas(ops, choques){
   const pausadas = new Set((choques || []).map(c => c.tabla + '|' + c.clave));
   return (ops || []).filter(o => !pausadas.has(claveOpSync(o)));
 }
+
+/* ---- T11 · Fase 1: resolución de choques (núcleo puro) ----
+   planResolverChoque(choque, decision, ctx) -> plan, sin DOM ni almacenamiento.
+     ctx  = { local, base, revs, cola, choques, userId }  (local/base = fotos canónicas)
+     plan = { estado:  [{ accion: 'aplicar'|'aplicarBorrado', tabla, clave, fila }]  (aplicarFilasAEstado)
+              encolar: [{ tabla, clave, tipo, fila }]          ops a asegurar en la cola
+              revs:    { tabla: { clave: rev | null } }         null = se borra el rev (sale como INSERT)
+              base:    { tabla: { clave: json | null } }        null = se borra de la base
+              quitarOps, quitarChoques: [{ tabla, clave }],
+              choquesDerivados: [{ tabla, clave, decision }] }  (p. ej. la meta de un aporte)
+   Decisiones por motivo:
+     version           conservar (lo local sale con el rev del servidor) | nube (se aplica lo de la nube)
+     eliminado         restaurar (lo local revive la fila)               | eliminar (se borra también acá)
+     no_existe         conservar (lo local sale como INSERT)             | eliminar
+     padre_eliminado,
+     padre_inexistente restaurar_padre (la meta vuelve y el aporte sale)  | descartar (se quita el aporte)
+   Conservar/restaurar ASEGURAN la op en la cola (upsert de lo local, o delete si lo local no está)
+   y fijan base = lo local para que el diff siguiente no la duplique: así la fila nunca queda viva
+   acá y borrada en la nube sin choque, aunque el tombstone tenga el mismo contenido. Toda
+   combinación inválida lanza un error con err.codigo (nunca un no-op silencioso). Repetir el mismo
+   plan sobre su propio resultado no cambia nada (no se encola de nuevo una op que ya está). */
+function errorSync(codigo, mensaje){ const e = new Error(mensaje); e.codigo = codigo; return e; }
+const DECISIONES_CHOQUE = {
+  version: ['conservar', 'nube'],
+  eliminado: ['restaurar', 'eliminar'],
+  no_existe: ['conservar', 'eliminar'],
+  padre_eliminado: ['restaurar_padre', 'descartar'],
+  padre_inexistente: ['restaurar_padre', 'descartar']
+};
+// «Conservar todos los de este dispositivo»: la decisión que deja lo local en cada motivo.
+function decisionLocalPara(motivo){
+  const d = { version: 'conservar', eliminado: 'restaurar', no_existe: 'conservar',
+              padre_eliminado: 'restaurar_padre', padre_inexistente: 'restaurar_padre' }[motivo];
+  if(!d) throw errorSync('decision_invalida', 'Motivo de choque desconocido: ' + motivo);
+  return d;
+}
+function planChoqueVacio(){ return { estado: [], encolar: [], revs: {}, base: {}, quitarOps: [], quitarChoques: [], choquesDerivados: [] }; }
+function fijarEnPlan(mapa, tabla, clave, valor){ (mapa[tabla] = mapa[tabla] || {})[clave] = valor; }
+function planResolverChoque(choque, decision, ctx){
+  const c = choque || {}, t = c.tabla, k = c.clave;
+  const permitidas = DECISIONES_CHOQUE[c.motivo];
+  if(!permitidas || !t || k == null) throw errorSync('decision_invalida', 'Choque inválido: ' + t + ' ' + k + ' (' + c.motivo + ')');
+  if(!permitidas.includes(decision)) throw errorSync('decision_invalida', '«' + decision + '» no aplica a un choque «' + c.motivo + '»');
+  if(c.motivo.indexOf('padre_') === 0 && t !== 'goal_aportes') throw errorSync('decision_invalida', 'Un choque «' + c.motivo + '» solo puede ser de un aporte');
+  const x = ctx || {};
+  const localDe = (tabla, clave) => ((x.local || {})[tabla] || {})[clave];
+  const opDe = (tabla, clave) => (x.cola || []).find(o => o.tabla === tabla && o.clave === clave);
+  const plan = planChoqueVacio();
+  plan.quitarChoques.push({ tabla: t, clave: k });
+  // Asegura la op que lleva lo local (upsert de L; delete si L no está) y fija base = L.
+  const asegurarOpLocal = (tabla, clave, L) => {
+    const op = opDe(tabla, clave);
+    if(L === undefined){
+      if(!(op && op.tipo === 'delete')) plan.encolar.push({ tabla, clave, tipo: 'delete', fila: pkDeFila(tabla, { id: clave, user_id: x.userId }) });
+    } else if(!(op && op.tipo === 'upsert' && jsonCanonico(op.fila) === L)){
+      plan.encolar.push({ tabla, clave, tipo: 'upsert', fila: JSON.parse(L) });
+    }
+    fijarEnPlan(plan.base, tabla, clave, L === undefined ? null : L);
+  };
+  const L = localDe(t, k);
+  const servidorVivo = !!c.servidor && c.servidor.deleted_at == null;
+  const revServidor = c.rev != null ? Number(c.rev) : (c.servidor && c.servidor.rev != null ? Number(c.servidor.rev) : null);
+  switch(c.motivo + '/' + decision){
+    case 'version/conservar':
+      asegurarOpLocal(t, k, L);
+      fijarEnPlan(plan.revs, t, k, revServidor);
+      break;
+    case 'version/nube':
+      if(!servidorVivo) throw errorSync('sin_servidor', 'No está la versión de la nube de ' + t + ' ' + k);
+      plan.estado.push({ accion: 'aplicar', tabla: t, clave: k, fila: c.servidor });
+      fijarEnPlan(plan.base, t, k, canonicoFilaNube(t, c.servidor, x.userId));
+      fijarEnPlan(plan.revs, t, k, revServidor);
+      plan.quitarOps.push({ tabla: t, clave: k });
+      break;
+    case 'eliminado/restaurar':
+      if(L === undefined) throw errorSync('no_aplica', 'No hay nada local que restaurar en ' + t + ' ' + k);
+      asegurarOpLocal(t, k, L);
+      fijarEnPlan(plan.revs, t, k, revServidor);   // el UPDATE con ese rev limpia deleted_at
+      break;
+    case 'no_existe/conservar':
+      if(L === undefined) throw errorSync('no_aplica', 'No hay nada local que conservar en ' + t + ' ' + k);
+      asegurarOpLocal(t, k, L);
+      fijarEnPlan(plan.revs, t, k, null);          // sin rev: sale como INSERT
+      break;
+    case 'eliminado/eliminar':
+    case 'no_existe/eliminar':
+    case 'padre_eliminado/descartar':
+    case 'padre_inexistente/descartar':
+      if(L !== undefined) plan.estado.push({ accion: 'aplicarBorrado', tabla: t, clave: k, fila: null });
+      fijarEnPlan(plan.base, t, k, null);
+      fijarEnPlan(plan.revs, t, k, (c.motivo === 'eliminado' || servidorVivo) ? revServidor : null);
+      plan.quitarOps.push({ tabla: t, clave: k });
+      break;
+    case 'padre_eliminado/restaurar_padre':
+    case 'padre_inexistente/restaurar_padre': {
+      if(L === undefined) throw errorSync('no_aplica', 'El aporte ' + k + ' ya no está en este dispositivo');
+      const goalId = JSON.parse(L).goal_id || (c.servidor && c.servidor.goal_id);
+      const choqueMeta = (x.choques || []).find(m => m.tabla === 'goals' && m.clave === goalId && m.motivo === 'eliminado');
+      let combinado = plan;
+      if(choqueMeta){
+        // La meta tiene su propio choque «eliminado»: se resuelve restaurándola.
+        combinado = combinarPlanes([plan, planResolverChoque(choqueMeta, 'restaurar', x)]);
+        combinado.choquesDerivados.push({ tabla: 'goals', clave: goalId, decision: 'restaurar' });
+      } else if(localDe('goals', goalId) !== undefined){
+        // La meta está acá: se reinserta (o se reenvía) desde lo local. Si la nube la tiene con
+        // tombstone y no se conoce su rev, el reenvío puede volver a chocar («eliminado»).
+        asegurarOpLocal('goals', goalId, localDe('goals', goalId));
+        if(c.motivo === 'padre_inexistente') fijarEnPlan(plan.revs, 'goals', goalId, null);
+      } else {
+        throw errorSync('no_aplica', 'La meta ' + goalId + ' no existe ni acá ni en la nube');
+      }
+      const aporte = planChoqueVacio();
+      aporte.quitarChoques.push({ tabla: t, clave: k });
+      const op = opDe(t, k);
+      if(!(op && op.tipo === 'upsert' && jsonCanonico(op.fila) === L)) aporte.encolar.push({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(L) });
+      fijarEnPlan(aporte.base, t, k, L);
+      fijarEnPlan(aporte.revs, t, k, servidorVivo ? revServidor : null);
+      return combinarPlanes([combinado, aporte]);
+    }
+    default:
+      throw errorSync('decision_invalida', '«' + decision + '» no aplica a un choque «' + c.motivo + '»');
+  }
+  return plan;
+}
+// Une los planes de un grupo. La misma clave con valores distintos (o quitada y encolada a la vez)
+// no se puede aplicar junta: planes_incompatibles.
+function combinarPlanes(planes){
+  const out = planChoqueVacio();
+  const ck = o => o.tabla + '|' + o.clave;
+  const unirLista = (lista, items, conValor) => {
+    items.forEach(it => {
+      const i = lista.findIndex(o => ck(o) === ck(it));
+      if(i < 0){ lista.push(it); return; }
+      if(conValor && jsonCanonico(lista[i]) !== jsonCanonico(it)) throw errorSync('planes_incompatibles', 'Dos resoluciones distintas para ' + ck(it));
+    });
+  };
+  const unirMapa = (dest, src) => {
+    Object.keys(src || {}).forEach(tabla => Object.keys(src[tabla]).forEach(clave => {
+      const v = src[tabla][clave];
+      if(dest[tabla] && tieneClave(dest[tabla], clave) && dest[tabla][clave] !== v) throw errorSync('planes_incompatibles', 'Dos resoluciones distintas para ' + tabla + '|' + clave);
+      fijarEnPlan(dest, tabla, clave, v);
+    }));
+  };
+  (planes || []).forEach(p => {
+    unirLista(out.estado, p.estado || [], true);
+    unirLista(out.encolar, p.encolar || [], true);
+    unirMapa(out.revs, p.revs);
+    unirMapa(out.base, p.base);
+    unirLista(out.quitarOps, p.quitarOps || [], false);
+    unirLista(out.quitarChoques, p.quitarChoques || [], false);
+    unirLista(out.choquesDerivados, p.choquesDerivados || [], true);
+  });
+  const quitadas = new Set(out.quitarOps.map(ck));
+  if(out.encolar.some(o => quitadas.has(ck(o)))) throw errorSync('planes_incompatibles', 'Una op se quita y se encola a la vez');
+  return out;
+}
+// «Descartar los 2 aportes» de una meta: goal_id -> choques de sus aportes.
+function agruparChoquesPorMeta(choques, local){
+  const m = new Map();
+  (choques || []).filter(c => c.tabla === 'goal_aportes').forEach(c => {
+    const L = ((local || {}).goal_aportes || {})[c.clave];
+    const goalId = (L && JSON.parse(L).goal_id) || (c.servidor && c.servidor.goal_id) || null;
+    if(!m.has(goalId)) m.set(goalId, []);
+    m.get(goalId).push(c);
+  });
+  return m;
+}
+// Parche de revs/base: null borra la clave.
+function aplicarParcheSync(obj, parche){
+  const o = JSON.parse(JSON.stringify(obj || {}));
+  Object.keys(parche || {}).forEach(t => Object.keys(parche[t]).forEach(k => {
+    o[t] = o[t] || {};
+    if(parche[t][k] === null) delete o[t][k]; else o[t][k] = parche[t][k];
+  }));
+  return o;
+}
 // Realtime: ¿este dispositivo debe dejar de escribir? En modo varios escritores solo si la
 // cuenta dejó de estar en 'multi:v2' (vuelta atrás); si no, la regla del escritor único.
 function escritorDejaDeSerEste(fila, ctx){
@@ -16338,6 +16514,12 @@ const syncAlmacen = {
   guardarCursor(userId, cursor){ return this._escribir('telora_sync_cursor:', userId, cursor); },
   leerChoques(userId){ return this._leer('telora_sync_choques:', userId) || []; },
   guardarChoques(userId, lista){ return this._escribir('telora_sync_choques:', userId, lista); },
+  // T11 · Fase 1. true si quedó quitado (o no estaba).
+  quitarChoque(userId, tabla, clave){
+    const lista = this.leerChoques(userId);
+    const resto = lista.filter(c => !(c.tabla === tabla && c.clave === clave));
+    return resto.length === lista.length ? true : this.guardarChoques(userId, resto);
+  },
   // C1: { fecha: ISO, contenido: JSON del estado reemplazado }. false = no se pudo guardar.
   leerRespaldoPrevio(userId){ return this._leer('telora_respaldo_previo_multi:', userId); },
   guardarRespaldoPrevio(userId, reg){ return this._escribir('telora_respaldo_previo_multi:', userId, reg); },
@@ -16831,6 +17013,64 @@ function registrarChoquesSync(userId, nuevos){
 // Contador consultable (la interfaz de choques es de T11): contarChoquesSync() en la consola.
 function contarChoquesSync(){ return syncCtx ? syncAlmacen.leerChoques(syncCtx.userId).length : 0; }
 
+/* ---- T11 · Fase 1: resolver choques (consola hoy; la UI de la Fase 3 después) ----
+   resolverChoques(lista, decision): decision es una de DECISIONES_CHOQUE o 'local_todos' (cada
+   choque con decisionLocalPara). Todo o nada: los planes se calculan antes de escribir; si uno
+   falla (err.codigo), no se aplica ninguno. Un solo candado y un solo procesarCambiosSync.
+   Solo en modo varios escritores y en la pestaña líder (err.codigo 'no_lider': la UI dirá
+   «Ábrelo en la otra pestaña»). Orden de escritura: estado (saveState) -> cola -> base/revs ->
+   choques. Si algo falla después del estado, el choque puede quedar registrado: resolverlo otra
+   vez da el mismo resultado (el plan no vuelve a encolar una op que ya está). */
+async function resolverChoques(lista, decision){
+  const ctx = syncCtx;
+  if(!ctx || !ctx.multi) throw errorSync('sin_multi', 'La sincronización con varios dispositivos no está activa en esta pestaña.');
+  if(!esPestanaLiderSync(ctx.userId)) throw errorSync('no_lider', 'Otra pestaña de Telora mantiene la sincronización: resuélvelo allí.');
+  const choques = (Array.isArray(lista) ? lista : [lista]).filter(Boolean);
+  if(!choques.length) return { resueltos: 0, encoladas: 0 };
+  const r = await conCandadoSync(() => aplicarResolucionChoques(ctx, choques, decision));
+  procesarCambiosSync();   // diff + vaciado (las ops dejan de estar en pausa)
+  return r;
+}
+function resolverChoque(choque, decision){ return resolverChoques([choque], decision); }
+function aplicarResolucionChoques(ctx, choques, decision){
+  if(syncCtx !== ctx) throw errorSync('sin_multi', 'La sincronización se detuvo.');
+  asegurarEstadoVigente();
+  if(!asegurarIdsSync()) throw errorSync('sin_guardar', 'No se pudo guardar el estado local.');
+  const pctx = {
+    local: construirSnapshot(state, ctx.userId, ctx.deviceId),
+    base: syncAlmacen.leerBase(ctx.userId) || {},
+    revs: syncAlmacen.leerRevs(ctx.userId) || {},
+    cola: syncAlmacen.leerCola(ctx.userId),
+    choques: syncAlmacen.leerChoques(ctx.userId),
+    userId: ctx.userId
+  };
+  // 1) Todos los planes, sin escribir nada (cualquier error corta aquí).
+  const plan = combinarPlanes(choques.map(c => planResolverChoque(c, decision === 'local_todos' ? decisionLocalPara(c.motivo) : decision, pctx)));
+  // 2) Estado.
+  if(plan.estado.length){
+    const r = aplicarFilasAEstado(state, plan.estado);
+    if(r.omitidas.length) throw errorSync('no_aplica', 'Un aporte de la nube no tiene su meta en este dispositivo.');
+    const previo = state;
+    state = r.estado;
+    if(!saveState()){ if(state === r.estado) state = previo; throw errorSync('sin_guardar', 'No se pudo guardar el estado local.'); }
+  }
+  // 3) Cola, base y revs, choques.
+  let cola = syncAlmacen.leerCola(ctx.userId);
+  plan.quitarOps.forEach(q => { cola = quitarOpsPorClave(cola, q.tabla, q.clave); });
+  if(plan.encolar.length){
+    const sello = Date.now().toString(36);
+    cola = coalescerOps(cola, plan.encolar.map((o, i) => ({ ...o, v: sello + '.r' + i, intentos: 0, proximo: 0 })));
+  }
+  if(!syncAlmacen.guardarCola(ctx.userId, cola)) throw errorSync('sin_guardar', 'No se pudo guardar la cola de sincronización.');
+  syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), plan.base));
+  syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), plan.revs));
+  plan.quitarChoques.forEach(q => syncAlmacen.quitarChoque(ctx.userId, q.tabla, q.clave));
+  try{ renderAll(); renderEstadoCuenta(); }catch(_){}
+  console.info('[Sync] ' + choques.length + ' choque(s) resuelto(s) (' + decision + '): ' + plan.encolar.length + ' op(s) aseguradas, '
+    + plan.estado.length + ' fila(s) aplicadas' + (plan.choquesDerivados.length ? ', ' + plan.choquesDerivados.length + ' derivado(s)' : '') + '.');
+  return { resueltos: plan.quitarChoques.length, encoladas: plan.encolar.length, aplicadas: plan.estado.length, derivados: plan.choquesDerivados };
+}
+
 // Respuesta OK de un RPC -> revs, cola, fallidas y choques. false = hay ops para reintentar.
 function procesarResultadoMultiSync(ctx, lote, res){
   if(lote[0].tabla === 'config_dispositivo'){ quitarDeColaSync(ctx.userId, lote); return true; }
@@ -16939,6 +17179,10 @@ function actualizarColaSync(userId, lote, fn){
   syncAlmacen.guardarCola(userId, nueva);
 }
 function quitarDeColaSync(userId, lote){ actualizarColaSync(userId, lote, () => null); }
+// T11 · Fase 1: quita TODAS las ops de una clave, sin exigir la misma versión (v). Pura.
+function quitarOpsPorClave(cola, tabla, clave){
+  return (cola || []).filter(o => !(o.tabla === tabla && o.clave === clave));
+}
 function reintentarLuegoSync(userId, lote){
   const ahora = Date.now();
   actualizarColaSync(userId, lote, o => {

@@ -1819,6 +1819,207 @@ async function runTests(){
           'T11 · 1a: sincronización inicial: fila propia CON op pendiente -> se adopta el rev; SIN op pendiente -> se aplica como remota; tombstone propio + upsert pendiente -> se adopta (el upsert lo restaura); lo ajeno sigue en choque',
           `propia: ${resAcc(fP.acciones)} · ajena: ${resAcc(fO.acciones)} · tombstone propio: ${resAcc(tomb.acciones)} · ajeno: ${resAcc(tombO.acciones)}`);
       }
+      // T11 · Fase 1: planResolverChoque (núcleo puro)
+      {
+        const P = win.planResolverChoque;
+        const st = fx(), S = snap(st);
+        const e1 = JSON.parse(S.expenses.e1), g1 = JSON.parse(S.goals.g1);
+        const editado = clon(st); editado.expenses[0].amount = 3000;
+        const SE = snap(editado);
+        const sinE1 = clon(st); sinE1.expenses = []; const SL = snap(sinE1);
+        const ctxDe = (local, cola, choques) => ({ local, base: local, revs: { expenses: { e1: 50 } }, cola: cola || [], choques: choques || [], userId: USER });
+        const opUp = (t, k, L) => ({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(L), v: 'v1' });
+        const codigo = fn => { try{ fn(); return null; }catch(e){ return e.codigo || ('sin código: ' + e.message); } };
+        const vivaOtra = meta({ ...e1, amount: 2500 }, 60, { modificado_por: 'dev-otro' });
+        const tombIdentico = meta(e1, 61, { modificado_por: 'dev-otro', deleted_at: TOMB });
+        const cVersion = { tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: vivaOtra, rev: 60 };
+        // Condición de salida de lo que conserva lo local: hay op en la cola para la clave O lo
+        // local es igual a la fila VIVA del servidor.
+        const salida = (plan, ctx, t, k, servidor) => {
+          const cola = win.coalescerOps(ctx.cola.filter(o => !plan.quitarOps.some(q => q.tabla === o.tabla && q.clave === o.clave)), plan.encolar);
+          const hayOp = cola.some(o => o.tabla === t && o.clave === k);
+          const igualViva = !!servidor && servidor.deleted_at == null && win.canonicoFilaNube(t, servidor, USER) === (ctx.local[t] || {})[k];
+          return hayOp || igualViva;
+        };
+        const casos = [];
+        { const ctx = ctxDe(SE), p = P(cVersion, 'conservar', ctx);
+          casos.push(['version/conservar sin op en la cola', p.encolar.length === 1 && p.encolar[0].tipo === 'upsert' && p.revs.expenses.e1 === 60
+            && p.base.expenses.e1 === SE.expenses.e1 && salida(p, ctx, 'expenses', 'e1', vivaOtra)]); }
+        { const ctx = ctxDe(SE, [opUp('expenses', 'e1', SE.expenses.e1)]), p = P(cVersion, 'conservar', ctx);
+          casos.push(['version/conservar con la op ya en la cola (no la duplica)', p.encolar.length === 0 && p.revs.expenses.e1 === 60 && salida(p, ctx, 'expenses', 'e1', vivaOtra)]); }
+        { const ctx = ctxDe(SL), p = P(cVersion, 'conservar', ctx);
+          casos.push(['version/conservar con lo local borrado (asegura el delete)', p.encolar.length === 1 && p.encolar[0].tipo === 'delete' && p.base.expenses.e1 === null
+            && salida(p, ctx, 'expenses', 'e1', vivaOtra)]); }
+        { const ctx = ctxDe(S), p = P({ tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: tombIdentico, rev: 61 }, 'restaurar', ctx);
+          casos.push(['eliminado/restaurar con tombstone de contenido IDÉNTICO (encola igual)', p.encolar.length === 1 && p.encolar[0].tipo === 'upsert' && p.revs.expenses.e1 === 61
+            && salida(p, ctx, 'expenses', 'e1', tombIdentico)]); }
+        { const ctx = ctxDe(SE), p = P({ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }, 'conservar', ctx);
+          casos.push(['no_existe/conservar (INSERT: sin rev)', p.encolar.length === 1 && p.revs.expenses.e1 === null && salida(p, ctx, 'expenses', 'e1', null)]); }
+        { const ctx = ctxDe(SE, [opUp('expenses', 'e1', SE.expenses.e1)]), p = P(cVersion, 'nube', ctx);
+          casos.push(['version/nube (aplica la nube, base del servidor, quita la op)', p.estado.length === 1 && p.estado[0].accion === 'aplicar' && p.encolar.length === 0
+            && p.base.expenses.e1 === win.canonicoFilaNube('expenses', vivaOtra, USER) && p.revs.expenses.e1 === 60 && p.quitarOps.length === 1]); }
+        { const ctx = ctxDe(SE, [opUp('expenses', 'e1', SE.expenses.e1)]), p = P({ tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: tombIdentico, rev: 61 }, 'eliminar', ctx);
+          casos.push(['eliminado/eliminar', p.estado.length === 1 && p.estado[0].accion === 'aplicarBorrado' && p.base.expenses.e1 === null && p.revs.expenses.e1 === 61 && p.quitarOps.length === 1]); }
+        { const ctx = ctxDe(SE), p = P({ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }, 'eliminar', ctx);
+          casos.push(['no_existe/eliminar', p.estado.length === 1 && p.revs.expenses.e1 === null && p.quitarOps.length === 1]); }
+        { const ctx = ctxDe(S), p = P({ tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_eliminado', servidor: null, rev: null }, 'descartar', ctx);
+          casos.push(['padre_eliminado/descartar', p.estado.length === 1 && p.estado[0].tabla === 'goal_aportes' && p.base.goal_aportes.ap1 === null && p.quitarOps.length === 1]); }
+        assert(casos.every(c => c[1]),
+          'T11 · Fase 1: matriz motivo × decisión; lo que conserva lo local deja una op en la cola para la clave (o lo local igual a la fila viva del servidor), también con un tombstone de contenido idéntico',
+          casos.map(([n, ok]) => `${ok ? 'ok' : 'FALLA'} ${n}`).join(' · '));
+
+        // restaurar_padre: con choque de la meta / meta solo acá / meta en ningún lado
+        const cAporte = m => ({ tabla: 'goal_aportes', clave: 'ap1', motivo: m, servidor: null, rev: null });
+        const cMeta = { tabla: 'goals', clave: 'g1', motivo: 'eliminado', servidor: meta(g1, 70, { modificado_por: 'dev-otro', deleted_at: TOMB }), rev: 70 };
+        const ctxA = ctxDe(S, [], [cMeta, cAporte('padre_eliminado')]);
+        const pa = P(cAporte('padre_eliminado'), 'restaurar_padre', ctxA);
+        const ctxB = ctxDe(S);
+        const pb = P(cAporte('padre_inexistente'), 'restaurar_padre', ctxB);
+        const sinMeta = { ...S, goals: {} };   // el aporte sin su meta: ni acá ni en la nube
+        const pc = codigo(() => P(cAporte('padre_inexistente'), 'restaurar_padre', ctxDe(sinMeta)));
+        const tieneOp = (p, t, k) => p.encolar.some(o => o.tabla === t && o.clave === k);
+        assert(pa.choquesDerivados.some(d => d.tabla === 'goals' && d.clave === 'g1' && d.decision === 'restaurar') && tieneOp(pa, 'goals', 'g1') && tieneOp(pa, 'goal_aportes', 'ap1')
+          && pa.revs.goals.g1 === 70 && pa.quitarChoques.length === 2
+          && tieneOp(pb, 'goals', 'g1') && tieneOp(pb, 'goal_aportes', 'ap1') && pb.revs.goals.g1 === null && pb.revs.goal_aportes.ap1 === null
+          && pc === 'no_aplica',
+          'T11 · Fase 1: restaurar_padre: con choque «eliminado» de la meta -> se restaura como derivado; meta solo acá -> se reinserta (sin rev) junto al aporte; meta en ningún lado -> no_aplica',
+          `con choque: encolar=${pa.encolar.map(o => o.tabla + ' ' + o.clave)} derivados=${JSON.stringify(pa.choquesDerivados)} · solo acá: ${pb.encolar.map(o => o.tabla + ' ' + o.clave)} · ninguno: ${pc}`);
+
+        // Errores explícitos (nunca un no-op silencioso) y decisionLocalPara
+        const errores = [
+          ['version/eliminar', codigo(() => P(cVersion, 'eliminar', ctxDe(SE))), 'decision_invalida'],
+          ['motivo desconocido', codigo(() => P({ ...cVersion, motivo: 'raro' }, 'conservar', ctxDe(SE))), 'decision_invalida'],
+          ['padre_* en un gasto', codigo(() => P({ ...cVersion, motivo: 'padre_eliminado' }, 'descartar', ctxDe(SE))), 'decision_invalida'],
+          ['nube sin la fila del servidor', codigo(() => P({ ...cVersion, servidor: null }, 'nube', ctxDe(SE))), 'sin_servidor'],
+          ['restaurar sin nada local', codigo(() => P({ tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: tombIdentico, rev: 61 }, 'restaurar', ctxDe(SL))), 'no_aplica'],
+          ['decisionLocalPara de un motivo desconocido', codigo(() => win.decisionLocalPara('raro')), 'decision_invalida'],
+          ['planes incompatibles (conservar y nube a la vez)', codigo(() => win.combinarPlanes([P(cVersion, 'conservar', ctxDe(SE)), P(cVersion, 'nube', ctxDe(SE))])), 'planes_incompatibles']
+        ];
+        const dl = win.decisionLocalPara;
+        const mapeo = dl('version') === 'conservar' && dl('eliminado') === 'restaurar' && dl('no_existe') === 'conservar'
+          && dl('padre_eliminado') === 'restaurar_padre' && dl('padre_inexistente') === 'restaurar_padre';
+        assert(mapeo && errores.every(([, obt, esp]) => obt === esp),
+          'T11 · Fase 1: combinaciones inválidas lanzan un error con err.codigo (decision_invalida, sin_servidor, no_aplica, planes_incompatibles); decisionLocalPara: version/no_existe->conservar, eliminado->restaurar, padre_*->restaurar_padre',
+          errores.map(([n, obt, esp]) => `${n}: ${obt}${obt === esp ? '' : ' (esperado ' + esp + ')'}`).join(' · '));
+
+        // agruparChoquesPorMeta: los aportes de una meta juntos («Descartar los 2 aportes»)
+        {
+          const st2 = fx(); st2.goals[0].aportes.push({ id: 'ap2', fecha: '2026-03-01', monto: 500, tipo: 'manual' });
+          const grupos = win.agruparChoquesPorMeta([cAporte('padre_eliminado'), { ...cAporte('padre_eliminado'), clave: 'ap2' }, cVersion,
+            { tabla: 'goal_aportes', clave: 'apX', motivo: 'padre_inexistente', servidor: { goal_id: 'gNube' }, rev: null }], snap(st2));
+          assert(grupos.get('g1') && grupos.get('g1').map(c => c.clave).join() === 'ap1,ap2' && grupos.get('gNube').length === 1 && grupos.size === 2,
+            'T11 · Fase 1: agruparChoquesPorMeta agrupa los choques de aportes por goal_id (de lo local o, si no está, de la fila del servidor) e ignora los de otras tablas',
+            [...grupos.entries()].map(([g, cs]) => g + ': ' + cs.map(c => c.clave)).join(' · '));
+        }
+        // La op conservada deja de estar en pausa
+        const pC = P(cVersion, 'conservar', ctxDe(SE, [opUp('expenses', 'e1', SE.expenses.e1)], [cVersion]));
+        const choquesTras = [cVersion].filter(c => !pC.quitarChoques.some(q => q.tabla === c.tabla && q.clave === c.clave));
+        const cola = [opUp('expenses', 'e1', SE.expenses.e1)];
+        assert(win.opsNoPausadas(cola, [cVersion]).length === 0 && win.opsNoPausadas(cola, choquesTras).length === 1
+          && win.quitarOpsPorClave([...cola, { ...cola[0], v: 'v2' }, { tabla: 'incomes', clave: 'i1', tipo: 'upsert' }], 'expenses', 'e1').length === 1,
+          'T11 · Fase 1: una op «conservada» ya no queda en pausa en opsNoPausadas; quitarOpsPorClave quita todas las ops de la clave sin mirar la versión',
+          `en pausa antes=${win.opsNoPausadas(cola, [cVersion]).length === 0} · libres después=${win.opsNoPausadas(cola, choquesTras).length}`);
+      }
+      // T11 · Fase 1: resolverChoques en el iframe principal (sin red: syncHabilitada es false,
+      // así que procesarCambiosSync no envía nada). Se restaura todo al final.
+      {
+        const U2 = 'u-t11-f1', D2 = 'dev-t11-f1';
+        const alm = win.eval('syncAlmacen');
+        const orig = { lider: win.esPestanaLiderSync, state: win.eval('JSON.stringify(state)') };
+        const lsAntes = {};
+        for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+        const codigoDe = async fn => { try{ await fn(); return null; }catch(e){ return e.codigo || ('sin código: ' + e.message); } };
+        try{
+          win.esPestanaLiderSync = () => true;
+          win.eval(`syncCtx = { userId: '${U2}', deviceId: '${D2}', esEscritor: false, multi: true };`);
+          const st0 = fx();
+          const S0 = win.construirSnapshot(st0, U2, D2);
+          const e1 = JSON.parse(S0.expenses.e1), i1 = JSON.parse(S0.incomes.i1), g1 = JSON.parse(S0.goals.g1);
+          const filaS = (o, rev, extra) => ({ ...o, rev, txid: '900', deleted_at: null, modificado_por: 'dev-otro', updated_at: '2026-10-07T12:00:00+00:00', ...(extra || {}) });
+          // Cada caso: estado local, cola y choques registrados. La base es lo local (lo encolado).
+          const preparar = (st, cola, choques) => {
+            setState(win, st);
+            alm.guardarBase(U2, win.construirSnapshot(st, U2, D2));
+            alm.guardarRevs(U2, { expenses: { e1: 50 }, incomes: { i1: 51 }, goals: { g1: 52 }, goal_aportes: { ap1: 53 } });
+            alm.guardarCola(U2, cola);
+            alm.guardarChoques(U2, choques);
+            alm.guardarCursor(U2, '1');
+          };
+          const opDe = (st, t, k) => ({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(win.construirSnapshot(st, U2, D2)[t][k]), v: 'v0', intentos: 0, proximo: 0 });
+          const foto = () => JSON.stringify({
+            cola: alm.leerCola(U2).map(o => [o.tabla, o.clave, o.tipo, win.jsonCanonico(o.fila)]),
+            revs: alm.leerRevs(U2), base: alm.leerBase(U2), state: JSON.parse(win.eval('JSON.stringify(state)')).expenses.concat(JSON.parse(win.eval('JSON.stringify(state)')).goals)
+          });
+          const editado = clon(st0); editado.expenses[0].amount = 3000;
+          const sinMeta = clon(st0); sinMeta.goals = [];
+          const casos = [
+            ['version/conservar', editado, [opDe(editado, 'expenses', 'e1')], { tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS({ ...e1, amount: 2500 }, 60), rev: 60 }, 'conservar'],
+            ['version/nube', editado, [opDe(editado, 'expenses', 'e1')], { tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS({ ...e1, amount: 2500 }, 60), rev: 60 }, 'nube'],
+            ['eliminado/restaurar', st0, [], { tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: filaS(e1, 61, { deleted_at: TOMB }), rev: 61 }, 'restaurar'],
+            ['eliminado/eliminar', editado, [opDe(editado, 'expenses', 'e1')], { tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: filaS(e1, 61, { deleted_at: TOMB }), rev: 61 }, 'eliminar'],
+            ['no_existe/conservar', editado, [opDe(editado, 'expenses', 'e1')], { tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }, 'conservar'],
+            ['no_existe/eliminar', editado, [opDe(editado, 'expenses', 'e1')], { tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }, 'eliminar'],
+            ['padre_inexistente/restaurar_padre', st0, [], { tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_inexistente', servidor: null, rev: null }, 'restaurar_padre'],
+            ['padre_eliminado/descartar', st0, [], { tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_eliminado', servidor: null, rev: null }, 'descartar']
+          ];
+          const malos = [];
+          for(const [nombre, st, cola, c, d] of casos){
+            preparar(st, cola, [c]);
+            await win.resolverChoques([c], d);
+            const f1 = foto(), quedan1 = alm.leerChoques(U2).length;
+            alm.guardarChoques(U2, [c]);                 // el choque «no se quitó» (falla a mitad de las escrituras)
+            await win.resolverChoques([c], d);
+            const f2 = foto(), quedan2 = alm.leerChoques(U2).length;
+            const claves = alm.leerCola(U2).map(o => o.tabla + '|' + o.clave);
+            if(f1 !== f2 || quedan1 !== 0 || quedan2 !== 0 || new Set(claves).size !== claves.length) malos.push(nombre);
+          }
+          assert(malos.length === 0,
+            'T11 · Fase 1: resolver dos veces el mismo choque con la misma decisión termina igual que una sola vez (sin ops duplicadas, mismos revs, misma base, mismo estado), en cada decisión',
+            `casos: ${casos.length} · distintos: ${malos.join(', ') || 'ninguno'}`);
+
+          // Orden de envío: con restaurar_padre, el upsert de la meta va antes que el de su aporte.
+          preparar(st0, [], [{ tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_inexistente', servidor: null, rev: null }]);
+          await win.resolverChoques(alm.leerChoques(U2), 'restaurar_padre');
+          const orden = win.ordenarOps(alm.leerCola(U2)).map(o => o.tabla);
+          assert(orden.indexOf('goals') >= 0 && orden.indexOf('goals') < orden.indexOf('goal_aportes'),
+            'T11 · Fase 1: en un lote con restaurar_padre, ordenarOps manda el upsert de la meta antes que el del aporte',
+            orden.join(' -> '));
+
+          // Todo o nada: si un plan del grupo falla, no cambia nada.
+          const cOk = { tabla: 'expenses', clave: 'e1', motivo: 'version', servidor: filaS({ ...e1, amount: 2500 }, 60), rev: 60 };
+          const cMalo = { tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_inexistente', servidor: null, rev: null };   // el aporte ya no está acá
+          preparar(sinMeta, [], [cOk, cMalo]);
+          const antes = foto() + JSON.stringify(alm.leerChoques(U2)) + localStorage.getItem('misfinanzas_data');
+          const cod = await codigoDe(() => win.resolverChoques([cOk, cMalo], 'local_todos'));
+          const despues = foto() + JSON.stringify(alm.leerChoques(U2)) + localStorage.getItem('misfinanzas_data');
+          assert(cod === 'no_aplica' && antes === despues,
+            'T11 · Fase 1: grupo «local_todos» con un choque que no se puede resolver (no_aplica) -> el grupo completo falla y no se aplica nada a medias (estado, cola, base, revs, choques y almacenamiento intactos)',
+            `código=${cod} · sin cambios=${antes === despues}`);
+
+          // local_todos traduce choque por choque; no_lider tiene su código.
+          const cI1 = { tabla: 'incomes', clave: 'i1', motivo: 'eliminado', servidor: filaS(i1, 62, { deleted_at: TOMB }), rev: 62 };
+          preparar(editado, [opDe(editado, 'expenses', 'e1')], [cOk, cI1]);
+          const rT = await win.resolverChoques(alm.leerChoques(U2), 'local_todos');
+          const colaT = alm.leerCola(U2).map(o => o.tabla + ' ' + o.clave + ' ' + o.tipo);
+          const revsT = alm.leerRevs(U2);
+          win.esPestanaLiderSync = () => false;
+          preparar(editado, [], [cOk]);
+          const codNoLider = await codigoDe(() => win.resolverChoques([cOk], 'conservar'));
+          const choquesNoLider = alm.leerChoques(U2).length;
+          assert(rT.resueltos === 2 && alm.leerChoques(U2).length === 1 && colaT.includes('expenses e1 upsert') && colaT.includes('incomes i1 upsert')
+            && revsT.expenses.e1 === 60 && revsT.incomes.i1 === 62 && codNoLider === 'no_lider' && choquesNoLider === 1,
+            'T11 · Fase 1: «local_todos» resuelve cada choque con decisionLocalPara (version->conservar, eliminado->restaurar); desde una pestaña que no es la líder -> err.codigo «no_lider» y no se toca nada',
+            `resueltos=${rT.resueltos} · cola=${colaT.join(', ')} · no líder=${codNoLider}`);
+        }catch(e){
+          assert(false, 'T11 · Fase 1: excepción en las pruebas de resolverChoques', (e && e.stack) || String(e));
+        }finally{
+          win.esPestanaLiderSync = orig.lider;
+          win.eval('syncCtx = null; state = ' + orig.state + ';');
+          Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+          Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+          win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
+        }
+      }
       // C1: respaldo previo vigente 30 días
       {
         const ahora = Date.parse('2026-10-07T12:00:00Z');
@@ -3877,6 +4078,13 @@ async function runTests(){
         `T11 · 1a: respuesta perdida (${txt}) -> 0 choques, la cola vacía y la nube igual a lo local`,
         JSON.stringify(r && (r.error || { perdida: r.perdida, choques: r.choques, cola: r.cola, distintas: r.distintas })));
     }
+    for(const [decision, esperado] of [['conservar', 3000], ['nube', 2500]]){
+      r = await correr(escenarioUnDispositivo, { resolver: decision });
+      assert(r && !r.error && r.choquesAntes.join() === 'version expenses e1' && r.codigoB === 'no_lider'
+        && r.choques === 0 && r.cola === 0 && r.nubeIgualLocal && r.e1Nube === esperado && r.e1Local === esperado,
+        `T11 · Fase 1: dos dispositivos, choque «version» resuelto desde la pestaña líder con «${decision}» -> 0 choques, la cola vacía, la nube igual a lo local (e1 = ${esperado}); la pestaña no líder recibe «no_lider»`,
+        JSON.stringify(r));
+    }
     r = await correr(escenarioUnDispositivo, { borrarLocal: true });
     assert(r && !r.error && r.h1Propia && r.deviceConservado && r.sinCola && r.h1Local && r.choques === 0 && r.cola === 0 && r.nubeIgualLocal,
       'T11 · 1a: tras borrarDatosLocalesTelora (conserva telora_device_id, borra la cola) la fila propia de la nube (h1) no se adopta por la regla nueva: vuelve como fila remota normal, con 0 choques',
@@ -4074,6 +4282,36 @@ async function escenarioUnDispositivo(opts){
     await procesar(A);                      // sincronización inicial: «adoptar»
     await procesar(B, A);
     const inicial = { revs: !!A.eval('syncAlmacen').leerRevs(U), choques: A.eval('syncAlmacen').leerChoques(U).length };
+
+    // T11 · Fase 1: dos dispositivos editan e1 (este sin conexión, el otro en la nube) -> choque
+    // «version»; se resuelve desde la pestaña líder ('conservar' o 'nube'); la no líder recibe no_lider.
+    if(opts.resolver){
+      srv.offline = true;
+      editar(A, `state.expenses.find(e => e.id === 'e1').amount = 3000;`);
+      await procesar(A, B);
+      srv.offline = false;
+      srv.cambiarRemoto('expenses', 'e1', { amount: 2500 });
+      await procesar(A, B);                     // puesta al día -> choque, e1 en pausa
+      const choquesAntes = A.eval('syncAlmacen').leerChoques(U);
+      let codigoB = null;
+      try{ await B.resolverChoques(choquesAntes, opts.resolver); }catch(e){ codigoB = e.codigo; }
+      await A.resolverChoques(choquesAntes, opts.resolver);
+      await quieto(A, B);
+      await procesar(A, B);
+      const alm = A.eval('syncAlmacen');
+      const local = A.construirSnapshot(A.eval('state'), U, D);
+      const nube = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+      const distintas = [];
+      A.eval('SYNC_TABLAS_MULTI').forEach(t => {
+        const claves = new Set(Object.keys(nube[t] || {}).filter(k => !nube[t][k].borrada).concat(Object.keys(local[t] || {})));
+        claves.forEach(k => { if(!nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
+      });
+      return {
+        choquesAntes: choquesAntes.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave), codigoB,
+        choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length, nubeIgualLocal: distintas.length === 0, distintas,
+        e1Nube: srv.filas.expenses.e1.amount, e1Local: A.eval('state.expenses.find(e => e.id === "e1").amount')
+      };
+    }
 
     // Rechazo durante aplicarAccionesSync: otra pestaña guarda justo antes de que la puesta al
     // día guarde lo remoto. Nada avanza; la siguiente puesta al día lo aplica.
