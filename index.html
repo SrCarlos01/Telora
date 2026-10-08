@@ -3466,6 +3466,25 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
+<!-- SHEET: T11 · 1b · dispositivo con datos propios que entra a una cuenta con varios
+     dispositivos. «Sí»: respaldo previo + unión con la nube. «No»: no se sube nada, no se
+     asocia el dispositivo y los datos locales quedan como están. -->
+<div class="sheet-overlay" id="sheetUnirMulti">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>¿Estos datos son tuyos?</h2>
+    <p class="sheet-note" style="margin-bottom:8px;">
+      En este dispositivo: <b id="unirConteoLocal"></b>.<br>
+      En tu cuenta: <b id="unirConteoNube"></b>.
+    </p>
+    <p class="sheet-note" style="margin-bottom:12px;">
+      Si son tuyos, se juntan con los de tu cuenta: lo que está solo aquí se sube, lo que está solo en la nube se trae y, si algo cambió en los dos lados, queda para que lo revises. Antes se guarda un respaldo de este dispositivo.
+    </p>
+    <button class="btn-primary" id="btnUnirMultiSi">Sí, son míos — juntar</button>
+    <button class="btn-ghost" id="btnUnirMultiNo" data-close>No son míos</button>
+  </div>
+</div>
+
 <!-- SHEET: guarda contra borrado masivo en la nube (Etapa 2 · Tanda 4a). data-nodismiss:
      hay que elegir. Mientras está abierto, la escritura continua queda pausada. -->
 <div class="sheet-overlay" id="sheetSyncBorradoMasivo" data-nodismiss>
@@ -16136,6 +16155,8 @@ function adoptarColaPendiente(cola, base, nube, deviceId){
 //             respaldo JSON y reemplaza lo local por la nube).
 //   con base: 'tres_vias' = adoptarColaPendiente para las claves con op en la cola +
 //             planPuestaAlDia (completa) para el resto.
+// T11 · 1b: p.conDatos = este dispositivo tiene datos financieros propios. Sin base y con datos,
+// la sincronización inicial es una UNIÓN (planUnion), nunca un reemplazo: lo local no se pierde.
 function fusionInicial(p){
   const local = p.local || {}, nube = p.nube || {};
   if(!p.base){
@@ -16144,13 +16165,39 @@ function fusionInicial(p){
       const vivas = Object.keys(N).filter(k => !N[k].borrada);
       return vivas.length === Object.keys(L).length && vivas.every(k => L[k] === N[k].json);
     });
-    return { modo: igual ? 'adoptar' : 'reemplazar', acciones: [], quitar: [] };
+    if(igual) return { modo: 'adoptar', acciones: [], quitar: [] };
+    if(p.conDatos) return { modo: 'union', acciones: planUnion(local, nube), quitar: [] };
+    return { modo: 'reemplazar', acciones: [], quitar: [] };
   }
   const pendientes = new Set((p.cola || []).filter(o => o.tabla !== 'config_dispositivo').map(claveOpSync));
   const adop = adoptarColaPendiente(p.cola, p.base, nube, p.deviceId);
   const resto = planPuestaAlDia({ local, base: p.base, revs: {}, nube, completa: true, deviceId: p.deviceId })
     .filter(a => !pendientes.has(a.tabla + '|' + a.clave));
   return { modo: 'tres_vias', acciones: adop.acciones.concat(resto), quitar: adop.quitar };
+}
+
+// T11 · 1b: unión con base vacía (dispositivo con datos propios que nunca sincronizó en este modo).
+//   solo en la nube -> aplicar (se trae) · tombstone sin nada local -> adoptarRev
+//   solo aquí -> sin acción: el diff siguiente lo sube como INSERT (la base no lo tiene)
+//   misma clave, mismo contenido -> adoptarRev · contenido distinto -> choque «version»
+//   viva aquí y con tombstone en la nube -> choque «eliminado»
+// Ningún delete hacia la nube. LIMITACIÓN: una fila que otro dispositivo borró físicamente
+// (escritor único, antes de los tombstones) y que este dispositivo todavía tiene vuelve a subir.
+function planUnion(local, nube){
+  const acciones = [];
+  SYNC_TABLAS_MULTI.forEach(t => {
+    const L = (local || {})[t] || {}, N = (nube || {})[t] || {};
+    Object.keys(N).forEach(k => {
+      const R = N[k], l = L[k];
+      let d;
+      if(l === undefined) d = { accion: R.borrada ? 'adoptarRev' : 'aplicar' };
+      else if(R.borrada) d = { accion: 'choque', motivo: 'eliminado' };
+      else if(l === R.json) d = { accion: 'adoptarRev' };
+      else d = { accion: 'choque', motivo: 'version' };
+      acciones.push({ ...d, tabla: t, clave: k, rev: R.rev, json: R.json, fila: R.fila, borrada: R.borrada });
+    });
+  });
+  return acciones;
 }
 
 // Estado nuevo con las filas remotas aplicadas (vía localX). No muta `st`. Devuelve también las
@@ -16701,6 +16748,7 @@ function detenerEscrituraContinua(){
   clearTimeout(syncTimerReintento); syncTimerReintento = null;
   try{ closeSheet('sheetSyncBorradoMasivo'); }catch(_){}
   try{ if(document.getElementById('sheetLegadoEscritor').classList.contains('open')) closeSheet('sheetLegadoEscritor'); }catch(_){}
+  try{ unionCtx = null; if(document.getElementById('sheetUnirMulti').classList.contains('open')) closeSheet('sheetUnirMulti'); }catch(_){}
 }
 
 // Serializado: si llega otro disparo mientras corre, se repite una vez al terminar.
@@ -16815,7 +16863,8 @@ async function sincronizacionInicialMulti(ctx, base){
   asegurarEstadoVigente();   // T11 · 0b: después del await (fusionInicial y reemplazarLocalConNube leen `state`)
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
   const cola = syncAlmacen.leerCola(ctx.userId);
-  const f = fusionInicial({ local: actual, base, nube, cola, deviceId: ctx.deviceId });
+  const f = fusionInicial({ local: actual, base, nube, cola, deviceId: ctx.deviceId, conDatos: !sinDatosFinancieros(state) });
+  if(f.modo === 'union') return unirLocalConNube(ctx, f.acciones, cursor);
   if(f.modo === 'adoptar'){
     // Lo local ya es igual a la nube (p. ej. recién subido): solo se adoptan las versiones. La
     // base va sin config_dispositivo para que el próximo diff mande la fila de este dispositivo.
@@ -16839,18 +16888,40 @@ async function sincronizacionInicialMulti(ctx, base){
 // ANTES de reemplazar; si no se puede guardar, no se reemplaza nada (y no se reintenta en esta
 // carga, para no repetir la lectura completa en cada guardado). Se ofrece en el aviso y en
 // Configuración → Respaldo de datos.
+// C1: respaldo de lo local en localStorage ANTES de reemplazarlo o unirlo con la nube. false = no se
+// pudo guardar (no se sigue y no se reintenta en esta carga). Sin datos financieros, nada que respaldar.
+function guardarRespaldoPrevioAntesDeSync(ctx){
+  if(sinDatosFinancieros(state)) return true;
+  let reg = null;
+  try{ reg = { fecha: new Date().toISOString(), contenido: JSON.stringify(state) }; }catch(_){}
+  if(!reg || !syncAlmacen.guardarRespaldoPrevio(ctx.userId, reg)){
+    ctx.inicialBloqueada = true;
+    console.warn('[Sync] varios escritores: no se pudo guardar el respaldo previo en este dispositivo (sin espacio u '
+      + 'otro error de almacenamiento): NO se tocan los datos locales. Se vuelve a intentar la próxima vez que abras la app.');
+    return false;
+  }
+  return true;
+}
+
+// T11 · 1b: dispositivo con datos propios que nunca sincronizó en este modo: respaldo previo y
+// UNIÓN con la nube (planUnion). Lo local que la nube no tiene lo sube el diff siguiente; los
+// choques quedan en pausa para revisarlos.
+function unirLocalConNube(ctx, acciones, cursor){
+  if(!guardarRespaldoPrevioAntesDeSync(ctx)) return false;
+  if(!aplicarAccionesSync(ctx, acciones, {}, {}, cursor)) return false;
+  const n = contarAcciones(acciones);
+  console.info('[Sync] varios escritores: unión con la nube · traídas ' + n.aplicar + ' · iguales ' + n.adoptarRev + ' · choques ' + n.choque + '.');
+  renderRespaldoPrevioMulti();
+  showToast('Juntamos los datos de este dispositivo con los de tu cuenta.'
+    + (n.choque ? ' Hay ' + n.choque + (n.choque === 1 ? ' cambio' : ' cambios') + ' para revisar.' : '')
+    + ' Guardamos un respaldo de lo que había antes (también en Configuración).', 'success', 20000,
+    { label: 'Descargar respaldo', onClick: () => descargarRespaldoPrevioMulti(ctx.userId) });
+  return true;
+}
+
 function reemplazarLocalConNube(ctx, nube, cursor){
   const teniaDatos = !sinDatosFinancieros(state);
-  if(teniaDatos){
-    let reg = null;
-    try{ reg = { fecha: new Date().toISOString(), contenido: JSON.stringify(state) }; }catch(_){}
-    if(!reg || !syncAlmacen.guardarRespaldoPrevio(ctx.userId, reg)){
-      ctx.inicialBloqueada = true;
-      console.warn('[Sync] varios escritores: no se pudo guardar el respaldo previo en este dispositivo (sin espacio u '
-        + 'otro error de almacenamiento): NO se reemplazan los datos locales. Se vuelve a intentar la próxima vez que abras la app.');
-      return false;
-    }
-  }
+  if(!guardarRespaldoPrevioAntesDeSync(ctx)) return false;
   const previo = state;
   const nuevo = migrateBackup(estadoDesdeNube(state, nube));
   state = nuevo;
@@ -17393,6 +17464,7 @@ async function intentarSubidaInicial(session){
         marcarDuenoConfirmado(userId);
         activarEscrituraContinua(userId, deviceId);
       }
+      else if(leerDuenoConfirmado() === null && multiActiva()) await ofrecerUnionMulti(userId, deviceId);   // T11 · 1b
       else if(leerDuenoConfirmado() === null) await ofrecerDispositivoLegado(userId, deviceId);   // Tanda 4a.1
       return;
     }
@@ -17430,6 +17502,15 @@ async function intentarSubidaInicial(session){
         await registrarDispositivo(userId, deviceId);
         activarRealtime(userId);
         activarEscrituraContinua(userId, deviceId);
+        return;
+      }
+      // T11 · 1b: con varios escritores y datos propios: si el candado ya es de esta cuenta, se une
+      // con la nube sin preguntar; sin candado se pregunta «¿Estos datos son tuyos?».
+      if(multiActiva() && (leerDuenoConfirmado() === null || leerDuenoConfirmado() === userId)){
+        await registrarDispositivo(userId, deviceId);
+        activarRealtime(userId);
+        if(leerDuenoConfirmado() === userId) activarEscrituraContinua(userId, deviceId);
+        else await ofrecerUnionMulti(userId, deviceId);
         return;
       }
       await registrarDispositivo(userId, deviceId);
@@ -17478,7 +17559,7 @@ async function intentarSubidaInicial(session){
 }
 
 // S1 · T7: dispositivo sin datos financieros que entra a una cuenta con datos en modo varios
-// escritores. Con datos locales y sin candado sigue el camino de siempre (pregunta de T11).
+// escritores. Con datos locales y sin candado: ofrecerUnionMulti (T11 · 1b).
 function entraSinDatosAMulti(){ asegurarEstadoVigente(); return multiActiva() && sinDatosFinancieros(state); }
 
 let subidaDuenoCtx = null;   // { userId, deviceId }
@@ -17490,6 +17571,51 @@ document.getElementById('btnConfirmarDueno').onclick = async ()=>{
   marcarDuenoConfirmado(userId);
   await subirDatosIniciales(userId, deviceId);
 };
+
+/* ---- T11 · 1b: «¿Estos datos son tuyos?» con varios escritores ----
+   Dispositivo con datos financieros propios y sin candado en una cuenta con datos. «Sí, son
+   míos»: candado + activación; la sincronización inicial hace el respaldo previo y la UNIÓN
+   (fusionInicial con conDatos -> planUnion), nunca el reemplazo. «No son míos»: no se sube nada,
+   no se marca el candado y el dispositivo sigue solo con sus datos locales, intactos (no se borra
+   nada); se vuelve a preguntar la próxima vez que se abra la app con esa sesión. */
+let unionCtx = null;            // { userId, deviceId } mientras la hoja está ofrecida
+let __unionEvaluado = false;
+async function ofrecerUnionMulti(userId, deviceId){
+  if(!ESCRITURA_CONTINUA_ACTIVA || __unionEvaluado || !supa || !multiActiva()) return;
+  __unionEvaluado = true;
+  const tablas = ['expenses','incomes','debts','goals'];
+  const res = await Promise.all(tablas.map(t =>
+    supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null)
+  ));
+  if(res.some(r => r.error)){ console.warn('[Sync] unión: no se pudo contar la nube', res.map(r => r.error)); return; }
+  const nube = {};
+  tablas.forEach((t, i) => { nube[t] = res[i].count || 0; });
+  unionCtx = { userId, deviceId };
+  abrirCuandoLibre(()=>{
+    if(!unionCtx || unionCtx.userId !== userId) return;   // se cerró sesión mientras esperaba
+    asegurarEstadoVigente();
+    const n = k => Array.isArray(state[k]) ? state[k].length : 0;
+    document.getElementById('unirConteoLocal').textContent =
+      textoConteosLegado({ expenses: n('expenses'), incomes: n('incomes'), debts: n('debts'), goals: n('goals') });
+    document.getElementById('unirConteoNube').textContent = textoConteosLegado(nube);
+    openSheet('sheetUnirMulti', 'btnUnirMultiSi');
+  });
+}
+document.getElementById('btnUnirMultiSi').onclick = async ()=>{
+  closeSheet('sheetUnirMulti');
+  const ctx = unionCtx;
+  unionCtx = null;
+  if(!ctx || !supa) return;
+  const { data } = await supa.auth.getSession();
+  if(!data || !data.session || !data.session.user || data.session.user.id !== ctx.userId) return;
+  marcarDuenoConfirmado(ctx.userId);
+  activarEscrituraContinua(ctx.userId, ctx.deviceId);   // sincronización inicial: respaldo previo + unión
+};
+document.getElementById('btnUnirMultiNo').addEventListener('click', ()=>{
+  if(!unionCtx) return;
+  unionCtx = null;
+  showToast('Estos datos quedan solo en este dispositivo: no se suben a tu cuenta ni se borran.', null, 6000);
+});
 
 /* ---- Dispositivo LEGADO (Tanda 4a.1) ----
    Registrado en la nube (fila propia en config_dispositivo) antes de que existiera el
@@ -18153,6 +18279,7 @@ const HOJAS_SIN_MARCA = [
   'sheetCierreMes',          // pantalla de lectura del mes cerrado
   'sheetConfirmRestore',     // reemplaza TODO el estado por un archivo elegido: no depende de lo leído
   'sheetConfirmarDueno',     // sube a la nube; asegurarEstadoVigente() relee antes de la foto
+  'sheetUnirMulti',          // T11 · 1b: une con la nube; la sincronización inicial relee el estado antes de la foto
   'sheetSyncBorradoMasivo',  // confirma ops ya calculadas; procesarCambiosSync rehace el diff con el estado vigente
   'sheetLegadoEscritor',     // reclama el rol de escritor; no edita `state`
   'sheetEliminarCuenta',     // borra la cuenta en el servidor; no edita `state`

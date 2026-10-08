@@ -1819,6 +1819,32 @@ async function runTests(){
           'T11 · 1a: sincronización inicial: fila propia CON op pendiente -> se adopta el rev; SIN op pendiente -> se aplica como remota; tombstone propio + upsert pendiente -> se adopta (el upsert lo restaura); lo ajeno sigue en choque',
           `propia: ${resAcc(fP.acciones)} · ajena: ${resAcc(fO.acciones)} · tombstone propio: ${resAcc(tomb.acciones)} · ajeno: ${resAcc(tombO.acciones)}`);
       }
+      // T11 · 1b: unión con base vacía (dispositivo con datos propios, sin candado)
+      {
+        const st = fx(); st.expenses.push({ ...st.expenses[0], id: 'x1', amount: 7 });   // x1 solo aquí
+        const S = snap(st);
+        const nubeSt = clon(st);
+        nubeSt.expenses = nubeSt.expenses.filter(e => e.id !== 'x1');
+        nubeSt.expenses.push({ ...nubeSt.expenses[0], id: 'c1', amount: 9 });              // c1 solo en la nube
+        nubeSt.incomes[0].amount = 1;                                                       // i1 distinta
+        const filas = filasNube(nubeSt);
+        filas.goal_aportes = filas.goal_aportes.map(a => ({ ...a, deleted_at: TOMB }));     // ap1: tombstone allá, viva aquí
+        filas.expenses.push(meta({ ...JSON.parse(S.expenses.e1), id: 'tX' }, 999, { deleted_at: TOMB }));   // tombstone sin nada local
+        const f = win.fusionInicial({ local: S, base: null, nube: nubeDe(filas), cola: [], conDatos: true });
+        const fSin = win.fusionInicial({ local: S, base: null, nube: nubeDe(filas), cola: [] });
+        const r = win.aplicarFilasAEstado(st, f.acciones);
+        const nb = win.actualizarBaseYRevs({}, {}, f.acciones);
+        const ops = win.diffSnapshots(nb.base, snap(r.estado));
+        assert(f.modo === 'union' && fSin.modo === 'reemplazar'
+          && acc(f.acciones, 'expenses', 'c1').accion === 'aplicar' && acc(f.acciones, 'expenses', 'e1').accion === 'adoptarRev'
+          && acc(f.acciones, 'incomes', 'i1').accion === 'choque' && acc(f.acciones, 'incomes', 'i1').motivo === 'version'
+          && acc(f.acciones, 'goal_aportes', 'ap1').accion === 'choque' && acc(f.acciones, 'goal_aportes', 'ap1').motivo === 'eliminado'
+          && acc(f.acciones, 'expenses', 'tX').accion === 'adoptarRev' && !f.acciones.some(a => a.clave === 'x1')
+          && r.estado.expenses.some(e => e.id === 'c1') && r.estado.expenses.some(e => e.id === 'x1')
+          && ops.every(o => o.tipo === 'upsert') && ops.some(o => o.clave === 'x1'),
+          'T11 · 1b: fusionInicial sin base y con datos propios -> UNIÓN: solo en la nube se trae, solo aquí sube como INSERT, misma clave igual se adopta, distinta -> choque «version», viva aquí y con tombstone allá -> choque «eliminado»; ningún delete (sin datos sigue siendo «reemplazar»)',
+          `${resAcc(f.acciones.filter(a => a.accion !== 'adoptarRev'))} · ops siguientes: ${resumen(ops)}`);
+      }
       // T11 · Fase 1: planResolverChoque (núcleo puro)
       {
         const P = win.planResolverChoque;
@@ -4078,6 +4104,23 @@ async function runTests(){
         `T11 · 1a: respuesta perdida (${txt}) -> 0 choques, la cola vacía y la nube igual a lo local`,
         JSON.stringify(r && (r.error || { perdida: r.perdida, choques: r.choques, cola: r.cola, distintas: r.distintas })));
     }
+    r = await correr(escenarioUnDispositivo, { union: 'si' });
+    assert(r && !r.error && r.abierta && r.dueno === 'u-t11-un-dispositivo' && r.respaldo && r.choques.length === 0 && r.cola.length === 0
+      && r.distintas.length === 0 && r.borrados.length === 0
+      && r.gastosLocal.join() === 'c1:900,e1:2000,x1:700' && r.gastosNube.join() === 'c1:900,e1:2000,x1:700',
+      'T11 · 1b: «Sí, son míos» (hoja real) -> respaldo previo creado y UNIÓN sin choques: x1 (solo aquí) sube, c1 (solo en la nube) se trae, nada se borra y la nube queda igual a lo local',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { union: 'choque' });
+    assert(r && !r.error && r.respaldo && r.choques.join() === 'version expenses e1' && r.borrados.length === 0
+      && r.gastosLocal.join() === 'c1:900,e1:2000,x1:700' && r.gastosNube.join() === 'c1:900,e1:2500,x1:700'
+      && r.cola.join() === 'upsert expenses e1' && r.distintas.join() === 'expenses e1',
+      'T11 · 1b: unión con la misma clave y contenido distinto (e1) -> choque «version» en pausa (lo local se conserva, la nube no se pisa); el resto se une igual y queda el respaldo previo',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { union: 'no' });
+    assert(r && !r.error && r.abierta && r.cerrada && r.dueno === null && r.syncCtx === null && r.llamadas === 0 && r.nubeIntacta && !r.respaldo
+      && r.gastosLocal.join() === 'e1:2000,x1:700' && r.gastosGuardados.join() === 'e1:2000,x1:700',
+      'T11 · 1b: «No son míos» -> no se sube nada (0 llamadas, la nube intacta), no se marca el candado, no se activa la sincronización y los datos locales quedan intactos (no se borra nada)',
+      JSON.stringify(r));
     for(const [decision, esperado] of [['conservar', 3000], ['nube', 2500]]){
       r = await correr(escenarioUnDispositivo, { resolver: decision });
       assert(r && !r.error && r.choquesAntes.join() === 'version expenses e1' && r.codigoB === 'no_lider'
@@ -4272,10 +4315,70 @@ async function escenarioUnDispositivo(opts){
     Object.keys(localStorage).filter(k => k.endsWith(':' + U)).forEach(k => localStorage.removeItem(k));
     const st = fixtureBase();
     st.expenses.push({ id:'e1', date:'2026-09-01', nombre:'Pan', amount:2000, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+    if(opts.union) st.expenses.push({ id:'x1', date:'2026-09-02', nombre:'Solo aquí', amount:700, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
     localStorage.setItem('misfinanzas_data', JSON.stringify(st));
     let fA = await nuevaPestana(), fB = await nuevaPestana();
     let A = instalar(fA, 'A', true), B = instalar(fB, 'B', false);
     const snapA = A.construirSnapshot(A.eval('state'), U, D);
+
+    // T11 · 1b: dispositivo con datos propios (x1 solo aquí) y sin candado que entra a una cuenta
+    // con datos (c1 solo en la nube; con 'choque', e1 distinta allá). Se maneja por la hoja real.
+    if(opts.union){
+      Object.keys(snapA).filter(t => t !== 'config_dispositivo').forEach(t => {
+        Object.keys(snapA[t]).filter(k => k !== 'x1').forEach(k => {
+          const fila = { ...JSON.parse(snapA[t][k]), ...(t === 'config_compartida' ? { dispositivo_escritor: 'multi:v2' } : {}) };
+          if(t === 'expenses' && k === 'e1' && opts.union === 'choque') fila.amount = 2500;
+          srv.sembrar(t, k, fila);
+        });
+      });
+      srv.sembrar('expenses', 'c1', { ...JSON.parse(snapA.expenses.e1), id: 'c1', nombre: 'Solo en la nube', amount: 900 });
+      A.eval('syncCtx = null;');
+      let dueno = null;
+      A.leerDuenoConfirmado = () => dueno;
+      A.marcarDuenoConfirmado = u => { dueno = u; };
+      A.multiActiva = () => true;
+      const tr = A.eval('syncTransporte');
+      tr.leerEscritor = async () => ({ existe: true, escritor: 'multi:v2' });
+      tr.activarMulti = async () => ({ data: { ok: true, escritor: 'multi:v2' }, error: null });
+      A.__supaFalso.from = t => ({ select: () => ({ eq: () => ({ is: async () => ({
+        count: Object.values(srv.filas[t] || {}).filter(f => !f.deleted_at).length, error: null }) }) }) });
+      A.document.querySelectorAll('.sheet-overlay.open').forEach(o => A.closeSheet(o.id));
+      const nubeAntes = JSON.stringify(srv.filas);
+      await A.ofrecerUnionMulti(U, D);
+      await tick(150);
+      const hoja = A.document.getElementById('sheetUnirMulti');
+      const abierta = hoja.classList.contains('open');
+      const conteos = A.document.getElementById('unirConteoLocal').textContent + ' | ' + A.document.getElementById('unirConteoNube').textContent;
+      const respaldo = () => localStorage.getItem('telora_respaldo_previo_multi:' + U) !== null;
+      const gastosLocal = () => JSON.parse(A.eval('JSON.stringify(state.expenses)')).map(e => e.id + ':' + e.amount).sort();
+      if(opts.union === 'no'){
+        A.document.getElementById('btnUnirMultiNo').click();
+        await tick(300);
+        return {
+          abierta, conteos, cerrada: !hoja.classList.contains('open'), dueno, syncCtx: A.eval('syncCtx'),
+          llamadas: srv.llamadas.length, nubeIntacta: JSON.stringify(srv.filas) === nubeAntes, respaldo: respaldo(),
+          gastosLocal: gastosLocal(), gastosGuardados: JSON.parse(localStorage.getItem('misfinanzas_data')).expenses.map(e => e.id + ':' + e.amount).sort()
+        };
+      }
+      A.document.getElementById('btnUnirMultiSi').click();
+      await tick(150);
+      await quieto(A, B);
+      await procesar(A, B);
+      const alm = A.eval('syncAlmacen');
+      const local = A.construirSnapshot(A.eval('state'), U, D);
+      const nube = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+      const distintas = [];
+      A.eval('SYNC_TABLAS_MULTI').forEach(t => {
+        const claves = new Set(Object.keys(nube[t] || {}).filter(k => !nube[t][k].borrada).concat(Object.keys(local[t] || {})));
+        claves.forEach(k => { if(!nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
+      });
+      return {
+        abierta, conteos, dueno, respaldo: respaldo(), choques: alm.leerChoques(U).map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave),
+        cola: alm.leerCola(U).map(o => o.tipo + ' ' + o.tabla + ' ' + o.clave), distintas, borrados: srv.borrados.slice(),
+        gastosLocal: gastosLocal(),
+        gastosNube: Object.values(srv.filas.expenses).filter(f => !f.deleted_at).map(f => f.id + ':' + f.amount).sort()
+      };
+    }
     Object.keys(snapA).filter(t => t !== 'config_dispositivo').forEach(t => {
       Object.keys(snapA[t]).forEach(k => srv.sembrar(t, k, { ...JSON.parse(snapA[t][k]), ...(t === 'config_compartida' ? { dispositivo_escritor: 'multi:v2' } : {}) }));
     });
