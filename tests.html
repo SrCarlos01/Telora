@@ -146,6 +146,14 @@ function instalarRelojPruebas(win){
 async function runTests(){
   const iframe = document.getElementById('appFrame');
   const win = iframe.contentWindow;
+  // Marca de carga: `win` es un WindowProxy; si el iframe principal se recarga, apunta a la página
+  // nueva (sin la marca, sin el reloj de pruebas ni los fixtures). winVigente() lo detecta.
+  const MARCA_CARGA = Math.random().toString(36).slice(2);
+  win.__marcaCargaPruebas = MARCA_CARGA;
+  const winVigente = () => {
+    if(win.__marcaCargaPruebas !== MARCA_CARGA) throw new Error('el iframe principal se recargó; esta prueba debe ir antes de los escenarios');
+    return win;
+  };
   instalarRelojPruebas(win);
   document.getElementById('relojPruebas').textContent =
     `Reloj de las pruebas: hoy = ${HOY_PRUEBAS.toLocaleDateString('es-CL')} (cambiar con ?hoy=AAAA-MM-DD).`;
@@ -1754,6 +1762,62 @@ async function runTests(){
           && !('e1' in nb.base.expenses) === !('e1' in base.expenses) && nb.base.incomes.i1 === base.incomes.i1,
           'T7 (C2): fila viva con modificado_por NULL -> adoptarRev y la op pendiente (delete o upsert) se conserva y sale con ese rev; con modificado_por de otro dispositivo y contenido distinto -> choque; la base no se toca',
           `NULL: ${resAcc(rNull.acciones)} · quitar=${rNull.quitar.length} · otro: ${resAcc(rOtro.acciones)}`);
+      }
+      // T11 · 1a: fila propia (modificado_por = este dispositivo) con op pendiente -> adoptarRev
+      {
+        const st = fx(), base0 = snap(st), e1 = JSON.parse(base0.expenses.e1);
+        const editado = clon(st); editado.expenses[0].amount = 3000;
+        const sinE1 = clon(st); sinE1.expenses = [];
+        const pend = new Set(['expenses|e1']);
+        const fila = (amount, mod, extra) => nubeDe({ expenses: [meta({ ...e1, amount }, 60, { modificado_por: mod, ...(extra || {}) })] });
+        const plan = (o) => acc(win.planPuestaAlDia({ revs: { expenses: { e1: 50 } }, ...o }), 'expenses', 'e1');
+        // Edición pendiente; la nube tiene una versión anterior escrita por este dispositivo (respuesta perdida).
+        const ed = { local: snap(editado), base: snap(editado), pendientes: pend };
+        const edPropia = plan({ ...ed, nube: fila(2500, DEV), deviceId: DEV });
+        const edOtro   = plan({ ...ed, nube: fila(2500, 'dev-otro'), deviceId: DEV });
+        const edSinDev = plan({ ...ed, nube: fila(2500, DEV) });
+        // Delete pendiente sobre una fila viva propia / ajena.
+        const del = { local: snap(sinE1), base: snap(sinE1), pendientes: pend };
+        const delPropia = plan({ ...del, nube: fila(2500, DEV), deviceId: DEV });
+        const delOtro   = plan({ ...del, nube: fila(2500, 'dev-otro'), deviceId: DEV });
+        // Tombstone propio / ajeno con upsert pendiente.
+        const tb = { local: snap(editado), base: snap(editado), pendientes: pend };
+        const tbPropio = plan({ ...tb, nube: fila(2500, DEV, { deleted_at: TOMB }), deviceId: DEV });
+        const tbOtro   = plan({ ...tb, nube: fila(2500, 'dev-otro', { deleted_at: TOMB }), deviceId: DEV });
+        // Sin op pendiente (p. ej. tras borrar los datos locales): la fila propia es una fila remota más.
+        const sinPend = plan({ local: base0, base: base0, nube: fila(2500, DEV), deviceId: DEV });
+        assert(edPropia.accion === 'adoptarRev' && edPropia.rev === 60
+          && edOtro.accion === 'choque' && edOtro.motivo === 'version'
+          && edSinDev.accion === 'choque' && edSinDev.motivo === 'version'
+          && delPropia.accion === 'adoptarRev' && delOtro.accion === 'choque' && delOtro.motivo === 'version'
+          && tbPropio.accion === 'adoptarRev' && tbOtro.accion === 'choque' && tbOtro.motivo === 'eliminado'
+          && sinPend.accion === 'aplicar',
+          'T11 · 1a: fila propia + op pendiente (edición, baja o tombstone propio) -> adoptarRev; la misma fila de OTRO dispositivo sigue en choque (version/eliminado); sin deviceId no cambia nada; sin op pendiente la fila propia se aplica como remota',
+          [['edición propia', edPropia], ['edición ajena', edOtro], ['sin deviceId', edSinDev], ['baja propia', delPropia], ['baja ajena', delOtro],
+           ['tombstone propio', tbPropio], ['tombstone ajeno', tbOtro], ['sin pendiente', sinPend]]
+            .map(([n, a]) => `${n}: ${a.accion}${a.motivo ? '/' + a.motivo : ''}`).join(' · '));
+      }
+      // T11 · 1a: sincronización inicial (fusionInicial / adoptarColaPendiente) con filas propias
+      {
+        const st = fx(), base = snap(st);
+        const e1 = JSON.parse(base.expenses.e1), i1 = JSON.parse(base.incomes.i1);
+        const editado = clon(st); editado.expenses[0].amount = 3000;
+        const opE1 = { tabla: 'expenses', clave: 'e1', tipo: 'upsert', fila: JSON.parse(snap(editado).expenses.e1), v: 'v1' };
+        const nube = mod => nubeDe({
+          expenses: [meta({ ...e1, amount: 2500 }, 70, { modificado_por: mod })],      // CON op pendiente
+          incomes: [meta({ ...i1, amount: 1 }, 71, { modificado_por: mod })]           // SIN op pendiente
+        });
+        const fP = win.fusionInicial({ local: snap(editado), base, nube: nube(DEV), cola: [opE1], deviceId: DEV });
+        const fO = win.fusionInicial({ local: snap(editado), base, nube: nube('dev-otro'), cola: [opE1], deviceId: DEV });
+        const tomb = win.adoptarColaPendiente([opE1], base, nubeDe({ expenses: [meta({ ...e1, amount: 2500 }, 72, { modificado_por: DEV, deleted_at: TOMB })] }), DEV);
+        const tombO = win.adoptarColaPendiente([opE1], base, nubeDe({ expenses: [meta({ ...e1, amount: 2500 }, 72, { modificado_por: 'dev-otro', deleted_at: TOMB })] }), DEV);
+        assert(acc(fP.acciones, 'expenses', 'e1').accion === 'adoptarRev' && acc(fP.acciones, 'expenses', 'e1').rev === 70
+          && acc(fP.acciones, 'incomes', 'i1').accion === 'aplicar'
+          && acc(fO.acciones, 'expenses', 'e1').accion === 'choque' && acc(fO.acciones, 'incomes', 'i1').accion === 'aplicar'
+          && acc(tomb.acciones, 'expenses', 'e1').accion === 'adoptarRev' && tomb.quitar.length === 0
+          && acc(tombO.acciones, 'expenses', 'e1').accion === 'choque' && acc(tombO.acciones, 'expenses', 'e1').motivo === 'eliminado',
+          'T11 · 1a: sincronización inicial: fila propia CON op pendiente -> se adopta el rev; SIN op pendiente -> se aplica como remota; tombstone propio + upsert pendiente -> se adopta (el upsert lo restaura); lo ajeno sigue en choque',
+          `propia: ${resAcc(fP.acciones)} · ajena: ${resAcc(fO.acciones)} · tombstone propio: ${resAcc(tomb.acciones)} · ajeno: ${resAcc(tombO.acciones)}`);
       }
       // C1: respaldo previo vigente 30 días
       {
@@ -3760,14 +3824,21 @@ async function runTests(){
 
   // ==================== T11 · un solo dispositivo con dos pestañas (va al final) ====================
   // Dos iframes nuevos de index.html (líder y no líder) con el mismo localStorage y un servidor
-  // falso en memoria con las reglas de compare-and-set de M2. Va al final porque al restaurar el
-  // localStorage la pestaña principal puede recargarse (debeRecargarPorBorradoLocal).
+  // falso en memoria con las reglas de compare-and-set de M2.
+  // REGLA: toda prueba que use `win` (el iframe principal) va ANTES de los escenarios. Algunos
+  // escenarios lo recargan a propósito (borrarLocal borra misfinanzas_data -> listener de
+  // borrado local -> location.reload()), y después `win` ya es otra página. Se verifica: la marca
+  // de carga debe seguir aquí, y toda prueba posterior que use `win` lo pide con winVigente(),
+  // que falla con un mensaje claro si el iframe se recargó.
   {
+    assert(win.__marcaCargaPruebas === MARCA_CARGA,
+      'T11: el iframe principal no se recargó antes de los escenarios (marca de carga intacta)',
+      `marca=${win.__marcaCargaPruebas === MARCA_CARGA ? 'intacta' : 'perdida'}`);
     // Inventario: toda hoja con un botón de guardar está clasificada (y las listas no nombran hojas inexistentes).
     {
-      const d = win.document;
-      const listas = { edicion: win.eval('HOJAS_EDICION'), conTexto: win.eval('HOJAS_EDICION_CON_TEXTO'), sinMarca: win.eval('HOJAS_SIN_MARCA') };
-      const selG = win.eval('SELECTOR_GUARDAR_HOJA'), selC = win.eval('SELECTOR_CERRAR_HOJA');
+      const w = winVigente(), d = w.document;
+      const listas = { edicion: w.eval('HOJAS_EDICION'), conTexto: w.eval('HOJAS_EDICION_CON_TEXTO'), sinMarca: w.eval('HOJAS_SIN_MARCA') };
+      const selG = w.eval('SELECTOR_GUARDAR_HOJA'), selC = w.eval('SELECTOR_CERRAR_HOJA');
       const clasificadas = new Set([].concat(listas.edicion, listas.conTexto, listas.sinMarca));
       const conGuardar = [...d.querySelectorAll('.sheet-overlay')]
         .filter(o => [...o.querySelectorAll(selG)].some(b => !b.closest(selC)))
@@ -3796,6 +3867,20 @@ async function runTests(){
       && r.h1TrasB === 'vivo 1500' && r.borradosAntesBaja.length === 0,
       'T11 · 0b: evento storage perdido (bfcache / iOS): «online» en la pestaña con el estado viejo no genera ops (relee antes del diff) y su guardado se rechaza sin escribir; h1 sigue vivo',
       JSON.stringify(r));
+    for(const [variante, ok, txt] of [
+      ['edicion',   x => x.aplicada && x.h4 === 'vivo 200', 'alta perdida y luego editada'],
+      ['baja',      x => x.aplicada && x.h4 === 'borrado',  'alta perdida y luego borrada'],
+      ['tombstone', x => x.tombstone && x.h5 === 'vivo',    'baja perdida (tombstone propio) y la fila vuelta a agregar: la op sale con el rev adoptado y la fila queda viva']
+    ]){
+      r = await correr(escenarioUnDispositivo, { perderRespuesta: variante });
+      assert(fin(r) && r.perdida && ok(r.perdida) && r.perdida.choquesTras === 0,
+        `T11 · 1a: respuesta perdida (${txt}) -> 0 choques, la cola vacía y la nube igual a lo local`,
+        JSON.stringify(r && (r.error || { perdida: r.perdida, choques: r.choques, cola: r.cola, distintas: r.distintas })));
+    }
+    r = await correr(escenarioUnDispositivo, { borrarLocal: true });
+    assert(r && !r.error && r.h1Propia && r.deviceConservado && r.sinCola && r.h1Local && r.choques === 0 && r.cola === 0 && r.nubeIgualLocal,
+      'T11 · 1a: tras borrarDatosLocalesTelora (conserva telora_device_id, borra la cola) la fila propia de la nube (h1) no se adopta por la regla nueva: vuelve como fila remota normal, con 0 choques',
+      JSON.stringify(r));
     r = await correr(escenarioUnDispositivo, { rechazoAplicar: true });
     assert(r && !r.error && r.p1 === false && r.sinCambios && r.e1Tras1 === 2000 && r.p2 === true && r.e1Tras2 === 2500
       && r.e1Guardado === 2500 && r.revE1 === r.revServidor && r.paletaOtra && r.choques === 0,
@@ -3823,6 +3908,14 @@ async function runTests(){
     assert(p && !p.error && h.cerrada && h.sinMarcaAlCerrar,
       'T11 · 0b: cerrar nunca se bloquea: un clic real en el control de cierre de la hoja marcada la cierra y le quita la marca',
       JSON.stringify(p && (p.error || { control: h.control, cerrada: h.cerrada, sinMarca: h.sinMarcaAlCerrar })));
+    // borrarLocal recargó el iframe principal: desde aquí winVigente() no deja usar `win`.
+    {
+      let msg = null;
+      try{ winVigente(); }catch(e){ msg = e.message; }
+      assert(msg === 'el iframe principal se recargó; esta prueba debe ir antes de los escenarios',
+        'T11: después de los escenarios que recargan el iframe principal, winVigente() falla con un mensaje claro (ninguna prueba posterior usa un `win` recargado)',
+        `mensaje=${msg}`);
+    }
   }
 
   renderResultados();
@@ -3910,7 +4003,8 @@ function servidorSyncFalso(userId){
 // opts.eventoPerdido: la pestaña no líder se queda con el `state` y el texto leído de antes del alta de
 //   h1 (como si el evento storage no hubiera llegado: bfcache, iOS); recibe «online» e intenta guardar.
 // opts.rechazoAplicar: otra pestaña guarda mientras la puesta al día aplica una fila remota.
-// opts.perderRespuesta: la respuesta del alta de h4 se pierde y h4 se vuelve a editar antes de reenviar.
+// opts.perderRespuesta: 'edicion' | 'baja' | 'tombstone' (ver las variantes más abajo).
+// opts.borrarLocal: borrarDatosLocalesTelora en la pestaña líder con h1 (propia) viva en la nube.
 async function escenarioUnDispositivo(opts){
   opts = opts || {};
   const U = 'u-t11-un-dispositivo', D = 'dev-t11-un-dispositivo';
@@ -4037,18 +4131,66 @@ async function escenarioUnDispositivo(opts){
     await procesar(B, A);                   // B encola; A vacía por el evento storage
     const h1TrasB = srv.filas.expenses.h1 ? (srv.filas.expenses.h1.deleted_at ? 'borrado' : 'vivo ' + srv.filas.expenses.h1.amount) : 'no existe';
     const borradosAntesBaja = srv.borrados.slice();
+
+    // Borrar los datos locales (conserva telora_device_id; borra cola, base y revs): las filas que
+    // escribió este dispositivo vuelven como filas remotas normales, sin choques.
+    if(opts.borrarLocal){
+      const h1Propia = srv.filas.expenses.h1 && srv.filas.expenses.h1.modificado_por === D && !srv.filas.expenses.h1.deleted_at;
+      const borradas = A.borrarDatosLocalesTelora(localStorage);
+      const recargar = async f => { const p = cargar(f); f.contentWindow.location.reload(); await p; };
+      await tick(100);
+      await recargar(fA); await recargar(fB);
+      A = instalar(fA, 'A', true); B = instalar(fB, 'B', false);
+      const sinCola = A.eval('syncAlmacen').leerCola(U).length === 0 && !A.eval('syncAlmacen').leerRevs(U);
+      await procesar(A, B);
+      await procesar(A, B);
+      const alm = A.eval('syncAlmacen');
+      const local = A.construirSnapshot(A.eval('state'), U, D);
+      const nube = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+      const distintas = [];
+      A.eval('SYNC_TABLAS_MULTI').forEach(t => {
+        const claves = new Set(Object.keys(nube[t] || {}).filter(k => !nube[t][k].borrada).concat(Object.keys(local[t] || {})));
+        claves.forEach(k => { if(!nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
+      });
+      return {
+        h1Propia, deviceConservado: borradas.indexOf('telora_device_id') < 0, sinCola,
+        h1Local: A.eval('state.expenses.some(e => e.id === "h1")'),
+        choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length, nubeIgualLocal: distintas.length === 0, distintas
+      };
+    }
+
     releer(A);
     editar(A, `state.expenses = state.expenses.filter(e => e.id !== 'h1');`);
     await procesar(A, B);
 
-    // Variante: respuesta perdida de un alta y otra edición antes del reenvío.
+    // Variantes de respuesta perdida (el servidor aplicó, la respuesta no llegó):
+    //   'edicion'   alta de h4 perdida -> se edita h4 antes del reenvío;
+    //   'baja'      alta de h4 perdida -> se borra h4 antes del reenvío;
+    //   'tombstone' baja de h5 perdida (tombstone propio) -> h5 se vuelve a agregar antes del reenvío.
+    let perdida = null;
     if(opts.perderRespuesta){
-      srv.perderRespuestas = 1;
-      editar(A, `state.expenses.push(${gasto('h4', 100)});`);
-      await procesar(A, B);
-      editar(A, `state.expenses.find(e => e.id === 'h4').amount = 200;`);
-      A.eval('adelantarReintentosSync("' + U + '");');
-      await procesar(A, B);
+      const reenviar = async () => { A.eval('adelantarReintentosSync("' + U + '");'); await procesar(A, B); };
+      if(opts.perderRespuesta === 'tombstone'){
+        editar(A, `state.expenses.push(${gasto('h5', 500)});`);
+        await procesar(A, B);
+        srv.perderRespuestas = 1;
+        editar(A, `state.expenses = state.expenses.filter(e => e.id !== 'h5');`);
+        await procesar(A, B);
+        const tombstone = !!(srv.filas.expenses.h5 && srv.filas.expenses.h5.deleted_at);
+        editar(A, `state.expenses.push(${gasto('h5', 500)});`);
+        await reenviar();
+        perdida = { tombstone, h5: srv.filas.expenses.h5 && (srv.filas.expenses.h5.deleted_at ? 'borrado' : 'vivo') };
+      } else {
+        srv.perderRespuestas = 1;
+        editar(A, `state.expenses.push(${gasto('h4', 100)});`);
+        await procesar(A, B);
+        const aplicada = !!srv.filas.expenses.h4;
+        if(opts.perderRespuesta === 'baja') editar(A, `state.expenses = state.expenses.filter(e => e.id !== 'h4');`);
+        else editar(A, `state.expenses.find(e => e.id === 'h4').amount = 200;`);
+        await reenviar();
+        perdida = { aplicada, h4: srv.filas.expenses.h4 && (srv.filas.expenses.h4.deleted_at ? 'borrado' : 'vivo ' + srv.filas.expenses.h4.amount) };
+      }
+      perdida.choquesTras = A.eval('syncAlmacen').leerChoques(U).length;
     }
 
     // Sin conexión: A da de alta y edita h2; B (releída) da de alta h3. Todo queda en la cola.
@@ -4085,7 +4227,7 @@ async function escenarioUnDispositivo(opts){
     });
     const e = srv.filas.expenses || {};
     return {
-      inicial, h1TrasB, borradosAntesBaja, eventoPerdido, colaSinRed,
+      inicial, h1TrasB, borradosAntesBaja, eventoPerdido, perdida, colaSinRed,
       choques: choques.length, detalleChoques: choques.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave),
       cola: alm.leerCola(U).length, fallidas: alm.leerFallidas(U).length,
       nubeIgualLocal: distintas.length === 0, distintas,
@@ -4226,7 +4368,7 @@ document.getElementById('appFrame').addEventListener('load', ()=>{
   // (no hay guard DOMContentLoaded en index.html), se espera un tick extra por si algo
   // async del iframe (fonts, etc.) dispara antes del evento load.
   setTimeout(runTests, 50);
-});
+}, { once: true });   // T11 · 1a: el escenario que borra los datos locales recarga este iframe; no se vuelve a correr todo
 </script>
 </body>
 </html>

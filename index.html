@@ -16035,11 +16035,23 @@ function revsDeNube(nube){
 
 // Decisión para UNA fila remota. L = JSON local (undefined = no está), B = JSON de la base
 // (lo último encolado), R = entrada de indexarNube. pendiente = hay op en la cola para la clave;
-// enVuelo = la op de esa clave se está enviando ahora mismo.
+// enVuelo = la op de esa clave se está enviando ahora mismo; propia = la fila la escribió ESTE
+// dispositivo (modificado_por = device_id).
+// T11 · 1a: fila propia con op pendiente -> adoptarRev. Es una versión anterior de lo que este
+// mismo dispositivo tiene encolado (p. ej. se aplicó pero la respuesta se perdió y después se
+// volvió a editar o se borró): la op pendiente (upsert o delete) sale con ese rev, sin choque.
+// También sobre un tombstone propio (el upsert pendiente lo restaura). Sin op pendiente la fila
+// propia se trata como cualquier fila remota (p. ej. tras borrar los datos locales).
+// LIMITACIÓN CONOCIDA (postergada): device_id clonado. Si el almacenamiento del navegador se
+// restaura en otro equipo (copia del perfil, restauración de un teléfono con la PWA) y los dos
+// siguen en uso, comparten device_id: la regla tomaría la escritura del otro equipo como propia
+// y la sobrescribiría sin choque. Defensa futura: verificar la autoría por contenido (hash de
+// las cargas enviadas por clave mientras la op está pendiente) en vez de solo modificado_por.
 function decidirFilaRemota(x){
   const L = x.L, B = x.B, R = x.R;
   if(x.conocido != null && R.rev <= x.conocido) return { accion: 'ignorar' };   // ya conocida (eco, solapamiento del cursor)
   if(x.enVuelo) return { accion: 'diferir' };
+  if(x.pendiente && x.propia) return { accion: 'adoptarRev' };                  // versión anterior de lo propio encolado
   if(R.borrada){
     if(L === undefined) return { accion: 'adoptarRev' };                        // también se borró acá
     if(!x.pendiente && L === B) return { accion: 'aplicarBorrado' };            // sin cambio local: se borra acá, sin op
@@ -16051,8 +16063,14 @@ function decidirFilaRemota(x){
   return { accion: 'choque', motivo: 'version' };
 }
 
+// Fila escrita por ESTE dispositivo vía RPC (T11 · 1a). Sin deviceId, nunca.
+function filaEsPropia(R, deviceId){
+  return !!deviceId && !!R && !!R.fila && R.fila.modificado_por === deviceId;
+}
+
 // Puesta al día. completa = la respuesta trae TODAS las filas (lectura completa): lo que la base
 // conoce y la nube ya no tiene fue borrado físicamente (cliente viejo, purga).
+// p.deviceId (T11 · 1a): habilita la regla de fila propia de decidirFilaRemota.
 function planPuestaAlDia(p){
   const acciones = [];
   const local = p.local || {}, base = p.base || {}, revs = p.revs || {}, nube = p.nube || {};
@@ -16061,7 +16079,8 @@ function planPuestaAlDia(p){
     const L = local[t] || {}, B = base[t] || {}, N = nube[t] || {}, V = revs[t] || {};
     Object.keys(N).forEach(k => {
       const R = N[k], ck = t + '|' + k;
-      const d = decidirFilaRemota({ L: L[k], B: B[k], R, pendiente: pend.has(ck), conocido: V[k], enVuelo: vuelo.has(ck) });
+      const d = decidirFilaRemota({ L: L[k], B: B[k], R, pendiente: pend.has(ck), conocido: V[k], enVuelo: vuelo.has(ck),
+                                    propia: filaEsPropia(R, p.deviceId) });
       acciones.push({ ...d, tabla: t, clave: k, rev: R.rev, json: R.json, fila: R.fila, borrada: R.borrada });
     });
     if(!p.completa || t === 'config_compartida') return;   // config sin fila no es un borrado
@@ -16086,7 +16105,9 @@ function planPuestaAlDia(p){
 // dispositivo por RPC): se adopta solo si su contenido es el de la base; si no, choque.
 // Tombstone: el upsert choca ('eliminado') y el delete sobra. Fila inexistente: el upsert sale
 // como nuevo y el delete sobra. soloRev: la base no se toca (sigue siendo lo encolado).
-function adoptarColaPendiente(cola, base, nube){
+// T11 · 1a: con deviceId, una fila (o tombstone) con modificado_por = este dispositivo también es
+// propia: se adopta su rev y la op sale con él (misma regla y limitación que decidirFilaRemota).
+function adoptarColaPendiente(cola, base, nube, deviceId){
   const acciones = [], quitar = [];
   (cola || []).forEach(op => {
     if(op.tabla === 'config_dispositivo') return;
@@ -16097,10 +16118,11 @@ function adoptarColaPendiente(cola, base, nube){
     if(!R){ if(op.tipo === 'delete') quitar.push(op); return; }   // upsert nuevo: sale con base_rev null
     if(R.borrada){
       if(op.tipo === 'delete'){ quitar.push(op); acciones.push({ ...a, accion: 'adoptarRev' }); }
+      else if(filaEsPropia(R, deviceId)) acciones.push({ ...a, accion: 'adoptarRev' });   // el upsert restaura el tombstone propio
       else acciones.push({ ...a, accion: 'choque', motivo: 'eliminado' });
       return;
     }
-    const deEsteDispositivo = R.fila == null || R.fila.modificado_por == null;
+    const deEsteDispositivo = R.fila == null || R.fila.modificado_por == null || filaEsPropia(R, deviceId);
     if(deEsteDispositivo || (op.tipo === 'upsert' && R.json === B)) acciones.push({ ...a, accion: 'adoptarRev' });
     else acciones.push({ ...a, accion: 'choque', motivo: 'version' });
   });
@@ -16125,8 +16147,8 @@ function fusionInicial(p){
     return { modo: igual ? 'adoptar' : 'reemplazar', acciones: [], quitar: [] };
   }
   const pendientes = new Set((p.cola || []).filter(o => o.tabla !== 'config_dispositivo').map(claveOpSync));
-  const adop = adoptarColaPendiente(p.cola, p.base, nube);
-  const resto = planPuestaAlDia({ local, base: p.base, revs: {}, nube, completa: true })
+  const adop = adoptarColaPendiente(p.cola, p.base, nube, p.deviceId);
+  const resto = planPuestaAlDia({ local, base: p.base, revs: {}, nube, completa: true, deviceId: p.deviceId })
     .filter(a => !pendientes.has(a.tabla + '|' + a.clave));
   return { modo: 'tres_vias', acciones: adop.acciones.concat(resto), quitar: adop.quitar };
 }
@@ -16611,7 +16633,7 @@ async function sincronizacionInicialMulti(ctx, base){
   asegurarEstadoVigente();   // T11 · 0b: después del await (fusionInicial y reemplazarLocalConNube leen `state`)
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
   const cola = syncAlmacen.leerCola(ctx.userId);
-  const f = fusionInicial({ local: actual, base, nube, cola });
+  const f = fusionInicial({ local: actual, base, nube, cola, deviceId: ctx.deviceId });
   if(f.modo === 'adoptar'){
     // Lo local ya es igual a la nube (p. ej. recién subido): solo se adoptan las versiones. La
     // base va sin config_dispositivo para que el próximo diff mande la fila de este dispositivo.
@@ -16791,7 +16813,7 @@ async function puestaAlDiaSync(ctx){
   const pendientes = new Set(syncAlmacen.leerCola(ctx.userId).map(claveOpSync));
   asegurarEstadoVigente();   // T11 · 0b: después de los await (aplicarAccionesSync parte de este `state`)
   const actual = construirSnapshot(state, ctx.userId, ctx.deviceId);
-  const acciones = planPuestaAlDia({ local: actual, base, revs, nube, pendientes, completa });
+  const acciones = planPuestaAlDia({ local: actual, base, revs, nube, pendientes, completa, deviceId: ctx.deviceId });
   const n = contarAcciones(acciones);
   // N3: cuántas filas ya conocidas llegan en cada puesta al día. Si este número crece sin parar,
   // el xmin del servidor está congelado (una transacción abierta) y el cursor no avanza.
