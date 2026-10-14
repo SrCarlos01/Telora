@@ -2076,11 +2076,18 @@ async function runTests(){
           ['sin op y sin cambio local -> sin_op', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [], local: S, base: S, userId: USER }), 'sin_op'],
           ['con op y distinta -> se conserva', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'conservar'],
           ['sin op pero con un cambio local sin encolar -> se conserva', L({ choques: [c(meta({ ...e1, amount: 2500 }, 60), 60)], cola: [], local: SE, base: S, userId: USER }), 'conservar'],
-          ['sin fila del servidor (no_existe) y con op -> se conserva', L({ choques: [{ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'conservar']
+          ['sin fila del servidor (no_existe) y con op -> se conserva', L({ choques: [{ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }], cola: [op('e1')], local: SE, base: SE, userId: USER }), 'conservar'],
+          // Fase 2b
+          ['sin op, tombstone allá y viva acá sin cambios -> sin_op (borrar)', L({ choques: [{ tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: meta(e1, 62, { deleted_at: TOMB }), rev: 62 }], cola: [], local: S, base: S, userId: USER }), 'sin_op'],
+          ['sin op y no_existe -> sin_op (borrar, sin rev)', L({ choques: [{ tabla: 'expenses', clave: 'e1', motivo: 'no_existe', servidor: null, rev: null }], cola: [], local: S, base: S, userId: USER }), 'sin_op'],
+          ['sin op, padre_* sin fila del servidor -> se conserva (no hay qué aplicar)', L({ choques: [{ tabla: 'goal_aportes', clave: 'ap1', motivo: 'padre_inexistente', servidor: null, rev: null }], cola: [], local: S, base: S, userId: USER }), 'conservar']
         ].map(([n, plan, esp]) => [n, plan.quitar.length ? plan.quitar[0].regla : 'conservar', esp, plan]);
         const igual = r[0][3].quitar[0];
-        assert(r.every(([, obt, esp]) => obt === esp) && igual.rev === 60 && igual.base === SE.expenses.e1 && r[1][3].quitar[0].base === null,
-          'T11 · Fase 2: limpieza: se quita si lo local equivale a la nube (rev y base del servidor) o si no queda op ni cambio local sin encolar; un choque con un cambio local pendiente distinto de la nube nunca se quita',
+        const vivo = r[2][3].quitar[0], tomb = r[6][3].quitar[0], noEx = r[7][3].quitar[0];
+        assert(r.every(([, obt, esp]) => obt === esp) && igual.rev === 60 && igual.base === SE.expenses.e1 && r[1][3].quitar[0].base === null
+          && vivo.accion === 'aplicar' && vivo.rev === 60 && vivo.base === win.canonicoFilaNube('expenses', meta({ ...e1, amount: 2500 }, 60), USER) && vivo.fila.amount === 2500
+          && tomb.accion === 'aplicarBorrado' && tomb.base === null && tomb.rev === 62 && noEx.accion === 'aplicarBorrado' && noEx.rev === null,
+          'T11 · Fase 2/2b: limpieza: se quita si lo local equivale a la nube (rev y base del servidor) o si no queda op ni cambio local sin encolar, y en ese caso se APLICA la versión de la nube (viva -> aplicar con su base y rev; tombstone o no_existe -> borrar); un choque con un cambio local pendiente, o un padre_* sin fila del servidor, nunca se quita',
           r.map(([n, obt, esp]) => `${n}: ${obt}${obt === esp ? '' : ' (esperado ' + esp + ')'}`).join(' · '));
       }
       // T11 · Fase 2: limpieza aplicada, regla (c), desborde y fallo de almacenamiento (iframe principal)
@@ -2113,6 +2120,14 @@ async function runTests(){
           const quedan = alm.leerChoques(U3).map(c => c.tabla + ' ' + c.clave);
           const cola = alm.leerCola(U3).map(o => o.tabla + ' ' + o.clave);
           const revs = alm.leerRevs(U3);
+          // Fase 2b: i1 (sin_op) quedó con la versión de la nube; e1 (igual_nube) no cambió.
+          const i1Nube = win.canonicoFilaNube('incomes', filaS({ ...i1, amount: 5 }, 61), U3);
+          const r2b = { i1Local: win.eval('state.incomes.find(i => i.id === "i1").amount'), i1Base: alm.leerBase(U3).incomes.i1 === i1Nube, i1Rev: revs.incomes.i1,
+                        e1Local: win.eval('state.expenses.find(e => e.id === "e1").amount'),
+                        guardado: JSON.parse(localStorage.getItem('misfinanzas_data')).incomes.find(i => i.id === 'i1').amount };
+          assert(r2b.i1Local === 5 && r2b.i1Base && r2b.i1Rev === 61 && r2b.guardado === 5 && r2b.e1Local === 3000,
+            'T11 · Fase 2b: limpieza sin_op con la fila de la nube viva -> lo local queda igual a la nube (estado guardado, base canónica y rev del servidor); igual_nube no cambia lo local',
+            JSON.stringify(r2b));
           // El usuario edita la fila en pausa: la op se coalesce y el choque sigue.
           const st2 = JSON.parse(win.eval('JSON.stringify(state)')); st2.goals[0].name = 'Viaje local 2'; setState(win, st2);
           alm.guardarCola(U3, win.coalescerOps(alm.leerCola(U3), win.diffSnapshots(alm.leerBase(U3), S3(st2)).filter(o => o.tabla === 'goals')));
@@ -2137,6 +2152,21 @@ async function runTests(){
           assert(alm.leerChoques(U3).length === 0 && alm.leerRevs(U3).expenses.e1 === 70 && alm.leerCola(U3).length === 0,
             'T11 · Fase 2 (c): la puesta al día trae una versión de la nube igual a lo local -> el choque se quita, el rev pasa a ser el del servidor y la op sobrante sale de la cola',
             `choques=${alm.leerChoques(U3).length} · rev=${alm.leerRevs(U3).expenses.e1} · cola=${alm.leerCola(U3).length}`);
+
+          // Fase 2b: sin_op con tombstone borra en local; un aporte cuya meta no está aquí conserva su choque.
+          const stT = fx(); setState(win, stT);
+          const ST = S3(stT), e1T = JSON.parse(ST.expenses.e1);
+          alm.guardarBase(U3, ST); alm.guardarRevs(U3, { expenses: { e1: 50 } }); alm.guardarCola(U3, []);
+          alm.guardarChoques(U3, [
+            { tabla: 'expenses', clave: 'e1', motivo: 'eliminado', servidor: filaS(e1T, 63, { deleted_at: TOMB }), rev: 63 },
+            { tabla: 'goal_aportes', clave: 'apX', motivo: 'version', servidor: filaS({ id: 'apX', goal_id: 'gNoEsta', monto: 1, fecha: '2026-09-01', tipo: 'manual' }, 64), rev: 64 }
+          ]);
+          const nT = win.limpiarChoquesSync(ctx);
+          const rT = { quitados: nT, choques: alm.leerChoques(U3).map(c => c.tabla + ' ' + c.clave), e1Local: win.eval('state.expenses.some(e => e.id === "e1")'),
+                       e1Base: 'e1' in (alm.leerBase(U3).expenses || {}), e1Rev: alm.leerRevs(U3).expenses.e1 };
+          assert(rT.quitados === 1 && rT.choques.join() === 'goal_aportes apX' && rT.e1Local === false && rT.e1Base === false && rT.e1Rev === 63,
+            'T11 · Fase 2b: limpieza sin_op con tombstone -> la fila se borra en local (sin base, rev del tombstone); un aporte cuya meta no está aquí no se aplica y su choque se conserva',
+            JSON.stringify(rT));
 
           // Desborde: 201 choques -> aviso y bandera; ninguno se descarta.
           win.console.warn = (...a) => { avisos.push(a.join(' ')); };

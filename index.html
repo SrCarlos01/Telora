@@ -16554,7 +16554,8 @@ function reducirFilaChoque(tabla, fila){
 //   igual_nube: lo local equivale a la versión de la nube que guarda el choque (viva e igual, o
 //               borrada en los dos lados) -> rev y base pasan a ser los del servidor y sobran sus ops;
 //   sin_op:     no queda ninguna op en la cola para la clave Y lo local es lo de la base (no hay
-//               un cambio local sin encolar).
+//               un cambio local sin encolar) -> se aplica la versión de la nube que guarda el
+//               choque (Fase 2b: accion 'aplicar' o 'aplicarBorrado', con su base y su rev).
 // Nunca se quita un choque con un cambio local pendiente distinto de la nube.
 function planLimpiezaChoques(p){
   const quitar = [], conservar = [];
@@ -16578,7 +16579,16 @@ function planLimpiezaChoques(p){
       quitar.push({ tabla: t, clave: k, regla: 'igual_nube', rev, base: sVivo ? sJson : null });
       return;
     }
-    if(!hayOp && L === B){ quitar.push({ tabla: t, clave: k, regla: 'sin_op' }); return; }
+    if(!hayOp && L === B){
+      // T11 · Fase 2b: sin op ni cambio local, la versión de la nube que guarda el choque se APLICA
+      // (como la puesta al día sin op): el cursor ya pasó ese cambio y no volverá a llegar.
+      const rev = c.rev != null ? Number(c.rev) : (s && s.rev != null ? Number(s.rev) : null);
+      if(sVivo) quitar.push({ tabla: t, clave: k, regla: 'sin_op', accion: 'aplicar', fila: s, base: sJson, rev });
+      else if(s) quitar.push({ tabla: t, clave: k, regla: 'sin_op', accion: 'aplicarBorrado', fila: null, base: null, rev });
+      else if(c.motivo === 'no_existe') quitar.push({ tabla: t, clave: k, regla: 'sin_op', accion: 'aplicarBorrado', fila: null, base: null, rev: null });
+      else conservar.push(c);   // padre_* sin fila del servidor: no hay qué aplicar; se conserva
+      return;
+    }
     conservar.push(c);
   });
   return { quitar, conservar };
@@ -17352,19 +17362,39 @@ function limpiarChoquesSync(ctx){
     base: syncAlmacen.leerBase(ctx.userId) || {}, userId: ctx.userId
   });
   if(!plan.quitar.length) return 0;
-  const iguales = plan.quitar.filter(q => q.regla === 'igual_nube');
-  if(iguales.length){
+  // Fase 2b: sin_op aplica la versión de la nube. Un aporte cuya meta no está aquí no se aplica
+  // (aplicarFilasAEstado lo deja en «omitidas») y su choque se conserva. Si el estado no se pudo
+  // guardar, no se quita ningún choque sin_op.
+  let quitar = plan.quitar;
+  const sinOp = quitar.filter(q => q.regla === 'sin_op');
+  if(sinOp.length){
+    const r = aplicarFilasAEstado(state, sinOp.map(q => ({ accion: q.accion, tabla: q.tabla, clave: q.clave, fila: q.fila })));
+    const omitidas = new Set(r.omitidas.map(a => a.tabla + '|' + a.clave));
+    quitar = quitar.filter(q => !(q.regla === 'sin_op' && omitidas.has(q.tabla + '|' + q.clave)));
+    if(sinOp.some(q => !omitidas.has(q.tabla + '|' + q.clave))){
+      const previo = state;
+      state = r.estado;
+      if(!saveStateQuiet()){
+        if(state === r.estado) state = previo;
+        quitar = quitar.filter(q => q.regla !== 'sin_op');
+      } else {
+        try{ renderAll(); }catch(_){}
+      }
+    }
+  }
+  const conCambio = quitar.filter(q => q.regla === 'igual_nube' || q.regla === 'sin_op');
+  if(conCambio.length){
     let cola = syncAlmacen.leerCola(ctx.userId);
     const base = {}, revs = {};
-    iguales.forEach(q => { cola = quitarOpsPorClave(cola, q.tabla, q.clave); fijarEnPlan(base, q.tabla, q.clave, q.base); fijarEnPlan(revs, q.tabla, q.clave, q.rev); });
+    conCambio.forEach(q => { cola = quitarOpsPorClave(cola, q.tabla, q.clave); fijarEnPlan(base, q.tabla, q.clave, q.base); fijarEnPlan(revs, q.tabla, q.clave, q.rev); });
     if(!syncAlmacen.guardarCola(ctx.userId, cola)) return 0;
     syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), base));
     syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), revs));
   }
-  plan.quitar.forEach(q => quitarChoqueSync(ctx.userId, q.tabla, q.clave));
-  console.info('[Sync] limpieza de choques: ' + plan.quitar.map(q => q.tabla + ' ' + q.clave + ' (' + q.regla + ')').join(', ') + '.');
+  quitar.forEach(q => quitarChoqueSync(ctx.userId, q.tabla, q.clave));
+  if(quitar.length) console.info('[Sync] limpieza de choques: ' + quitar.map(q => q.tabla + ' ' + q.clave + ' (' + q.regla + ')').join(', ') + '.');
   try{ renderEstadoCuenta(); }catch(_){}
-  return plan.quitar.length;
+  return quitar.length;
 }
 
 /* ---- T11 · Fase 1: resolver choques (consola hoy; la UI de la Fase 3 después) ----
