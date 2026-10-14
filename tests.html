@@ -2041,9 +2041,7 @@ async function runTests(){
         }finally{
           win.esPestanaLiderSync = orig.lider;
           win.eval('syncCtx = null; state = ' + orig.state + ';');
-          Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
-          Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
-          win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
+          await restaurarLocalStorageSinRecargar(win, lsAntes);
         }
       }
       // T11 · Fase 2: fila reducida del choque y reglas de limpieza (núcleo puro)
@@ -2172,9 +2170,109 @@ async function runTests(){
           alm.guardarChoques = orig.guardarChoques;
           win.console.warn = orig.warn;
           win.eval('syncCtx = null; state = ' + orig.state + ';');
-          Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
-          Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
-          win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
+          await restaurarLocalStorageSinRecargar(win, lsAntes);
+        }
+      }
+      // T11 · Fase 4: fusionarConfigCompartida (núcleo puro)
+      {
+        const F = win.fusionarConfigCompartida;
+        const base = { categorias: ['A','B','C'], metodos: ['M1'], fuentes: ['F1'], categoria_iconos: { A: 'i1' }, categoria_topes: { A: 100 },
+                       categoria_colores: {}, mes_inicio_registro: '2026-01', read_only: false };
+        const conCambios = (o) => ({ ...clon(base), ...o });
+        const sinUso = { categorias: new Set(), metodos: new Set(), fuentes: new Set() };
+        const casos = [];
+        // Escalares
+        { const r = F(base, base, conCambios({ mes_inicio_registro: '2026-03' }), sinUso); casos.push(['escalar: solo cambió la nube -> nube', r.fusion.mes_inicio_registro === '2026-03' && !r.choquesCampo.length]); }
+        { const r = F(base, conCambios({ read_only: true }), base, sinUso); casos.push(['escalar: solo cambió lo local -> local', r.fusion.read_only === true && !r.choquesCampo.length]); }
+        { const r = F(base, conCambios({ mes_inicio_registro: '2026-05' }), conCambios({ mes_inicio_registro: '2026-05' }), sinUso); casos.push(['escalar: igual cambio en los dos -> listo', r.fusion.mes_inicio_registro === '2026-05' && !r.choquesCampo.length]); }
+        { const r = F(base, conCambios({ mes_inicio_registro: '2026-02' }), conCambios({ mes_inicio_registro: '2026-03' }), sinUso);
+          casos.push(['escalar: cambios distintos -> choque por campo (se queda lo local)', r.fusion.mes_inicio_registro === '2026-02' && r.choquesCampo.length === 1
+            && r.choquesCampo[0].campo === 'mes_inicio_registro' && r.choquesCampo[0].local === '2026-02' && r.choquesCampo[0].nube === '2026-03']); }
+        // Listas
+        { const r = F(base, conCambios({ categorias: ['A','B','C','D'] }), conCambios({ categorias: ['A','B','C','E'] }), sinUso);
+          const antes = ['A','B','C'].map(x => base.categorias.indexOf(x)).join(), despues = ['A','B','C'].map(x => r.fusion.categorias.indexOf(x)).join();
+          casos.push(['lista: agregar en los dos lados -> orden local y lo de la nube al final; los que ya existían no cambian de índice (color)',
+            r.fusion.categorias.join() === 'A,B,C,D,E' && antes === despues && !r.choquesCampo.length]); }
+        { const r = F(base, conCambios({ categorias: ['A','C'] }), base, sinUso); casos.push(['lista: quitado aquí, sin cambio allá -> se quita', r.fusion.categorias.join() === 'A,C']); }
+        { const r = F(base, base, conCambios({ categorias: ['A','B'] }), sinUso); casos.push(['lista: quitado en la nube, sin cambio aquí -> se quita', r.fusion.categorias.join() === 'A,B']); }
+        { const r = F(base, base, conCambios({ categorias: ['A','B'] }), { ...sinUso, categorias: new Set(['C']) });
+          casos.push(['lista: quitado en la nube pero en uso aquí -> se conserva y se avisa', r.fusion.categorias.join() === 'A,B,C' && r.info.length === 1]); }
+        { const r = F(base, conCambios({ categorias: ['A2','B','C'] }), base, sinUso);
+          casos.push(['lista: renombre local = baja + alta (limitación conocida)', r.fusion.categorias.join() === 'A2,B,C']); }
+        // Diccionarios
+        { const r = F(base, conCambios({ categoria_iconos: { A: 'i2' } }), conCambios({ categoria_iconos: { A: 'i1', B: 'j1' } }), sinUso);
+          casos.push(['diccionario: cambio aquí en A + alta allá de B -> los dos', r.fusion.categoria_iconos.A === 'i2' && r.fusion.categoria_iconos.B === 'j1' && !r.choquesCampo.length]); }
+        { const r = F(base, conCambios({ categoria_topes: { A: 200 } }), conCambios({ categoria_topes: { A: 300 } }), sinUso);
+          casos.push(['diccionario: la misma clave con valores distintos -> choque por campo con su clave', r.choquesCampo.length === 1 && r.choquesCampo[0].campo === 'categoria_topes'
+            && r.choquesCampo[0].clave === 'A' && r.fusion.categoria_topes.A === 200]); }
+        { const r = F(base, conCambios({ categoria_topes: {} }), base, sinUso); casos.push(['diccionario: quitado aquí, sin cambio allá -> se quita', !('A' in r.fusion.categoria_topes)]); }
+        // Iguales
+        { const r = F(base, base, base, sinUso); casos.push(['las dos versiones iguales -> ningún choque y la misma configuración', !r.choquesCampo.length && win.jsonCanonico({ ...r.fusion }) === win.jsonCanonico(base)]); }
+        // Sin ancestro (unión): lo que difiere es conflicto; las listas se unen
+        { const r = F(null, conCambios({ mes_inicio_registro: '2026-02', categorias: ['A','X'] }), conCambios({ mes_inicio_registro: '2026-03', categorias: ['A','Y'] }), sinUso);
+          casos.push(['sin ancestro: escalar distinto -> choque; listas -> unión', r.choquesCampo.some(c => c.campo === 'mes_inicio_registro') && r.fusion.categorias.join() === 'A,X,Y']); }
+        assert(casos.every(c => c[1]),
+          'T11 · Fase 4: fusión de config_compartida en tres vías: escalares, listas por nombre (unión, orden local, lo de la nube al final, bajas y en uso), diccionarios por clave, iguales sin choque y sin ancestro',
+          casos.map(([n, ok]) => `${ok ? 'ok' : 'FALLA'} ${n}`).join(' · '));
+      }
+      // T11 · Fase 4: fusión aplicada a un choque «version» de config (iframe principal)
+      {
+        const U4 = 'u-t11-f4', D4 = 'dev-t11-f4';
+        const alm = win.eval('syncAlmacen');
+        const orig = { state: win.eval('JSON.stringify(state)'), lider: win.esPestanaLiderSync };
+        const lsAntes = {};
+        for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+        try{
+          win.eval(`syncCtx = { userId: '${U4}', deviceId: '${D4}', esEscritor: false, multi: true };`);
+          win.esPestanaLiderSync = () => true;
+          const ctx = win.eval('syncCtx');
+          const S4 = st => win.construirSnapshot(st, U4, D4);
+          const st0 = fx(); st0.config.mesInicioRegistro = '2026-01';
+          const anc = S4(st0).config_compartida[U4];
+          const preparar = (local, nube) => {
+            setState(win, local);
+            const L = S4(local);
+            alm.guardarBase(U4, L);
+            alm.guardarRevs(U4, { config_compartida: { [U4]: 40 } });
+            alm.guardarCola(U4, [{ tabla: 'config_compartida', clave: U4, tipo: 'upsert', fila: JSON.parse(L.config_compartida[U4]), v: 'v0', intentos: 0, proximo: 0 }]);
+            alm.guardarAncestroConfig(U4, anc);
+            const filaNube = { ...JSON.parse(S4(nube).config_compartida[U4]), rev: 41, txid: '1', deleted_at: null, modificado_por: 'dev-otro', dispositivo_escritor: 'multi:v2' };
+            alm.guardarChoques(U4, [{ tabla: 'config_compartida', clave: U4, motivo: 'version', servidor: filaNube, rev: 41 }]);
+          };
+          // Sin conflicto: aquí se agrega «Mascotas», allá «Viajes».
+          const loc = clon(st0); loc.config.categorias = loc.config.categorias.concat(['Mascotas']);
+          const nub = clon(st0); nub.config.categorias = nub.config.categorias.concat(['Viajes']);
+          preparar(loc, nub);
+          const ok1 = win.fusionarChoquesConfigGuardados(ctx);
+          const cats = win.eval('state.config.categorias').slice(-2).join();
+          const cola1 = alm.leerCola(U4);
+          const r1 = { ok1, cats, choques: alm.leerChoques(U4).length, cola: cola1.length, colaCats: cola1[0] && cola1[0].fila.categorias.slice(-2).join(),
+                       rev: alm.leerRevs(U4).config_compartida[U4], anc: alm.leerAncestroConfig(U4) === S4(nub).config_compartida[U4],
+                       libre: win.opsNoPausadas(cola1, win.leerChoquesVigentes(U4)).length };
+          // Conflicto real: mes de inicio distinto en los dos lados -> choque por campo que no pausa la fila.
+          const loc2 = clon(st0); loc2.config.mesInicioRegistro = '2026-02';
+          const nub2 = clon(st0); nub2.config.mesInicioRegistro = '2026-03'; nub2.config.categorias = nub2.config.categorias.concat(['Viajes']);
+          preparar(loc2, nub2);
+          win.fusionarChoquesConfigGuardados(ctx);
+          const choques2 = alm.leerChoques(U4);
+          const cola2 = alm.leerCola(U4);
+          const r2 = { choques: choques2.map(c => c.motivo + ' ' + c.clave), mes: win.eval('state.config.mesInicioRegistro'),
+                       libre: win.opsNoPausadas(cola2, win.leerChoquesVigentes(U4)).length, colaMes: cola2[0] && cola2[0].fila.mes_inicio_registro,
+                       viajes: win.eval('state.config.categorias').includes('Viajes') };
+          // Se resuelve el campo con «nube»: el mes pasa a ser el de la nube y el choque se va.
+          await win.resolverChoques(choques2, 'nube');
+          const r3 = { mes: win.eval('state.config.mesInicioRegistro'), choques: alm.leerChoques(U4).length };
+          assert(r1.ok1 && r1.cats === 'Mascotas,Viajes' && r1.choques === 0 && r1.cola === 1 && r1.colaCats === 'Mascotas,Viajes' && r1.rev === 41 && r1.anc && r1.libre === 1
+            && r2.choques.join() === 'campo ' + U4 + '#mes_inicio_registro' && r2.mes === '2026-02' && r2.libre === 1 && r2.colaMes === '2026-02' && r2.viajes
+            && r3.mes === '2026-03' && r3.choques === 0,
+            'T11 · Fase 4: choque «version» de config -> fusión automática (lo de los dos lados, sale con el rev del servidor, sin pausa); un conflicto real queda como choque por campo que no pausa la fila y se resuelve con «nube»',
+            JSON.stringify({ r1, r2, r3 }));
+        }catch(e){
+          assert(false, 'T11 · Fase 4: excepción en las pruebas de fusión de config', (e && e.stack) || String(e));
+        }finally{
+          win.esPestanaLiderSync = orig.lider;
+          win.eval('syncCtx = null; state = ' + orig.state + ';');
+          await restaurarLocalStorageSinRecargar(win, lsAntes);
         }
       }
       // C1: respaldo previo vigente 30 días
@@ -4235,6 +4333,15 @@ async function runTests(){
         `T11 · 1a: respuesta perdida (${txt}) -> 0 choques, la cola vacía y la nube igual a lo local`,
         JSON.stringify(r && (r.error || { perdida: r.perdida, choques: r.choques, cola: r.cola, distintas: r.distintas })));
     }
+    r = await correr(escenarioUnDispositivo, { config: 'listas' });
+    assert(r && !r.error && r.choques.length === 0 && r.cola === 0 && r.configIgual && r.catsNube === 'Mascotas,Viajes' && r.catsLocal === 'Mascotas,Viajes',
+      'T11 · Fase 4: dos dispositivos agregan categorías distintas -> la config se fusiona sola (orden local + lo de la nube al final), 0 choques y la nube igual a lo local',
+      JSON.stringify(r));
+    r = await correr(escenarioUnDispositivo, { config: 'campo' });
+    assert(r && !r.error && r.choques.join() === 'campo u-t11-un-dispositivo#mes_inicio_registro' && r.cola === 0 && r.configIgual
+      && r.catsNube === 'Mascotas,Viajes' && r.mesNube === '2026-02' && r.mesLocal === '2026-02',
+      'T11 · Fase 4: con un conflicto real (mes de inicio distinto) solo ese campo queda como choque; el resto se fusiona y se envía (la fila no queda en pausa) y la nube queda igual a lo local',
+      JSON.stringify(r));
     r = await correr(escenarioUnDispositivo, { union: 'si' });
     assert(r && !r.error && r.abierta && r.dueno === 'u-t11-un-dispositivo' && r.respaldo && r.choques.length === 0 && r.cola.length === 0
       && r.distintas.length === 0 && r.borrados.length === 0
@@ -4302,6 +4409,23 @@ async function runTests(){
 
   renderResultados();
   checkLocalStorage();
+}
+
+// Restaura el localStorage del origen después de una prueba que guardó desde el iframe principal.
+// Si la prueba creó misfinanzas_data (el origen no la tenía), quitarla dispararía el listener de
+// borrado local y el iframe principal se recargaría a mitad de las pruebas: mientras dura la
+// restauración, ese listener no recarga. Después, la pestaña recuerda el texto vigente.
+async function restaurarLocalStorageSinRecargar(win, lsAntes){
+  const orig = win.recargarPorBorradoLocal;
+  win.recargarPorBorradoLocal = () => {};
+  try{
+    Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+    Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+    await new Promise(r => setTimeout(r, 150));   // que llegue el evento storage al iframe
+  }finally{
+    win.recargarPorBorradoLocal = orig;
+  }
+  win.eval('__rawCargado = localStorage.getItem("misfinanzas_data");');
 }
 
 // ---- T11 · escenario de un solo dispositivo (dos pestañas reales + servidor falso) ----
@@ -4544,6 +4668,29 @@ async function escenarioUnDispositivo(opts){
         choquesAntes: choquesAntes.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave), codigoB,
         choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length, nubeIgualLocal: distintas.length === 0, distintas,
         e1Nube: srv.filas.expenses.e1.amount, e1Local: A.eval('state.expenses.find(e => e.id === "e1").amount')
+      };
+    }
+
+    // T11 · Fase 4: los dos dispositivos cambian la configuración. 'listas': aquí «Mascotas», allá
+    // «Viajes» (se fusiona sin choques). 'campo': además, el mes de inicio distinto en los dos lados.
+    if(opts.config){
+      srv.offline = true;
+      editar(A, `state.config.categorias.push('Mascotas');` + (opts.config === 'campo' ? ` state.config.mesInicioRegistro = '2026-02';` : ''));
+      await procesar(A, B);
+      srv.offline = false;
+      const cfgNube = srv.filas.config_compartida[U];
+      srv.cambiarRemoto('config_compartida', U, { categorias: cfgNube.categorias.concat(['Viajes']), ...(opts.config === 'campo' ? { mes_inicio_registro: '2026-03' } : {}) });
+      await procesar(A, B);
+      await quieto(A, B);
+      await procesar(A, B);
+      const alm = A.eval('syncAlmacen');
+      const local = A.construirSnapshot(A.eval('state'), U, D);
+      const nubeIdx = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+      return {
+        choques: alm.leerChoques(U).map(c => c.motivo + ' ' + c.clave), cola: alm.leerCola(U).length,
+        configIgual: nubeIdx.config_compartida[U].json === local.config_compartida[U],
+        catsNube: srv.filas.config_compartida[U].categorias.slice(-2).join(), catsLocal: A.eval('state.config.categorias').slice(-2).join(),
+        mesNube: srv.filas.config_compartida[U].mes_inicio_registro, mesLocal: A.eval('state.config.mesInicioRegistro')
       };
     }
 

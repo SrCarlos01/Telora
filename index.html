@@ -16372,16 +16372,17 @@ const DECISIONES_CHOQUE = {
   eliminado: ['restaurar', 'eliminar'],
   no_existe: ['conservar', 'eliminar'],
   padre_eliminado: ['restaurar_padre', 'descartar'],
-  padre_inexistente: ['restaurar_padre', 'descartar']
+  padre_inexistente: ['restaurar_padre', 'descartar'],
+  campo: ['local', 'nube']                      // T11 · Fase 4: un campo de config_compartida
 };
 // «Conservar todos los de este dispositivo»: la decisión que deja lo local en cada motivo.
 function decisionLocalPara(motivo){
   const d = { version: 'conservar', eliminado: 'restaurar', no_existe: 'conservar',
-              padre_eliminado: 'restaurar_padre', padre_inexistente: 'restaurar_padre' }[motivo];
+              padre_eliminado: 'restaurar_padre', padre_inexistente: 'restaurar_padre', campo: 'local' }[motivo];
   if(!d) throw errorSync('decision_invalida', 'Motivo de choque desconocido: ' + motivo);
   return d;
 }
-function planChoqueVacio(){ return { estado: [], encolar: [], revs: {}, base: {}, quitarOps: [], quitarChoques: [], choquesDerivados: [] }; }
+function planChoqueVacio(){ return { estado: [], encolar: [], revs: {}, base: {}, quitarOps: [], quitarChoques: [], choquesDerivados: [], config: [] }; }
 function fijarEnPlan(mapa, tabla, clave, valor){ (mapa[tabla] = mapa[tabla] || {})[clave] = valor; }
 function planResolverChoque(choque, decision, ctx){
   const c = choque || {}, t = c.tabla, k = c.clave;
@@ -16389,6 +16390,15 @@ function planResolverChoque(choque, decision, ctx){
   if(!permitidas || !t || k == null) throw errorSync('decision_invalida', 'Choque inválido: ' + t + ' ' + k + ' (' + c.motivo + ')');
   if(!permitidas.includes(decision)) throw errorSync('decision_invalida', '«' + decision + '» no aplica a un choque «' + c.motivo + '»');
   if(c.motivo.indexOf('padre_') === 0 && t !== 'goal_aportes') throw errorSync('decision_invalida', 'Un choque «' + c.motivo + '» solo puede ser de un aporte');
+  if(c.motivo === 'campo'){
+    // T11 · Fase 4. «local»: el valor local ya salió con la fusión; solo se quita el aviso.
+    // «nube»: se pone el valor de la nube en ese campo (el diff siguiente lo sube).
+    if(t !== 'config_compartida' || !c.campo) throw errorSync('decision_invalida', 'Un choque por campo solo puede ser de config_compartida');
+    const p = planChoqueVacio();
+    p.quitarChoques.push({ tabla: t, clave: k });
+    if(decision === 'nube') p.config.push({ campo: c.campo, clave: c.subclave, valor: c.nube === undefined ? null : c.nube });
+    return p;
+  }
   const x = ctx || {};
   const localDe = (tabla, clave) => ((x.local || {})[tabla] || {})[clave];
   const opDe = (tabla, clave) => (x.cola || []).find(o => o.tabla === tabla && o.clave === clave);
@@ -16496,6 +16506,11 @@ function combinarPlanes(planes){
     unirLista(out.quitarOps, p.quitarOps || [], false);
     unirLista(out.quitarChoques, p.quitarChoques || [], false);
     unirLista(out.choquesDerivados, p.choquesDerivados || [], true);
+    (p.config || []).forEach(x => {
+      const prev = out.config.find(o => o.campo === x.campo && o.clave === x.clave);
+      if(!prev) out.config.push(x);
+      else if(jsonCanonico(prev.valor) !== jsonCanonico(x.valor)) throw errorSync('planes_incompatibles', 'Dos valores distintos para ' + x.campo);
+    });
   });
   const quitadas = new Set(out.quitarOps.map(ck));
   if(out.encolar.some(o => quitadas.has(ck(o)))) throw errorSync('planes_incompatibles', 'Una op se quita y se encola a la vez');
@@ -16545,6 +16560,14 @@ function planLimpiezaChoques(p){
   const quitar = [], conservar = [];
   (p.choques || []).forEach(c => {
     const t = c.tabla, k = c.clave;
+    if(c.motivo === 'campo'){
+      // T11 · Fase 4: un campo de config se quita cuando lo local ya tiene el valor de la nube.
+      const cfgJson = ((p.local || {}).config_compartida || {})[String(k).split('#')[0]];
+      const v = cfgJson ? valorCampoConfig(JSON.parse(cfgJson), c.campo, c.subclave) : undefined;
+      if(jsonCanonico(v === undefined ? null : v) === jsonCanonico(c.nube === undefined ? null : c.nube)) quitar.push({ tabla: t, clave: k, regla: 'campo_igual' });
+      else conservar.push(c);
+      return;
+    }
     const L = ((p.local || {})[t] || {})[k], B = ((p.base || {})[t] || {})[k];
     const s = c.servidor;
     const sVivo = !!s && s.deleted_at == null;
@@ -16559,6 +16582,75 @@ function planLimpiezaChoques(p){
     conservar.push(c);
   });
   return { quitar, conservar };
+}
+/* ---- T11 · Fase 4: fusión de config_compartida en tres vías (núcleo puro) ----
+   fusionarConfigCompartida(base, local, nube, enUso) -> { fusion, choquesCampo, info }
+   base/local/nube = fila de config_compartida (sin user_id); base = el ANCESTRO común (la última
+   versión confirmada con la nube; null si no se conoce). enUso = { categorias, metodos, fuentes }
+   (Set de nombres usados por registros locales).
+   Escalares (read_only, mes_inicio_registro): local = base -> nube; nube = base -> local; iguales
+     -> listo; distintos -> choque por campo (la fusión se queda con lo local).
+   Listas por nombre (categorías, métodos, fuentes): unión; se respeta el orden local y lo que solo
+     está en la nube se agrega AL FINAL (nunca se reordena: el color depende del índice). Lo que se
+     quitó en un lado y sigue igual en el otro se quita, salvo que lo usen registros locales (se
+     conserva y se avisa por consola). LIMITACIÓN: un renombre cuenta como baja + alta.
+   Diccionarios por nombre (íconos, topes, colores): tres vías por clave, con la regla de los escalares. */
+const CONFIG_LISTAS = ['categorias', 'metodos', 'fuentes'];
+const CONFIG_DICCIONARIOS = ['categoria_iconos', 'categoria_topes', 'categoria_colores'];
+const CONFIG_ESCALARES = ['mes_inicio_registro', 'read_only'];
+function fusionarConfigCompartida(base, local, nube, enUso){
+  const B = base || {}, L = local || {}, N = nube || {}, usos = enUso || {};
+  const igual = (a, b) => jsonCanonico(a === undefined ? null : a) === jsonCanonico(b === undefined ? null : b);
+  const fusion = {}, choquesCampo = [], info = [];
+  const tresVias = (b, l, n, campo, clave) => {
+    if(igual(l, n)) return l;
+    if(base && igual(l, b)) return n;
+    if(base && igual(n, b)) return l;
+    choquesCampo.push(clave === undefined ? { tabla: 'config_compartida', campo, local: l, nube: n }
+                                          : { tabla: 'config_compartida', campo, clave, local: l, nube: n });
+    return l;
+  };
+  CONFIG_ESCALARES.forEach(c => {
+    const v = tresVias(B[c], L[c], N[c], c);
+    if(v !== undefined) fusion[c] = v;
+  });
+  CONFIG_LISTAS.forEach(c => {
+    const b = Array.isArray(B[c]) ? B[c] : [], l = Array.isArray(L[c]) ? L[c] : [], n = Array.isArray(N[c]) ? N[c] : [];
+    const usados = (usos[c] && typeof usos[c].has === 'function') ? usos[c] : new Set();   // sin instanceof: puede venir de otra ventana
+    const res = [];
+    const conservarPorUso = (x, lado) => {
+      if(!usados.has(x)) return false;
+      info.push('«' + x + '» (' + c + ') se quitó ' + lado + ' pero lo usan registros de este dispositivo: se conserva.');
+      return true;
+    };
+    l.forEach(x => {
+      if(res.includes(x)) return;
+      if(n.includes(x) || !b.includes(x) || conservarPorUso(x, 'en la nube')) res.push(x);   // en los dos, nuevo aquí o en uso
+    });
+    n.forEach(x => {
+      if(res.includes(x) || l.includes(x)) return;
+      if(!b.includes(x) || conservarPorUso(x, 'en este dispositivo')) res.push(x);       // nuevo en la nube: al final
+    });
+    fusion[c] = res;
+  });
+  CONFIG_DICCIONARIOS.forEach(c => {
+    const b = B[c] || {}, l = L[c] || {}, n = N[c] || {};
+    const claves = [];
+    [l, n, b].forEach(o => Object.keys(o).forEach(k => { if(!claves.includes(k)) claves.push(k); }));
+    const res = {};
+    claves.forEach(k => {
+      const v = tresVias(b[k], l[k], n[k], c, k);
+      if(v !== undefined && v !== null) res[k] = v;
+    });
+    fusion[c] = res;
+  });
+  return { fusion, choquesCampo, info };
+}
+// Choque por campo de config_compartida: no pausa la fila (su clave es «userId#campo[.clave]»).
+function claveChoqueCampo(userId, cc){ return userId + '#' + cc.campo + (cc.clave !== undefined ? '.' + cc.clave : ''); }
+function valorCampoConfig(fila, campo, clave){
+  const v = (fila || {})[campo];
+  return clave === undefined ? v : (v && typeof v === 'object' ? v[clave] : undefined);
 }
 // Parche de revs/base: null borra la clave.
 function aplicarParcheSync(obj, parche){
@@ -16621,7 +16713,11 @@ const syncAlmacen = {
   // C1: { fecha: ISO, contenido: JSON del estado reemplazado }. false = no se pudo guardar.
   leerRespaldoPrevio(userId){ return this._leer('telora_respaldo_previo_multi:', userId); },
   guardarRespaldoPrevio(userId, reg){ return this._escribir('telora_respaldo_previo_multi:', userId, reg); },
-  borrarRespaldoPrevio(userId){ try{ localStorage.removeItem('telora_respaldo_previo_multi:' + userId); }catch(_){} }
+  borrarRespaldoPrevio(userId){ try{ localStorage.removeItem('telora_respaldo_previo_multi:' + userId); }catch(_){} },
+  // T11 · Fase 4: ancestro de config_compartida = la última versión confirmada con la nube (JSON
+  // canónico). Es la «base» de la fusión en tres vías (la base del diff es lo último encolado).
+  leerAncestroConfig(userId){ return this._leer('telora_sync_ancestro_config:', userId); },
+  guardarAncestroConfig(userId, json){ return this._escribir('telora_sync_ancestro_config:', userId, json); }
 };
 
 /* ---- c) Adaptador de transporte (supabase-js) ---- */
@@ -16921,6 +17017,7 @@ async function sincronizacionInicialMulti(ctx, base){
     // base va sin config_dispositivo para que el próximo diff mande la fila de este dispositivo.
     syncAlmacen.guardarBase(ctx.userId, sinConfigDispositivo(actual));
     syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+    if(actual.config_compartida && actual.config_compartida[ctx.userId]) syncAlmacen.guardarAncestroConfig(ctx.userId, actual.config_compartida[ctx.userId]);
     syncAlmacen.guardarCursor(ctx.userId, cursor);
     console.info('[Sync] varios escritores: lo local ya coincide con la nube; se adoptan las versiones.');
     return true;
@@ -16982,6 +17079,8 @@ function reemplazarLocalConNube(ctx, nube, cursor){
   if(!saveStateQuiet()){ if(state === nuevo) state = previo; return false; }
   syncAlmacen.guardarBase(ctx.userId, baseDesdeNube(nube));
   syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+  const cfgNube = ((nube || {}).config_compartida || {})[ctx.userId];
+  if(cfgNube && !cfgNube.borrada && cfgNube.json) syncAlmacen.guardarAncestroConfig(ctx.userId, cfgNube.json);
   syncAlmacen.guardarCursor(ctx.userId, cursor);
   try{ renderAll(); }catch(_){}
   console.info('[Sync] varios escritores: lo local se reemplazó por la nube' + (teniaDatos ? ' (con respaldo previo).' : '.'));
@@ -17096,6 +17195,11 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
       .map(c => { const a = nuevas.get(c.tabla + '|' + c.clave); return { ...c, servidor: a.fila, rev: a.rev }; });
     if(refrescar.length) registrarChoquesSync(ctx.userId, refrescar, true);
   }
+  // T11 · Fase 4: la versión de config_compartida que se aplicó o adoptó es el nuevo ancestro; un
+  // choque «version» de config se fusiona en tres vías en vez de quedar en pausa.
+  efectivas.filter(a => a.tabla === 'config_compartida' && (a.accion === 'aplicar' || a.accion === 'adoptarRev') && !a.borrada && a.json)
+    .forEach(a => syncAlmacen.guardarAncestroConfig(ctx.userId, a.json));
+  fusionarChoquesConfigGuardados(ctx);
   if(r.omitidas.length) console.info('[Sync] ' + r.omitidas.length + ' fila(s) remota(s) sin aplicar todavía (aporte sin su meta): se releen después.');
   if(cursor != null && !r.omitidas.length && !acciones.some(a => a.accion === 'diferir')) syncAlmacen.guardarCursor(ctx.userId, cursor);
   return true;
@@ -17186,6 +17290,58 @@ function estadoChoquesSync(){
 // Contador consultable (la interfaz de choques es de T11): contarChoquesSync() en la consola.
 function contarChoquesSync(){ return syncCtx ? leerChoquesVigentes(syncCtx.userId).length : 0; }
 
+// T11 · Fase 4: nombres que usan los registros locales (una baja de la nube no los quita).
+function enUsoConfigLocal(st){
+  const s = st || {}, categorias = new Set(), metodos = new Set(), fuentes = new Set();
+  (s.expenses || []).forEach(e => { if(e && e.category) categorias.add(e.category); if(e && e.method) metodos.add(e.method); });
+  (s.debts || []).forEach(d => { if(d && d.category) categorias.add(d.category); });
+  (s.incomes || []).forEach(i => { if(i && i.source) fuentes.add(i.source); });
+  return { categorias, metodos, fuentes };
+}
+// T11 · Fase 4: choque «version» de config_compartida -> fusión en tres vías con el ancestro. El
+// estado toma la fusión; si difiere de la nube, sale como upsert con el rev del servidor. Solo
+// los conflictos reales quedan como choques por campo (no pausan la fila). Bajo el candado.
+// true = se fusionó.
+function fusionarChoquesConfigGuardados(ctx){
+  const c = leerChoquesVigentes(ctx.userId).find(x => x.tabla === 'config_compartida' && x.clave === ctx.userId
+    && x.motivo === 'version' && x.servidor && x.servidor.deleted_at == null);
+  if(!c) return false;
+  asegurarEstadoVigente();
+  const localJson = construirSnapshot(state, ctx.userId, ctx.deviceId).config_compartida[ctx.userId];
+  const nubeJson = canonicoFilaNube('config_compartida', c.servidor, ctx.userId);
+  const anc = syncAlmacen.leerAncestroConfig(ctx.userId);
+  const r = fusionarConfigCompartida(anc ? JSON.parse(anc) : null, JSON.parse(localJson), JSON.parse(nubeJson), enUsoConfigLocal(state));
+  const filaFusion = { ...JSON.parse(nubeJson), ...r.fusion };
+  CONFIG_ESCALARES.forEach(k => { if(!tieneClave(r.fusion, k)) filaFusion[k] = null; });
+  const previo = state;
+  const cfg = { ...((state && state.config) || {}) };
+  delete cfg.mesInicioRegistro;
+  Object.assign(cfg, localConfigCompartida(filaFusion));
+  state = { ...state, config: cfg };
+  if(!saveStateQuiet()){ if(state.config === cfg) state = previo; return false; }
+  const jsonFusion = jsonCanonico(filaConfigCompartida(ctx.userId, state.config));
+  let cola = quitarOpsPorClave(syncAlmacen.leerCola(ctx.userId), 'config_compartida', ctx.userId);
+  if(jsonFusion !== nubeJson){
+    cola = coalescerOps(cola, [{ tabla: 'config_compartida', clave: ctx.userId, tipo: 'upsert', fila: JSON.parse(jsonFusion),
+                                 v: Date.now().toString(36) + '.f', intentos: 0, proximo: 0 }]);
+  }
+  if(!syncAlmacen.guardarCola(ctx.userId, cola)) return false;
+  const rev = c.rev != null ? Number(c.rev) : Number(c.servidor.rev);
+  syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), { config_compartida: { [ctx.userId]: jsonFusion } }));
+  syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), { config_compartida: { [ctx.userId]: rev } }));
+  syncAlmacen.guardarAncestroConfig(ctx.userId, nubeJson);
+  quitarChoqueSync(ctx.userId, 'config_compartida', ctx.userId);
+  if(r.choquesCampo.length) registrarChoquesSync(ctx.userId, r.choquesCampo.map(cc => ({
+    tabla: 'config_compartida', clave: claveChoqueCampo(ctx.userId, cc), motivo: 'campo', campo: cc.campo, subclave: cc.clave,
+    local: cc.local === undefined ? null : cc.local, nube: cc.nube === undefined ? null : cc.nube, servidor: null, rev, origen: 'fusion_config' })), true);
+  r.info.forEach(m => console.info('[Sync] config: ' + m));
+  console.info('[Sync] config_compartida fusionada en tres vías' + (anc ? '' : ' (sin ancestro conocido)') + ': '
+    + (jsonFusion === nubeJson ? 'igual a la nube, no se envía nada' : 'sale la fusión con el rev ' + rev)
+    + (r.choquesCampo.length ? ' · ' + r.choquesCampo.length + ' campo(s) para revisar' : '') + '.');
+  try{ renderAll(); renderEstadoCuenta(); }catch(_){}
+  return true;
+}
+
 // Limpieza automática (Fase 2): al abrir la app y después de cada puesta al día, bajo el candado.
 function limpiarChoquesSync(ctx){
   const choques = leerChoquesVigentes(ctx.userId);
@@ -17252,6 +17408,20 @@ function aplicarResolucionChoques(ctx, choques, decision){
     state = r.estado;
     if(!saveState()){ if(state === r.estado) state = previo; throw errorSync('sin_guardar', 'No se pudo guardar el estado local.'); }
   }
+  // 2b) T11 · Fase 4: campos de config_compartida que toman el valor de la nube.
+  if(plan.config.length){
+    const fila = JSON.parse(construirSnapshot(state, ctx.userId, ctx.deviceId).config_compartida[ctx.userId]);
+    plan.config.forEach(x => {
+      if(x.clave === undefined){ if(x.valor === null) fila[x.campo] = null; else fila[x.campo] = x.valor; }
+      else { fila[x.campo] = { ...(fila[x.campo] || {}) }; if(x.valor === null) delete fila[x.campo][x.clave]; else fila[x.campo][x.clave] = x.valor; }
+    });
+    const previo = state;
+    const cfg = { ...state.config };
+    delete cfg.mesInicioRegistro;
+    Object.assign(cfg, localConfigCompartida(fila));
+    state = { ...state, config: cfg };
+    if(!saveState()){ if(state.config === cfg) state = previo; throw errorSync('sin_guardar', 'No se pudo guardar el estado local.'); }
+  }
   // 3) Cola, base y revs, choques.
   let cola = syncAlmacen.leerCola(ctx.userId);
   plan.quitarOps.forEach(q => { cola = quitarOpsPorClave(cola, q.tabla, q.clave); });
@@ -17262,6 +17432,9 @@ function aplicarResolucionChoques(ctx, choques, decision){
   if(!syncAlmacen.guardarCola(ctx.userId, cola)) throw errorSync('sin_guardar', 'No se pudo guardar la cola de sincronización.');
   syncAlmacen.guardarBase(ctx.userId, aplicarParcheSync(syncAlmacen.leerBase(ctx.userId), plan.base));
   syncAlmacen.guardarRevs(ctx.userId, aplicarParcheSync(syncAlmacen.leerRevs(ctx.userId), plan.revs));
+  // T11 · Fase 4: resolver a mano el choque de la fila de config deja como ancestro la versión de la nube.
+  choques.filter(c => c.tabla === 'config_compartida' && c.clave === ctx.userId && c.servidor && c.servidor.deleted_at == null)
+    .forEach(c => syncAlmacen.guardarAncestroConfig(ctx.userId, canonicoFilaNube('config_compartida', c.servidor, ctx.userId)));
   plan.quitarChoques.forEach(q => quitarChoqueSync(ctx.userId, q.tabla, q.clave));
   try{ renderAll(); renderEstadoCuenta(); }catch(_){}
   console.info('[Sync] ' + choques.length + ' choque(s) resuelto(s) (' + decision + '): ' + plan.encolar.length + ' op(s) aseguradas, '
@@ -17283,11 +17456,19 @@ function procesarResultadoMultiSync(ctx, lote, res){
     });
     syncAlmacen.guardarRevs(ctx.userId, revs);
     quitarDeColaSync(ctx.userId, c.ok.map(x => x.op));
+    // T11 · Fase 4: lo que la nube aceptó de config_compartida es el nuevo ancestro de la fusión.
+    c.ok.filter(x => x.op.tabla === 'config_compartida' && x.op.tipo === 'upsert')
+      .forEach(x => syncAlmacen.guardarAncestroConfig(ctx.userId, jsonCanonico(x.op.fila)));
   }
   c.invalidas.forEach(x => moverAFallidasSync(ctx.userId, x.op, { status: 0, error: { message: 'op inválida (' + x.motivo + ')' } }));
   if(c.choques.length) registrarChoquesSync(ctx.userId, c.choques.map(x => ({
     tabla: x.op.tabla, clave: x.op.clave, motivo: x.motivo, servidor: x.servidor,
     rev: (x.servidor && x.servidor.rev != null) ? Number(x.servidor.rev) : null, origen: 'envio' })));
+  // T11 · Fase 4: un choque «version» de config_compartida se fusiona bajo el candado (aquí no se
+  // tiene: el envío no corre bajo él) y la op fusionada sale en la vuelta siguiente.
+  if(c.choques.some(x => x.op.tabla === 'config_compartida' && x.motivo === 'version')){
+    conCandadoSync(() => { if(syncCtx === ctx && fusionarChoquesConfigGuardados(ctx)) programarReintentoSync(ctx.userId); });
+  }
   if(c.reintentar.length){ reintentarLuegoSync(ctx.userId, c.reintentar.map(x => x.op)); return false; }
   return true;
 }
@@ -18123,6 +18304,7 @@ const MSG_CUENTA_ELIMINADA_SERVIDOR = 'Tu cuenta de Telora fue eliminada. Tus da
 const CLAVE_TOAST_TRAS_RECARGA = 'telora_toast_tras_recarga';   // sessionStorage, no localStorage
 const PREFIJOS_SYNC_CUENTA = ['telora_sync_base:', 'telora_sync_cola:', 'telora_sync_fallidas:',
   'telora_sync_revs:', 'telora_sync_cursor:', 'telora_sync_choques:',   // S1 · T7
+  'telora_sync_ancestro_config:',                                         // T11 · Fase 4
   'telora_respaldo_previo_multi:'];                                       // S1 · T7 (C1)
 
 function confirmacionEliminarValida(texto){ return String(texto == null ? '' : texto).trim() === TEXTO_CONFIRMAR_ELIMINAR; }
