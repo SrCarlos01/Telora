@@ -2305,6 +2305,161 @@ async function runTests(){
           await restaurarLocalStorageSinRecargar(win, lsAntes);
         }
       }
+      // T11 · Fase 3: interfaz de choques (pantallas 14–18) en el iframe principal. La bandera
+      // sigue en false (multiActiva() = false aquí): la sesión multi la da syncCtx.multi.
+      {
+        const U5 = 'u-t11-f3', D5 = 'dev-t11-f3';
+        const alm = win.eval('syncAlmacen');
+        const d = win.document, $ = id => d.getElementById(id);
+        const orig = { state: win.eval('JSON.stringify(state)'), lider: win.esPestanaLiderSync, toast: win.showToast,
+                       fecha: win.eval('currentDate.toISOString()'), htab: win.eval('hTab') };
+        const lsAntes = {};
+        for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+        const toasts = [];
+        const tick = ms => new Promise(r => setTimeout(r, ms));
+        const fotoLS = () => { const o = {}; for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); o[k] = localStorage.getItem(k); } return JSON.stringify(o, Object.keys(o).sort()); };
+        try{
+          win.esPestanaLiderSync = () => true;
+          win.showToast = (m, t) => { toasts.push((t || '') + ':' + m); };
+          const st = fx();
+          st.expenses.push({ id:'e2', date:'2026-09-05', nombre:'Arriendo', amount:420000, category:'Hogar', method:'Transferencia', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+          st.goals.push({ id:'g2', name:'Viaje a Chiloé', indefinida:true, montoObjetivo:0, fechaLimite:'', fechaCreacion:'2026-01-01', fechaCumplida:null,
+            aportes:[{ id:'apA', fecha:'2026-10-04', monto:20000, tipo:'manual' }, { id:'apB', fecha:'2026-10-07', monto:15000, tipo:'manual' }], aporteAutomatico: aaSync(), cuentaId:'acc1' });
+          setState(win, st);
+          const S = win.construirSnapshot(st, U5, D5);
+          const filaS = (t, k, extra) => ({ ...JSON.parse(S[t][k]), rev: 60, txid: '900', deleted_at: null, modificado_por: 'dev-otro', updated_at: '2026-10-07T14:28:00+00:00', ...(extra || {}) });
+          const choques = [
+            { tabla:'expenses', clave:'e1', motivo:'version', servidor: filaS('expenses', 'e1', { amount: 2500, category: 'Hogar', description: 'con mantequilla' }), rev: 60, detectado: '2026-10-07T14:32:00.000Z' },
+            { tabla:'expenses', clave:'e2', motivo:'eliminado', servidor: filaS('expenses', 'e2', { amount: 400000, deleted_at: '2026-10-07T13:05:00+00:00', rev: 61 }), rev: 61 },
+            { tabla:'incomes', clave:'i1', motivo:'no_existe', servidor: null, rev: null },
+            { tabla:'goal_aportes', clave:'apA', motivo:'padre_eliminado', servidor: null, rev: null },
+            { tabla:'goal_aportes', clave:'apB', motivo:'padre_eliminado', servidor: null, rev: null },
+            { tabla:'goal_aportes', clave:'ap1', motivo:'padre_inexistente', servidor: null, rev: null },
+            { tabla:'config_compartida', clave: U5 + '#categoria_topes.Comida', motivo:'campo', campo:'categoria_topes', subclave:'Comida', local: 150000, nube: 120000, servidor: null, rev: 40 }
+          ];
+          alm.guardarBase(U5, S);
+          alm.guardarRevs(U5, { expenses: { e1: 50, e2: 51 }, incomes: { i1: 52 }, goals: { g1: 53, g2: 54 }, goal_aportes: { ap1: 55 } });
+          alm.guardarCola(U5, ['e1', 'e2'].map(k => ({ tabla:'expenses', clave:k, tipo:'upsert', fila: JSON.parse(S.expenses[k]), v:'v0', intentos:0, proximo:0 })));
+          alm.guardarChoques(U5, choques);
+          // Entrada: sin sesión multi la fila no se ve; con syncCtx.multi muestra el conteo.
+          win.eval('syncCtx = null;'); win.renderEstadoCuenta();
+          const sinSesion = $('cuentaFilaChoques').hidden;
+          win.eval(`syncCtx = { userId: '${U5}', deviceId: '${D5}', esEscritor: true };`); win.renderEstadoCuenta();
+          const sinMulti = $('cuentaFilaChoques').hidden;
+          win.eval(`syncCtx = { userId: '${U5}', deviceId: '${D5}', esEscritor: false, multi: true };`); win.renderEstadoCuenta();
+          const entrada = { sinSesion, sinMulti, visible: !$('cuentaFilaChoques').hidden, n: $('cuentaChoquesN').textContent, bandera: win.eval('multiActiva()') };
+          assert(entrada.sinSesion && entrada.sinMulti && entrada.visible && entrada.n === '7' && entrada.bandera === false,
+            'T11 · Fase 3: la fila «Cambios por revisar» de Tu cuenta solo aparece en una sesión con varios escritores y muestra el conteo de choques (7); la bandera sigue en false',
+            JSON.stringify(entrada));
+          // Pantalla 14: la fila abre la lista.
+          const lsCero = fotoLS(), stCero = win.eval('JSON.stringify(state)');
+          $('cuentaFilaChoques').click();
+          const lista = $('choquesLista');
+          const p14 = { abierta: $('sheetChoques').classList.contains('open'), filas: lista.querySelectorAll('[data-choque-item]').length,
+                        config: [...lista.querySelectorAll('.cfg-sub-tit')].map(x => x.textContent).join(), texto: lista.textContent,
+                        nota: $('choquesConservarNota').textContent, detectados: $('choquesDetectados').textContent, todos: !$('btnChoquesConservarTodos').hidden };
+          assert(p14.abierta && p14.filas === 6 && p14.config === 'Configuración' && p14.todos
+            && ['Pan', 'Gasto · editado en los dos', 'Arriendo', 'eliminado en el otro', 'Sueldo', 'ya no está en la nube', 'Aportes a Viaje a Chiloé',
+                '2 aportes · su meta se eliminó en el otro', 'Aporte a Viaje', 'su meta ya no está en la nube', 'Tope de Comida', 'Configuración · cambiado en los dos'].every(t => p14.texto.includes(t))
+            && p14.nota.startsWith('Tus 7 versiones se suben') && p14.nota.includes('Lo eliminado en el otro dispositivo se restaura') && p14.detectados.startsWith('Detectados '),
+            'T11 · Fase 3 · 14: la entrada abre «Cambios por revisar» con un ítem por registro, los aportes agrupados por meta, los campos bajo «Configuración», «Conservar todos» y la nota',
+            JSON.stringify(p14));
+          // Pantallas 15, 16, 17 y 15 adaptada: render de cada motivo.
+          const detalle = clave => {
+            win.abrirDetalleChoque(clave);
+            const otro = $('btnChoqueOtro');
+            return { abierta: $('sheetChoque').classList.contains('open'), tit: $('choqueTitulo').textContent, sub: $('choqueSubtitulo').textContent,
+                     pos: $('choquePosicion').textContent, cuerpo: $('choqueCuerpo').textContent, tarjetas: $('choqueCuerpo').querySelectorAll('.choque-campo').length,
+                     local: $('btnChoqueLocal').hidden ? null : $('btnChoqueLocal').textContent, otro: otro.hidden ? null : otro.textContent,
+                     peligro: otro.classList.contains('btn-danger'), despues: $('btnChoqueDespues').textContent };
+          };
+          const v = detalle('expenses|e1');
+          const el = detalle('expenses|e2');
+          const ne = detalle('incomes|i1');
+          const m2 = detalle('meta|g2');
+          const m1 = detalle('meta|g1');
+          const ca = detalle('config_compartida|' + U5 + '#categoria_topes.Comida');
+          const casos = [
+            ['15 version', v.abierta && v.tit === 'Pan' && v.pos === '1 de 6' && v.tarjetas === 3 && ['Monto · distinto', '$2.000', '$2.500', 'Categoría · distinta', 'Hogar', 'Descripción · distinta', 'con mantequilla', 'Iguales en las dos', 'La versión de la nube se guardó'].every(t => v.cuerpo.includes(t))
+              && v.local === 'Conservar la de este dispositivo' && v.otro === 'Usar la de la nube' && !v.peligro],
+            ['16 eliminado', el.sub === 'Gasto' && el.cuerpo.includes('Se eliminó desde otro dispositivo') && el.cuerpo.includes('Tu versión en este dispositivo') && el.cuerpo.includes('$420.000')
+              && el.cuerpo.includes('Cambio sin subir') && el.cuerpo.includes('Monto: antes $400.000') && el.local === 'Restaurar en todos los dispositivos' && el.otro === 'Eliminar también aquí' && el.peligro],
+            ['16 no_existe', ne.tit === 'Sueldo' && ne.sub === 'Ingreso fijo' && ne.cuerpo.includes('No está en la nube') && ne.local === 'Subir la de este dispositivo' && ne.otro === 'Eliminar también aquí' && ne.peligro],
+            ['17 padre_eliminado', m2.tit === 'Viaje a Chiloé' && m2.sub === 'Meta · 2 aportes de este dispositivo' && m2.cuerpo.includes('La meta se eliminó desde otro dispositivo')
+              && m2.cuerpo.includes('$20.000') && m2.cuerpo.includes('$15.000') && m2.cuerpo.includes('Total') && m2.cuerpo.includes('$35.000') && m2.local === 'Restaurar la meta' && m2.otro === 'Descartar los 2 aportes' && m2.peligro],
+            ['17 padre_inexistente', m1.tit === 'Viaje' && m1.cuerpo.includes('La meta ya no está en la nube') && m1.otro === 'Descartar el aporte'],
+            ['15 campo', ca.tit === 'Tope de Comida' && ca.pos === '6 de 6' && ca.tarjetas === 1 && ca.cuerpo.includes('$150.000') && ca.cuerpo.includes('$120.000') && ca.local === 'Conservar la de este dispositivo' && ca.otro === 'Usar la de la nube'],
+            ['Decidir después en todas', [v, el, ne, m2, m1, ca].every(x => x.abierta && x.despues === 'Decidir después')]
+          ];
+          assert(casos.every(c => c[1]), 'T11 · Fase 3 · 15–17: render de cada motivo (version, eliminado, no_existe, padre_eliminado, padre_inexistente, campo): título, posición, solo los campos distintos, textos y botones',
+            casos.map(([n, ok]) => `${ok ? 'ok' : 'FALLA'} ${n}`).join(' · ') + ' · ' + JSON.stringify({ v, el, ne, m2, m1, ca }));
+          // «Decidir después» no modifica nada (almacenamiento ni estado), en cada pantalla.
+          const despues = ['expenses|e1', 'expenses|e2', 'incomes|i1', 'meta|g2', 'meta|g1', 'config_compartida|' + U5 + '#categoria_topes.Comida'].map(k => {
+            win.abrirDetalleChoque(k);
+            $('btnChoqueDespues').click();
+            return !$('sheetChoque').classList.contains('open') && $('sheetChoques').classList.contains('open');
+          });
+          const igualTodo = fotoLS() === lsCero && win.eval('JSON.stringify(state)') === stCero;
+          assert(despues.every(Boolean) && igualTodo && alm.leerChoques(U5).length === 7,
+            'T11 · Fase 3: «Decidir después» solo cierra el detalle (la lista sigue abierta) y no cambia nada: localStorage, estado y los 7 choques intactos',
+            JSON.stringify({ despues, igualTodo }));
+          // Error de resolverChoques: texto en español de Chile y la hoja no queda colgada.
+          win.esPestanaLiderSync = () => false;
+          win.abrirDetalleChoque('expenses|e1');
+          toasts.length = 0;
+          $('btnChoqueLocal').click();
+          await tick(30);
+          const err = { toast: toasts.join(), abierta: $('sheetChoque').classList.contains('open'), habil: !$('btnChoqueLocal').disabled && !$('btnChoqueOtro').disabled && !$('btnChoquesConservarTodos').disabled,
+                        choques: alm.leerChoques(U5).length, nada: fotoLS() === lsCero };
+          const textos = ['no_lider', 'sin_multi', 'no_aplica', 'sin_servidor', 'decision_invalida', 'planes_incompatibles', 'sin_guardar', 'otro'].map(c => win.textoErrorChoque({ codigo: c }));
+          assert(err.toast === 'error:Telora está abierto en otra pestaña. Resuélvelo desde esa pestaña.' && err.abierta && err.habil && err.choques === 7 && err.nada
+            && new Set(textos).size === textos.length && textos.every(t => t && !/[a-z]+_[a-z]+/.test(t)),
+            'T11 · Fase 3: un error de resolverChoques (no_lider) se muestra en español, no cambia nada, el detalle sigue abierto con los botones habilitados; cada código tiene su texto',
+            JSON.stringify({ err, textos }));
+          // Resolver desde la hoja: el campo con «Conservar» y luego «Conservar todos».
+          win.esPestanaLiderSync = () => true;
+          win.abrirDetalleChoque('config_compartida|' + U5 + '#categoria_topes.Comida');
+          $('btnChoqueLocal').click();
+          await tick(50);
+          const r1 = { cerrado: !$('sheetChoque').classList.contains('open'), lista: $('sheetChoques').classList.contains('open'),
+                       filas: $('choquesLista').querySelectorAll('[data-choque-item]').length, choques: alm.leerChoques(U5).length, n: $('cuentaChoquesN').textContent };
+          $('btnChoquesConservarTodos').click();
+          await tick(80);
+          const r2 = { choques: alm.leerChoques(U5).length, cerradas: !$('sheetChoques').classList.contains('open') && !$('sheetChoque').classList.contains('open'),
+                       entrada: $('cuentaFilaChoques').hidden, toast: toasts[toasts.length - 1] };
+          assert(r1.cerrado && r1.lista && r1.filas === 5 && r1.choques === 6 && r1.n === '6' && r2.choques === 0 && r2.cerradas && r2.entrada
+            && r2.toast === 'success:Listo: no quedan cambios por revisar',
+            'T11 · Fase 3: resolver desde la hoja: el detalle se cierra y la lista se rearma (6 choques); «Conservar todos» deja 0 choques, cierra las hojas y oculta la entrada',
+            JSON.stringify({ r1, r2 }));
+          // Pantalla 18: aviso en el Historial y filas marcadas.
+          setState(win, st);
+          alm.guardarChoques(U5, choques);
+          win.eval("currentDate = new Date(2026, 8, 10); hTab = 'gastos';");
+          win.renderHistorial();
+          const fila = id => d.querySelector('#hList [data-editexpense="' + id + '"] [data-choque-marca]');
+          const h = { aviso: !$('histChoquesAviso').hidden, txt: $('histChoquesAvisoTxt').textContent,
+                      e1: fila('e1') && fila('e1').textContent, e2: fila('e2') && fila('e2').textContent };
+          $('btnHistChoquesOcultar').click();
+          win.renderHistorial();
+          h.oculto = $('histChoquesAviso').hidden;
+          win.eval("hTab = 'todo';"); win.renderHistorial();
+          h.todo = !!d.querySelector('#hList [data-editexpense="e1"] [data-choque-marca]');
+          win.eval('syncCtx = null;'); win.renderHistorial();
+          h.sinSesion = $('histChoquesAviso').hidden && !d.querySelector('#hList [data-choque-marca]');
+          assert(h.aviso && h.txt === '7 cambios por revisar' && h.e1 === 'Por revisar' && h.e2 === 'Eliminado en otro' && h.oculto && h.todo && h.sinSesion,
+            'T11 · Fase 3 · 18: el Historial muestra el aviso «7 cambios por revisar» (se oculta con ✕) y marca las filas con choque (Por revisar / Eliminado en otro), también en «Todo»; sin sesión multi no hay aviso ni marcas',
+            JSON.stringify(h));
+        }catch(e){
+          assert(false, 'T11 · Fase 3: excepción en las pruebas de la interfaz de choques', (e && e.stack) || String(e));
+        }finally{
+          win.esPestanaLiderSync = orig.lider;
+          win.showToast = orig.toast;
+          ['sheetChoque', 'sheetChoques'].forEach(id => { try{ win.closeSheet(id); }catch(_){} });
+          win.eval('syncCtx = null; avisoChoquesOcultoCon = 0; state = ' + orig.state + '; currentDate = new Date(' + JSON.stringify(orig.fecha) + '); hTab = ' + JSON.stringify(orig.htab) + ';');
+          await restaurarLocalStorageSinRecargar(win, lsAntes);
+          try{ win.renderAll(); win.renderEstadoCuenta(); }catch(_){}
+        }
+      }
       // C1: respaldo previo vigente 30 días
       {
         const ahora = Date.parse('2026-10-07T12:00:00Z');

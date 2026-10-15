@@ -1134,7 +1134,7 @@ button{font-family:inherit;}
 /* ---------- T23 · Cuenta: hoja #sheetCuenta, bienvenida e invitación ----------
    Solo variables de la paleta activa (funcionan en las 9 paletas y en alto contraste).
    Radios 16 (tarjetas) y 24 (hoja); objetivos táctiles de 44 px o más. */
-#sheetCuenta .sheet, #sheetBienvenidaCuenta .sheet{border-radius:24px 24px 0 0;}
+#sheetCuenta .sheet, #sheetBienvenidaCuenta .sheet, #sheetUnirMulti .sheet{border-radius:24px 24px 0 0;}
 .hoja-cab{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px;}
 .hoja-cab h2{margin:0;}
 .hoja-cerrar{
@@ -1308,6 +1308,23 @@ button{font-family:inherit;}
 :root.hc .cfg-lista, :root.hc .cfg-cuenta, :root.hc .cfg-estado-card, :root.hc .cfg-fila-sola, :root.hc .cfg-segmentado{border-width:2px;}
 :root.hc .cfg-grupo-tit, :root.hc .cfg-sub-tit, :root.hc .cfg-fila-val, :root.hc .cfg-nota, :root.hc .cfg-cuenta-estado, :root.hc .cfg-estado-sub{color:var(--cream);}
 :root.hc .cfg-switch{border-width:2px;}
+/* T11 · Fase 3: cambios por revisar. Filas, títulos de sección y notas son los de Configuración
+   (.cfg-lista, .cfg-fila, .cfg-sub-tit, .cfg-nota); aquí solo lo que no tenía equivalente: la
+   comparación en dos columnas y el recuadro de aviso. */
+.choque-cab{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.choque-cols{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px;}
+.choque-cols-tit{margin:0 4px 8px; font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--cream-dim);}
+.choque-campo{padding:12px 16px; margin:0 0 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:16px;}
+.choque-campo-tit{margin:0 0 6px; font-size:13px; color:var(--gold);}
+.choque-val{font-size:15px; color:var(--cream); overflow-wrap:anywhere; display:flex; align-items:center; gap:8px;}
+.choque-val .sw, .cfg-fila-val .sw{width:12px; height:12px; border-radius:50%; flex-shrink:0; display:inline-block;}
+.choque-iguales{margin:0 0 12px; padding:10px 16px; border:1px solid var(--border); border-radius:16px; color:var(--cream-dim); font-size:13px; line-height:1.45;}
+.choque-aviso{display:flex; align-items:flex-start; gap:12px; margin:0 0 6px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:16px; color:var(--cream); font-size:14px; line-height:1.5;}
+.choque-aviso .icon{width:20px; height:20px; flex-shrink:0; color:var(--danger); margin-top:1px;}
+#sheetChoque .btn-primary{margin-top:18px;}
+#histChoquesAviso .icon{width:18px; height:18px; flex-shrink:0; color:var(--gold);}
+:root.hc .choque-campo, :root.hc .choque-iguales, :root.hc .choque-aviso{border-width:2px;}
+:root.hc .choque-cols-tit, :root.hc .choque-iguales{color:var(--cream);}
 
 .choice-row{display:flex; gap:12px; margin-bottom:6px;}
 .choice-card{
@@ -2531,6 +2548,15 @@ button:active{ transform:scale(0.93); }
       <button data-htab="ingresos" role="tab" aria-selected="false">Ingresos</button>
       <button data-htab="todo" role="tab" aria-selected="false">Todo</button>
     </div>
+    <!-- T11 · Fase 3 · pantalla 18: aviso no bloqueante de cambios por revisar (renderAvisoChoquesHistorial). -->
+    <div class="notice-bar" id="histChoquesAviso" role="status" hidden style="margin:0 0 12px;">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      <div class="notice-bar-txt" style="flex:1;"><strong id="histChoquesAvisoTxt"></strong></div>
+      <div class="notice-bar-actions">
+        <button type="button" class="nb-primary" id="btnHistChoquesRevisar">Revisar</button>
+        <button type="button" class="nb-ghost" id="btnHistChoquesOcultar" aria-label="Ocultar el aviso">✕</button>
+      </div>
+    </div>
     <!-- Tanda E: chip visible cuando el Historial salió de la vista mensual y muestra un
          rango de fechas elegido a mano. El botón vuelve a "Este mes" (navegación normal). -->
     <div class="hist-rango-chip" id="hRangoChip" hidden>
@@ -3472,16 +3498,55 @@ button:active{ transform:scale(0.93); }
 <div class="sheet-overlay" id="sheetUnirMulti">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Estos datos son tuyos?</h2>
-    <p class="sheet-note" style="margin-bottom:8px;">
-      En este dispositivo: <b id="unirConteoLocal"></b>.<br>
-      En tu cuenta: <b id="unirConteoNube"></b>.
-    </p>
-    <p class="sheet-note" style="margin-bottom:12px;">
+    <!-- T11 · Fase 3: mismo estilo que «Tu cuenta» (ícono, tarjeta de filas, botones); la lógica no cambia. -->
+    <div class="cuenta-hero">
+      <div class="cuenta-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="13" height="10" rx="2"/><path d="M5 18h7"/><rect x="17" y="8" width="5" height="12" rx="1.5"/></svg></div>
+      <h3>¿Estos datos son tuyos?</h3>
+      <p>Hay registros en este dispositivo y también en tu cuenta.</p>
+    </div>
+    <div class="cfg-lista" style="margin:0 0 12px;">
+      <div class="cfg-fila"><span class="cfg-fila-lbl">En este dispositivo</span><span class="cfg-fila-val" id="unirConteoLocal" style="white-space:normal; max-width:60%;"></span></div>
+      <div class="cfg-fila"><span class="cfg-fila-lbl">En tu cuenta</span><span class="cfg-fila-val" id="unirConteoNube" style="white-space:normal; max-width:60%;"></span></div>
+    </div>
+    <p class="sheet-note" style="margin:0 0 14px;">
       Si son tuyos, se juntan con los de tu cuenta: lo que está solo aquí se sube, lo que está solo en la nube se trae y, si algo cambió en los dos lados, queda para que lo revises. Antes se guarda un respaldo de este dispositivo.
     </p>
     <button class="btn-primary" id="btnUnirMultiSi">Sí, son míos — juntar</button>
     <button class="btn-ghost" id="btnUnirMultiNo" data-close>No son míos</button>
+  </div>
+</div>
+
+<!-- SHEET: T11 · Fase 3 · pantalla 14: «Cambios por revisar» (choques de la sincronización con
+     varios dispositivos). Se apila sobre «Tu cuenta». La lista la arma renderListaChoques(). -->
+<div class="sheet-overlay cfg-hija" id="sheetChoques">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg><span id="choquesVolverTxt">Tu cuenta</span></button>
+    <h2>Cambios por revisar</h2>
+    <p class="sheet-note" style="margin:0 0 14px;">Estos registros cambiaron aquí y en otro dispositivo antes de sincronizarse. Elige qué versión queda. Mientras no lo decidas, no se suben.</p>
+    <div id="choquesLista"></div>
+    <button type="button" class="btn-ghost" id="btnChoquesConservarTodos" style="margin-top:16px;">Conservar todos los de este dispositivo</button>
+    <p class="cfg-nota" id="choquesConservarNota"></p>
+    <p class="cfg-nota" id="choquesDetectados" style="margin-top:18px;"></p>
+  </div>
+</div>
+
+<!-- SHEET: T11 · Fase 3 · pantallas 15 (comparación), 16 (eliminado en otro dispositivo),
+     17 (aportes sin su meta) y la 15 adaptada a un campo de Configuración. Una sola hoja que
+     renderDetalleChoque() rellena según el motivo. «Decidir después» solo cierra. -->
+<div class="sheet-overlay cfg-hija" id="sheetChoque">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="choque-cab">
+      <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Cambios por revisar</button>
+      <span class="cfg-fila-val" id="choquePosicion"></span>
+    </div>
+    <h2 id="choqueTitulo" style="margin:0 0 4px;"></h2>
+    <p class="sheet-note" id="choqueSubtitulo" style="margin:0 0 14px;"></p>
+    <div id="choqueCuerpo"></div>
+    <button type="button" class="btn-primary" id="btnChoqueLocal"></button>
+    <button type="button" class="btn-ghost" id="btnChoqueOtro"></button>
+    <button type="button" class="btn-discreto" id="btnChoqueDespues" data-close>Decidir después</button>
   </div>
 </div>
 
@@ -10214,6 +10279,7 @@ function irAHoyClick(){
 })();
 
 function renderHistorial(){
+  renderAvisoChoquesHistorial();   // T11 · Fase 3 · pantalla 18
   const mk = monthKey(currentDate);
   const box = document.getElementById('hList');
   const chartBox = document.getElementById('hChart');
@@ -10317,7 +10383,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-cuotavirtual]').forEach(el=>{
       el.addEventListener('click', ()=> openCuotaProyeccion(el.dataset.cuotavirtual));
     });
-    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
+    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box); marcarChoquesHistorial(box);
   } else {
     const items = applySort(ingresosDelHistorial(), 'nombre', 'amount', 'date').filter(histPasaIngreso);
     updateHistCount(items.length);
@@ -10348,7 +10414,7 @@ function renderHistorial(){
     box.querySelectorAll('[data-editincome]').forEach(el=>{
       el.addEventListener('click', ()=> openIngresoForm(el.dataset.editincome));
     });
-    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
+    wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box); marcarChoquesHistorial(box);
   }
   refreshIrAHoyBtn();
 }
@@ -10554,7 +10620,7 @@ function renderHistorialTodo(box){
   box.querySelectorAll('[data-edittransfer]').forEach(el=>{   // Tanda C4
     el.addEventListener('click', ()=> openTransferForm(el.dataset.edittransfer));
   });
-  wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box);
+  wireRowExpand(box); wireConfirmFechaFijo(box); markNewRow(box); marcarChoquesHistorial(box);
 }
 // Chevron "aparte" que expande/colapsa el sub-detalle de una fila, sin disparar el tap de edición.
 function wireRowExpand(box){
@@ -15167,7 +15233,7 @@ function renderEstadoCuenta(){
       cola = syncAlmacen.leerCola(syncCtx.userId).length;
       fallidas = syncAlmacen.leerFallidas(syncCtx.userId).length;
     }
-    multi = multiActiva();
+    multi = choquesUiActiva();   // T11 · Fase 3: la sesión corre con varios escritores (syncCtx.multi)
     choques = multi ? contarChoquesSync() : 0;
   }catch(_){ habilitada = false; multi = false; choques = 0; }
   const est = estadoRespaldoCuenta({ habilitada, enLinea: navigator.onLine !== false, cola, fallidas });
@@ -15205,8 +15271,420 @@ function renderTarjetaCuentaConfig(est){
     ? ((est && est.texto) || document.getElementById('cuentaEstadoTxt').textContent)
     : 'Tus datos viven solo en este dispositivo';
 }
-// Por ahora solo un aviso: T11 conecta la revisión de choques.
-document.getElementById('cuentaFilaChoques').onclick = ()=> showToast('Disponible pronto');
+/* ---- T11 · Fase 3: interfaz de choques (pantallas 14–18) ----
+   Solo muestra y decide: la resolución sale de resolverChoques / decisionLocalPara /
+   agruparChoquesPorMeta / DECISIONES_CHOQUE (Fases 1, 2 y 4). Lo local se lee con el mismo JSON
+   canónico que usa la sincronización (construirSnapshot) y la nube con canonicoFilaNube, así
+   «distinto» es exactamente lo que el motor considera distinto. try/catch donde se lee syncCtx:
+   el Historial puede pintarse antes de que existan las `let` de S1. */
+let choquesUiOcupado = false;        // una resolución en curso: botones deshabilitados
+let detalleChoqueActual = null;      // { clave, local: {lista, decision}, otro: {lista, decision} }
+let avisoChoquesOcultoCon = 0;       // «✕» del aviso del Historial: oculto hasta que haya más choques
+function choquesUiActiva(){ try{ return !!(syncCtx && syncCtx.multi); }catch(_){ return false; } }
+function choquesUiVigentes(){ try{ return choquesUiActiva() ? leerChoquesVigentes(syncCtx.userId) : []; }catch(_){ return []; } }
+function snapshotLocalChoques(){
+  try{ asegurarEstadoVigente(); return construirSnapshot(state, syncCtx.userId, syncCtx.deviceId); }catch(_){ return {}; }
+}
+function filaJsonChoque(s){ try{ return s ? JSON.parse(s) : null; }catch(_){ return null; } }
+// Ítems de la lista: un choque por fila; los aportes sin su meta (padre_*) se agrupan por meta
+// (pantalla 17) y los campos de Configuración van aparte, bajo su título.
+function itemsChoquesUi(choques, local){
+  const lista = (choques || []).filter(Boolean);
+  const padres = lista.filter(c => c.tabla === 'goal_aportes' && String(c.motivo).indexOf('padre_') === 0);
+  const filas = [], metas = [], campos = [];
+  lista.forEach(c => {
+    if(c.motivo === 'campo') campos.push({ tipo: 'campo', choques: [c] });
+    else if(!padres.includes(c)) filas.push({ tipo: 'fila', choques: [c] });
+  });
+  agruparChoquesPorMeta(padres, local).forEach((cs, goalId) => metas.push({ tipo: 'meta', goalId, choques: cs }));
+  return filas.concat(metas, campos);
+}
+function claveItemChoque(it){ return it.tipo === 'meta' ? 'meta|' + it.goalId : it.choques[0].tabla + '|' + it.choques[0].clave; }
+function lecturaChoque(c, local){
+  const L = filaJsonChoque(((local || {})[c.tabla] || {})[c.clave]);
+  let N = null;
+  try{ if(c.servidor) N = JSON.parse(canonicoFilaNube(c.tabla, c.servidor, syncCtx.userId)); }catch(_){ N = null; }
+  return { L, N, nubeViva: !!c.servidor && c.servidor.deleted_at == null };
+}
+function nombreMetaChoque(goalId, local, choques){
+  const L = filaJsonChoque(((local || {}).goals || {})[goalId]);
+  if(L && L.name) return L.name;
+  const c = (choques || []).find(x => x.tabla === 'goals' && x.clave === goalId && x.servidor && x.servidor.name);
+  return c ? c.servidor.name : 'Meta eliminada';
+}
+function nombreRegistroChoque(tabla, f, local, choques){
+  const x = f || {};
+  switch(tabla){
+    case 'expenses': return x.nombre || x.description || 'Gasto sin nombre';
+    case 'incomes': return x.nombre || x.description || x.source || 'Ingreso sin nombre';
+    case 'debts': return x.description || 'Compra en cuotas';
+    case 'goals': return x.name || 'Meta';
+    case 'goal_aportes': return 'Aporte a ' + nombreMetaChoque(x.goal_id, local, choques);
+    case 'transfers': return x.nombre || 'Transferencia';
+    case 'cuentas_financieras': return x.nombre || 'Cuenta';
+    case 'config_compartida': return 'Configuración';
+  }
+  return 'Registro';
+}
+function tipoRegistroChoque(tabla, f){
+  const x = f || {};
+  switch(tabla){
+    case 'expenses': return x.debt_id ? 'Compra en cuotas' : (x.tipo === 'Fijo' ? 'Gasto fijo' : 'Gasto');
+    case 'incomes': return x.tipo === 'Fijo' ? 'Ingreso fijo' : 'Ingreso';
+    case 'debts': return 'Compra en cuotas';
+    case 'goals': return 'Meta';
+    case 'goal_aportes': return 'Aporte';
+    case 'transfers': return 'Transferencia';
+    case 'cuentas_financieras': return 'Cuenta';
+  }
+  return 'Configuración';
+}
+const MOTIVO_CHOQUE_TXT = { version: 'editado en los dos', eliminado: 'eliminado en el otro', no_existe: 'ya no está en la nube',
+  padre_eliminado: 'su meta se eliminó en el otro', padre_inexistente: 'su meta ya no está en la nube', campo: 'cambiado en los dos' };
+function iconoChoqueHtml(tabla, f){
+  const x = f || {};
+  if((tabla === 'expenses' || tabla === 'debts') && x.category) return `<span class="cfg-ic" style="color:${colorDeCategoria(x.category)};">${catIcon(x.category)}</span>`;
+  const n = { incomes: 'arrow-down-left', goals: 'target', goal_aportes: 'target', transfers: 'arrow-up-right',
+              cuentas_financieras: 'credit-card', config_compartida: 'settings' }[tabla] || 'tag';
+  return `<span class="cfg-ic">${icon(n)}</span>`;
+}
+// Etiquetas de las columnas (las de COLUMNAS_CHOQUE) y su valor legible.
+const CAMPOS_CHOQUE_TXT = { amount: 'Monto', monto: 'Monto', total_amount: 'Monto total', monto_objetivo: 'Monto objetivo',
+  date: 'Fecha', fecha: 'Fecha', purchase_date: 'Fecha de compra', fecha_limite: 'Fecha límite', fecha_creacion: 'Creada', fecha_cumplida: 'Cumplida',
+  category: 'Categoría', method: 'Pagado con', source: 'Fuente', description: 'Descripción', nombre: 'Nombre', name: 'Nombre', tipo: 'Tipo',
+  cuenta_id: 'Cuenta', origen: 'Desde', destino: 'Hacia', num_cuotas: 'Cuotas', dia_hasta: 'Hasta el día', goal_id: 'Meta',
+  fixed_end_month_key: 'Se repite hasta', goal_end_month_key: 'Termina', indefinida: 'Sin fecha límite', aporte_automatico: 'Aporte automático',
+  fechas_confirmadas: 'Fechas confirmadas', manual_paid_month_keys: 'Cuotas marcadas pagadas', manual_unpaid_month_keys: 'Cuotas marcadas sin pagar',
+  ultimo_done_visto: 'Aviso de meta cumplida', orden: 'Orden', archivada: 'Archivada' };
+const CAMPOS_CHOQUE_RESUMEN = { expenses: ['amount', 'category', 'date', 'method'], incomes: ['amount', 'source', 'date'],
+  debts: ['total_amount', 'num_cuotas', 'category', 'purchase_date'], goals: ['monto_objetivo', 'fecha_limite'],
+  goal_aportes: ['monto', 'fecha'], transfers: ['monto', 'origen', 'destino', 'fecha'], cuentas_financieras: ['nombre'] };
+function distintoTxt(lbl){
+  const p = String(lbl).split(' ')[0];
+  const fem = ['Fecha', 'Fechas', 'Categoría', 'Descripción', 'Fuente', 'Cuenta', 'Meta', 'Cuotas', 'Creada', 'Cumplida', 'Archivada'].includes(p);
+  return /s$/.test(p) ? (fem ? 'distintas' : 'distintos') : (fem ? 'distinta' : 'distinto');
+}
+function fechaCortaChoque(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if(!m) return String(iso || '');
+  return Number(m[3]) + ' ' + MESES[Number(m[2]) - 1].slice(0, 3).toLowerCase() + (Number(m[1]) !== new Date().getFullYear() ? ' ' + m[1] : '');
+}
+function mesChoque(v){
+  if(typeof v === 'number' && isFinite(v)) return MESES[((v % 12) + 12) % 12].slice(0, 3) + ' ' + Math.floor(v / 12);
+  const m = /^(\d{4})-(\d{2})/.exec(String(v || ''));
+  return m ? MESES[Number(m[2]) - 1].slice(0, 3) + ' ' + m[1] : String(v);
+}
+function valorChoqueHtml(campo, v, local, choques){
+  if(v === null || v === undefined || v === '') return '<span class="li-muted">Sin dato</span>';
+  switch(campo){
+    case 'amount': case 'monto': case 'total_amount': case 'monto_objetivo':
+      return Number.isFinite(Number(v)) ? money(Number(v)) : escHtml(v);
+    case 'date': case 'fecha': case 'purchase_date': case 'fecha_limite': case 'fecha_creacion': case 'fecha_cumplida':
+      return escHtml(fechaCortaChoque(v));
+    case 'category': return `<span class="sw" style="background:${colorDeCategoria(String(v))};"></span>${escHtml(v)}`;
+    case 'source': return `<span class="sw" style="background:${colorDeFuente(String(v))};"></span>${escHtml(v)}`;
+    case 'cuenta_id': case 'origen': case 'destino': return escHtml(cuentaNombre(v));
+    case 'goal_id': return escHtml(nombreMetaChoque(v, local, choques));
+    case 'fixed_end_month_key': case 'goal_end_month_key': return escHtml(mesChoque(v));
+    case 'dia_hasta': return 'Día ' + escHtml(v);
+  }
+  if(typeof v === 'boolean') return v ? 'Sí' : 'No';
+  if(Array.isArray(v)) return v.length ? escHtml(v.length === 1 ? '1 elemento' : v.length + ' elementos') : '<span class="li-muted">Ninguno</span>';
+  if(typeof v === 'object') return escHtml(JSON.stringify(v));
+  return escHtml(v);
+}
+function textoPlanoChoque(html){ const d = document.createElement('div'); d.innerHTML = html; return d.textContent; }
+// Columnas que difieren entre lo local y la nube. Sin la columna en la fila guardada de la nube
+// (choque viejo o tombstone sin datos) no se compara: nunca se inventa un «antes».
+function camposChoque(tabla, L, N, servidorCrudo){
+  const igual = (a, b) => jsonCanonico(a === undefined ? null : a) === jsonCanonico(b === undefined ? null : b);
+  const distintos = [], iguales = [];
+  (COLUMNAS_CHOQUE[tabla] || []).filter(k => k !== 'id').forEach(k => {
+    if(servidorCrudo && !tieneClave(servidorCrudo, k)) return;
+    const a = L ? L[k] : undefined, b = N ? N[k] : undefined;
+    if(igual(a, b)){ if(a != null && a !== '' && !(Array.isArray(a) && !a.length)) iguales.push(k); }
+    else distintos.push(k);
+  });
+  return { distintos, iguales };
+}
+// «hoy a las 14:28» / «el 5 oct a las 14:28» (hora local del dispositivo).
+function cuandoChoqueTxt(iso){
+  const d = new Date(iso);
+  if(!iso || isNaN(d.getTime())) return '';
+  const p = n => String(n).padStart(2, '0');
+  const dia = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  return (dia === fechaHoyLocalISO() ? 'hoy' : 'el ' + fechaCortaChoque(dia)) + ' a las ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+// Choque «campo» de config_compartida (pantalla 15 adaptada).
+function etiquetaCampoConfigChoque(c){
+  const k = c.subclave;
+  switch(c.campo){
+    case 'categoria_topes': return 'Tope de ' + k;
+    case 'categoria_colores': return 'Color de ' + k;
+    case 'categoria_iconos': return 'Ícono de ' + k;
+    case 'mes_inicio_registro': return 'Inicio del registro';
+    case 'read_only': return 'Modo solo lectura';
+    case 'categorias': return 'Categorías';
+    case 'metodos': return 'Métodos de pago';
+    case 'fuentes': return 'Fuentes de ingreso';
+  }
+  return k !== undefined && k !== null ? c.campo + ' · ' + k : String(c.campo);
+}
+function valorCampoConfigChoqueHtml(c, v){
+  if(v === null || v === undefined){
+    return escHtml({ categoria_topes: 'Sin tope', categoria_colores: 'Color por defecto', categoria_iconos: 'Ícono por defecto',
+                     mes_inicio_registro: 'Sin definir', read_only: 'Desactivado' }[c.campo] || 'Sin dato');
+  }
+  switch(c.campo){
+    case 'categoria_topes': return Number.isFinite(Number(v)) ? money(Number(v)) : escHtml(v);
+    case 'categoria_colores': return /^#[0-9a-f]{3,8}$/i.test(String(v)) ? `<span class="sw" style="background:${v};"></span>Color elegido` : escHtml(v);
+    case 'categoria_iconos':
+      if(v && v.tipo === 'emoji') return escHtml(v.valor);
+      if(v && v.tipo === 'icono' && ICONS[v.valor]) return icon(v.valor);
+      return escHtml(typeof v === 'object' ? JSON.stringify(v) : v);
+    case 'mes_inicio_registro': return escHtml(mesChoque(v));
+    case 'read_only': return v ? 'Activado' : 'Desactivado';
+  }
+  if(Array.isArray(v)) return escHtml(v.join(', '));
+  return escHtml(typeof v === 'object' ? JSON.stringify(v) : v);
+}
+function textoErrorChoque(e){
+  switch(e && e.codigo){
+    case 'no_lider': return 'Telora está abierto en otra pestaña. Resuélvelo desde esa pestaña.';
+    case 'sin_multi': return 'La sincronización con tus otros dispositivos no está activa ahora. Vuelve a intentarlo en un rato.';
+    case 'no_aplica': return 'Este cambio ya no se puede aplicar así: puede que ya se haya resuelto o que el registro ya no esté. Revisa la lista de nuevo.';
+    case 'sin_servidor': return 'No tenemos la versión de la nube de este registro. Conserva la de este dispositivo o decide después.';
+    case 'decision_invalida': return 'Esa opción no corresponde a este cambio. Elige otra.';
+    case 'planes_incompatibles': return 'Estos cambios no se pueden resolver todos juntos. Revísalos de a uno.';
+    case 'sin_guardar': return 'No se pudo guardar en este dispositivo. Libera espacio y vuelve a intentarlo.';
+  }
+  return 'No se pudo resolver el cambio. Vuelve a intentarlo.';
+}
+
+// Pantalla 14. Devuelve los ítems que pintó.
+function renderListaChoques(){
+  const choques = choquesUiVigentes();
+  const local = snapshotLocalChoques();
+  const items = itemsChoquesUi(choques, local);
+  const filaHtml = (it, i) => {
+    let ico, tit, sub;
+    if(it.tipo === 'campo'){
+      const c = it.choques[0];
+      ico = iconoChoqueHtml('config_compartida'); tit = etiquetaCampoConfigChoque(c); sub = 'Configuración · ' + MOTIVO_CHOQUE_TXT.campo;
+    } else if(it.tipo === 'meta'){
+      ico = iconoChoqueHtml('goal_aportes'); tit = 'Aporte' + (it.choques.length > 1 ? 's' : '') + ' a ' + nombreMetaChoque(it.goalId, local, choques);
+      sub = (it.choques.length > 1 ? it.choques.length + ' aportes' : 'Aporte') + ' · ' + MOTIVO_CHOQUE_TXT[it.choques[0].motivo];
+    } else {
+      const c = it.choques[0], r = lecturaChoque(c, local), f = r.L || r.N || c.servidor;
+      ico = iconoChoqueHtml(c.tabla, f); tit = nombreRegistroChoque(c.tabla, f, local, choques);
+      sub = tipoRegistroChoque(c.tabla, f) + ' · ' + (MOTIVO_CHOQUE_TXT[c.motivo] || c.motivo);
+    }
+    return `<button type="button" class="cfg-fila" data-choque-item="${i}">${ico}<span class="cfg-fila-lbl">${escHtml(tit)}<small>${escHtml(sub)}</small></span>`
+      + `<svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+  };
+  const registros = items.map((it, i) => it.tipo !== 'campo' ? filaHtml(it, i) : '').join('');
+  const config = items.map((it, i) => it.tipo === 'campo' ? filaHtml(it, i) : '').join('');
+  const caja = document.getElementById('choquesLista');
+  caja.innerHTML = items.length
+    ? (registros ? `<div class="cfg-lista">${registros}</div>` : '')
+      + (config ? `<p class="cfg-sub-tit">Configuración</p><div class="cfg-lista">${config}</div>` : '')
+    : '<p class="sheet-note" style="margin:0;">No quedan cambios por revisar.</p>';
+  caja.querySelectorAll('[data-choque-item]').forEach(b => {
+    b.onclick = () => abrirDetalleChoque(claveItemChoque(items[Number(b.dataset.choqueItem)]));
+  });
+  const n = choques.length;
+  const restaura = choques.some(c => c.motivo !== 'version' && c.motivo !== 'campo');
+  document.getElementById('btnChoquesConservarTodos').hidden = !items.length;
+  document.getElementById('choquesConservarNota').textContent = !items.length ? ''
+    : (n === 1 ? 'Tu versión se sube y reemplaza la de la nube.' : 'Tus ' + n + ' versiones se suben y reemplazan las de la nube.')
+      + (restaura ? ' Lo eliminado en el otro dispositivo se restaura.' : '');
+  const ultimo = choques.map(c => c.detectado).filter(Boolean).sort().pop();
+  const cuando = ultimo ? cuandoChoqueTxt(ultimo) : '';
+  document.getElementById('choquesDetectados').textContent = cuando
+    ? 'Detectados ' + cuando + ' · ' + nombreDispositivoDesdeUA(navigator.userAgent) : '';
+  return items;
+}
+function abrirChoques(desde){
+  if(!choquesUiActiva()){ showToast('La sincronización con tus otros dispositivos no está activa ahora.', 'error'); return; }
+  document.getElementById('choquesVolverTxt').textContent = desde === 'historial' ? 'Historial' : 'Tu cuenta';
+  renderListaChoques();
+  openSheet('sheetChoques', 'btnChoquesConservarTodos');
+}
+function abrirDetalleChoque(clave){
+  const items = renderListaChoques();
+  const it = items.find(x => claveItemChoque(x) === clave);
+  if(!it) return;
+  renderDetalleChoque(it, items);
+  openSheet('sheetChoque', 'btnChoqueLocal');
+}
+// Pantallas 15, 16, 17 y 15 adaptada (campo). Los dos botones de acción y su decisión salen
+// de DECISIONES_CHOQUE[motivo]: [0] conserva lo local, [1] lo otro.
+function renderDetalleChoque(it, items){
+  const choques = choquesUiVigentes();
+  const local = snapshotLocalChoques();
+  const c = it.choques[0];
+  const dec = DECISIONES_CHOQUE[c.motivo] || [];
+  const tit = document.getElementById('choqueTitulo'), sub = document.getElementById('choqueSubtitulo');
+  const cuerpo = document.getElementById('choqueCuerpo');
+  const bLocal = document.getElementById('btnChoqueLocal'), bOtro = document.getElementById('btnChoqueOtro');
+  document.getElementById('choquePosicion').textContent = (items.findIndex(x => claveItemChoque(x) === claveItemChoque(it)) + 1) + ' de ' + items.length;
+  let local1 = { lista: it.choques, decision: dec[0] }, otro = { lista: it.choques, decision: dec[1] };
+  let txtLocal = 'Conservar la de este dispositivo', txtOtro = 'Usar la de la nube', otroPeligro = false, mostrarLocal = true, mostrarOtro = true;
+  const cols = '<div class="choque-cols"><p class="choque-cols-tit">Este dispositivo</p><p class="choque-cols-tit">En la nube</p></div>';
+  const tarjeta = (lbl, a, b) => `<div class="choque-campo"><p class="choque-campo-tit">${escHtml(lbl)} · ${distintoTxt(lbl)}</p>`
+    + `<div class="choque-cols"><div class="choque-val">${a}</div><div class="choque-val">${b}</div></div></div>`;
+  const filasLista = filas => `<div class="cfg-lista">${filas.map(([l, v]) =>
+    `<div class="cfg-fila"><span class="cfg-fila-lbl" style="color:var(--cream-dim);">${escHtml(l)}</span><span class="cfg-fila-val" style="color:var(--cream); white-space:normal; display:inline-flex; align-items:center; gap:8px;">${v}</span></div>`).join('')}</div>`;
+  const aviso = (ico, txt) => `<div class="choque-aviso">${ico}<span>${escHtml(txt)}</span></div>`;
+  const icoBorrado = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+  if(it.tipo === 'campo'){
+    tit.textContent = etiquetaCampoConfigChoque(c);
+    sub.textContent = 'Configuración · lo cambiaste aquí y en otro dispositivo.';
+    cuerpo.innerHTML = cols + tarjeta('Valor', valorCampoConfigChoqueHtml(c, c.local), valorCampoConfigChoqueHtml(c, c.nube))
+      + '<p class="cfg-nota">Los demás ajustes de Configuración ya se juntaron solos.</p>';
+  } else if(it.tipo === 'meta'){
+    const nombre = nombreMetaChoque(it.goalId, local, choques);
+    const aportes = it.choques.map(x => filaJsonChoque(((local || {}).goal_aportes || {})[x.clave])).filter(Boolean)
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+    const n = it.choques.length, total = aportes.reduce((s, a) => s + (Number(a.monto) || 0), 0);
+    tit.textContent = nombre;
+    sub.textContent = 'Meta · ' + (n === 1 ? '1 aporte de este dispositivo' : n + ' aportes de este dispositivo');
+    cuerpo.innerHTML = aviso(icon('alert-triangle'), (c.motivo === 'padre_inexistente' ? 'La meta ya no está en la nube.' : 'La meta se eliminó desde otro dispositivo.')
+        + (n === 1 ? ' Este aporte lo registraste aquí y quedó sin meta.' : ' Estos aportes los registraste aquí y quedaron sin meta.'))
+      + `<p class="cfg-sub-tit">${n === 1 ? 'Aporte sin subir' : 'Aportes sin subir'}</p>`
+      + filasLista(aportes.map(a => [fechaCortaChoque(a.fecha), money(Number(a.monto) || 0)]).concat(aportes.length > 1 ? [['Total', money(total)]] : []))
+      + `<p class="cfg-nota">Si restauras la meta, vuelve en todos tus dispositivos junto con ${n === 1 ? 'este aporte' : 'estos ' + n + ' aportes'}.</p>`;
+    txtLocal = 'Restaurar la meta';
+    txtOtro = n === 1 ? 'Descartar el aporte' : 'Descartar los ' + n + ' aportes';
+    otroPeligro = true;
+  } else {
+    const r = lecturaChoque(c, local), f = r.L || r.N || c.servidor || {};
+    tit.textContent = nombreRegistroChoque(c.tabla, f, local, choques);
+    if(c.motivo === 'version'){
+      sub.textContent = r.L ? 'Lo editaste aquí y en otro dispositivo.' : 'Lo eliminaste aquí y en otro dispositivo lo editaron.';
+      const { distintos, iguales } = camposChoque(c.tabla, r.L, r.N, c.servidor);
+      const lbl = k => CAMPOS_CHOQUE_TXT[k] || k;
+      const val = (k, fila) => fila ? valorChoqueHtml(k, fila[k], local, choques) : '<span class="li-muted">Eliminado</span>';
+      const igualesTxt = iguales.filter(k => (CAMPOS_CHOQUE_RESUMEN[c.tabla] || []).includes(k) || k === 'tipo')
+        .map(k => textoPlanoChoque(valorChoqueHtml(k, r.L[k], local, choques))).join(' · ');
+      cuerpo.innerHTML = cols
+        + (distintos.length ? distintos.map(k => tarjeta(lbl(k), val(k, r.L), val(k, r.N))).join('')
+                            : '<p class="cfg-nota" style="margin-bottom:10px;">Las dos versiones se ven iguales: cambió un dato que no se muestra.</p>')
+        + (igualesTxt ? `<p class="choque-iguales">Iguales en las dos: ${escHtml(igualesTxt)}</p>` : '')
+        + (c.servidor && c.servidor.updated_at ? `<p class="cfg-nota">La versión de la nube se guardó ${escHtml(cuandoChoqueTxt(c.servidor.updated_at))} desde otro dispositivo.</p>` : '');
+      mostrarOtro = r.nubeViva;   // sin la fila viva de la nube, «nube» daría sin_servidor
+    } else {
+      // eliminado / no_existe (pantalla 16)
+      sub.textContent = tipoRegistroChoque(c.tabla, f);
+      const cuando = c.servidor ? cuandoChoqueTxt(c.servidor.deleted_at || c.servidor.updated_at) : '';
+      const avisoTxt = c.motivo === 'eliminado'
+        ? 'Se eliminó desde otro dispositivo' + (cuando ? ' ' + cuando : '') + '.' + (r.L ? ' En este dispositivo todavía existe y tiene un cambio que no se ha subido.' : '')
+        : 'No está en la nube: se eliminó desde otro dispositivo o nunca llegó a subirse.' + (r.L ? ' En este dispositivo todavía existe.' : '');
+      let filas = [];
+      if(r.L){
+        filas = (CAMPOS_CHOQUE_RESUMEN[c.tabla] || []).filter(k => r.L[k] != null && r.L[k] !== '')
+          .map(k => [CAMPOS_CHOQUE_TXT[k] || k, valorChoqueHtml(k, r.L[k], local, choques)]);
+        if(r.N && c.motivo === 'eliminado'){
+          const antes = camposChoque(c.tabla, r.L, r.N, c.servidor).distintos.slice(0, 2)
+            .map(k => (CAMPOS_CHOQUE_TXT[k] || k) + ': antes ' + textoPlanoChoque(valorChoqueHtml(k, r.N[k], local, choques)));
+          if(antes.length) filas.push(['Cambio sin subir', escHtml(antes.join(' · '))]);
+        }
+      }
+      cuerpo.innerHTML = aviso(icoBorrado, avisoTxt) + (filas.length ? '<p class="cfg-sub-tit">Tu versión en este dispositivo</p>' + filasLista(filas) : '');
+      txtLocal = c.motivo === 'eliminado' ? 'Restaurar en todos los dispositivos' : 'Subir la de este dispositivo';
+      txtOtro = 'Eliminar también aquí';
+      otroPeligro = true;
+      mostrarLocal = !!r.L;   // sin nada local, restaurar/conservar daría no_aplica
+    }
+  }
+  bLocal.textContent = txtLocal; bLocal.hidden = !mostrarLocal;
+  bOtro.textContent = txtOtro; bOtro.hidden = !mostrarOtro;
+  bOtro.className = otroPeligro ? 'btn-danger' : 'btn-ghost';
+  detalleChoqueActual = { clave: claveItemChoque(it), local: local1, otro };
+}
+async function ejecutarResolucionChoques(lista, decision){
+  if(choquesUiOcupado) return;
+  choquesUiOcupado = true;
+  const botones = ['btnChoqueLocal', 'btnChoqueOtro', 'btnChoquesConservarTodos'].map(id => document.getElementById(id));
+  botones.forEach(b => { b.disabled = true; });
+  let ok = false;
+  try{
+    await resolverChoques(lista, decision);
+    ok = true;
+  }catch(e){
+    showToast(textoErrorChoque(e), 'error', 6000);
+  }finally{
+    choquesUiOcupado = false;
+    botones.forEach(b => { b.disabled = false; });
+    trasResolverChoques(ok);
+  }
+}
+// Después de resolver (o de un error): la lista se rearma con lo vigente; el detalle se cierra
+// si se resolvió o si su choque ya no está; si no queda nada, se cierra todo. Nunca queda una
+// hoja abierta con botones deshabilitados.
+function trasResolverChoques(ok){
+  let items = [];
+  try{ items = renderListaChoques(); }catch(_){ items = []; }
+  try{ renderEstadoCuenta(); renderAvisoChoquesHistorial(); }catch(_){}
+  const det = document.getElementById('sheetChoque');
+  if(det.classList.contains('open')){
+    const sigue = detalleChoqueActual && items.find(x => claveItemChoque(x) === detalleChoqueActual.clave);
+    if(ok || !sigue) closeSheet('sheetChoque');
+    else renderDetalleChoque(sigue, items);
+  }
+  if(!items.length){
+    closeSheet('sheetChoques');
+    if(ok) showToast('Listo: no quedan cambios por revisar', 'success');
+  } else if(ok){
+    showToast('Listo, quedó resuelto', 'success');
+  }
+}
+document.getElementById('cuentaFilaChoques').onclick = ()=> abrirChoques('cuenta');
+document.getElementById('btnChoqueLocal').onclick = ()=> { const d = detalleChoqueActual; if(d) ejecutarResolucionChoques(d.local.lista, d.local.decision); };
+document.getElementById('btnChoqueOtro').onclick = ()=> { const d = detalleChoqueActual; if(d) ejecutarResolucionChoques(d.otro.lista, d.otro.decision); };
+document.getElementById('btnChoquesConservarTodos').onclick = ()=> {
+  const todos = choquesUiVigentes();
+  if(todos.length) ejecutarResolucionChoques(todos, 'local_todos');
+};
+// «Decidir después» y «‹ Cambios por revisar» solo cierran (data-close): no tocan nada.
+
+// Pantalla 18: aviso no bloqueante en el Historial y filas marcadas.
+function renderAvisoChoquesHistorial(){
+  const el = document.getElementById('histChoquesAviso');
+  if(!el) return;
+  try{
+    const n = choquesUiVigentes().length;
+    if(n === 0) avisoChoquesOcultoCon = 0;
+    el.hidden = !(n > 0 && n > avisoChoquesOcultoCon);
+    document.getElementById('histChoquesAvisoTxt').textContent = n === 1 ? '1 cambio por revisar' : n + ' cambios por revisar';
+  }catch(_){ el.hidden = true; }   // el Historial puede pintarse antes de que exista este bloque
+}
+function marcarChoquesHistorial(box){
+  const choques = choquesUiVigentes();
+  if(!box || !choques.length) return;
+  const mapa = new Map(choques.filter(c => c.motivo !== 'campo').map(c => [c.tabla + '|' + c.clave, c]));
+  const marcar = (attr, tabla) => box.querySelectorAll('[data-' + attr + ']').forEach(el => {
+    const c = mapa.get(tabla + '|' + el.getAttribute('data-' + attr));
+    if(!c || el.querySelector('[data-choque-marca]')) return;
+    let meta = el.querySelector('.li-meta');
+    if(!meta){
+      meta = document.createElement('p'); meta.className = 'li-meta';
+      const t = el.querySelector('.li-title');
+      if(t) t.after(meta); else return;
+    }
+    const txt = c.motivo === 'eliminado' ? 'Eliminado en otro' : c.motivo === 'no_existe' ? 'No está en la nube' : 'Por revisar';
+    meta.insertAdjacentHTML('afterbegin', `<span class="li-badge ${c.motivo === 'version' ? 'li-badge-rango' : 'li-badge-unpaid'}" data-choque-marca>${txt}</span>`);
+  });
+  marcar('editexpense', 'expenses');
+  marcar('editincome', 'incomes');
+  marcar('edittransfer', 'transfers');
+  marcar('cuotavirtual', 'debts');
+}
+document.getElementById('btnHistChoquesRevisar').onclick = ()=> abrirChoques('historial');
+document.getElementById('btnHistChoquesOcultar').onclick = ()=> {
+  avisoChoquesOcultoCon = choquesUiVigentes().length;
+  document.getElementById('histChoquesAviso').hidden = true;
+};
 window.addEventListener('online', ()=> renderEstadoCuenta());
 window.addEventListener('offline', ()=> renderEstadoCuenta());
 // Mientras la hoja está abierta, el estado se relee cada 2 s (la cola y las fallidas viven en
@@ -15214,6 +15692,12 @@ window.addEventListener('offline', ()=> renderEstadoCuenta());
 setInterval(()=>{
   const ov = document.getElementById('sheetCuenta');
   if(ov && ov.classList.contains('open')) renderEstadoCuenta();
+  // T11 · Fase 3: la lista de cambios por revisar también se relee (otra puesta al día o la
+  // limpieza automática pueden quitar o sumar choques). El detalle abierto no se repinta.
+  const lc = document.getElementById('sheetChoques');
+  if(lc && lc.classList.contains('open') && !choquesUiOcupado && !document.getElementById('sheetChoque').classList.contains('open')){
+    try{ renderListaChoques(); }catch(_){}
+  }
 }, 2000);
 
 /* ---- T23 · Fase 1: bienvenida de cuenta (primera ejecución) ----
@@ -18625,6 +19109,8 @@ const HOJAS_SIN_MARCA = [
   'sheetConfirmRestore',     // reemplaza TODO el estado por un archivo elegido: no depende de lo leído
   'sheetConfirmarDueno',     // sube a la nube; asegurarEstadoVigente() relee antes de la foto
   'sheetUnirMulti',          // T11 · 1b: une con la nube; la sincronización inicial relee el estado antes de la foto
+  'sheetChoques',            // T11 · 3: lista de choques; se rearma sola y resolverChoques relee el estado antes de planificar
+  'sheetChoque',             // T11 · 3: detalle de un choque; sin texto escrito y resolverChoques relee el estado (asegurarEstadoVigente)
   'sheetSyncBorradoMasivo',  // confirma ops ya calculadas; procesarCambiosSync rehace el diff con el estado vigente
   'sheetLegadoEscritor',     // reclama el rol de escritor; no edita `state`
   'sheetEliminarCuenta',     // borra la cuenta en el servidor; no edita `state`
