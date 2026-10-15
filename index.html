@@ -5723,6 +5723,13 @@ function cerrarDeskAddMenu(devolverFoco){
     inp.addEventListener('input', sync);
     inp.addEventListener('change', sync);
     sync();
+    // Escritorio (Chrome, Edge): sin apariencia nativa, el calendario solo se abre con su
+    // indicador, que es invisible y no está bajo el ícono. Un clic en el campo (o en el ícono)
+    // lo abre con showPicker(). En iOS no se toca: ahí todo el campo ya abre la rueda.
+    inp.addEventListener('click', ()=>{
+      if(document.documentElement.classList.contains('es-ios') || inp.disabled || inp.readOnly) return;
+      try{ if(typeof inp.showPicker === 'function') inp.showPicker(); }catch(_){}
+    });
   });
 })();
 
