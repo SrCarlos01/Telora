@@ -15347,7 +15347,8 @@ function tipoRegistroChoque(tabla, f){
   return 'Configuración';
 }
 const MOTIVO_CHOQUE_TXT = { version: 'editado en los dos', eliminado: 'eliminado en el otro', no_existe: 'ya no está en la nube',
-  padre_eliminado: 'su meta se eliminó en el otro', padre_inexistente: 'su meta ya no está en la nube', campo: 'cambiado en los dos' };
+  padre_eliminado: 'su meta se eliminó en el otro', padre_inexistente: 'su meta ya no está en la nube', padre_cerrado: 'su meta se finalizó en el otro',
+  campo: 'cambiado en los dos' };
 function iconoChoqueHtml(tabla, f){
   const x = f || {};
   if((tabla === 'expenses' || tabla === 'debts') && x.category) return `<span class="cfg-ic" style="color:${colorDeCategoria(x.category)};">${catIcon(x.category)}</span>`;
@@ -15500,7 +15501,7 @@ function renderListaChoques(){
     b.onclick = () => abrirDetalleChoque(claveItemChoque(items[Number(b.dataset.choqueItem)]));
   });
   const n = choques.length;
-  const restaura = choques.some(c => c.motivo !== 'version' && c.motivo !== 'campo');
+  const restaura = choques.some(c => c.motivo !== 'version' && c.motivo !== 'campo' && c.motivo !== 'padre_cerrado');
   document.getElementById('btnChoquesConservarTodos').hidden = !items.length;
   document.getElementById('choquesConservarNota').textContent = !items.length ? ''
     : (n === 1 ? 'Tu versión se sube y reemplaza la de la nube.' : 'Tus ' + n + ' versiones se suben y reemplazan las de la nube.')
@@ -15556,14 +15557,23 @@ function renderDetalleChoque(it, items){
     const n = it.choques.length, total = aportes.reduce((s, a) => s + (Number(a.monto) || 0), 0);
     tit.textContent = nombre;
     sub.textContent = 'Meta · ' + (n === 1 ? '1 aporte de este dispositivo' : n + ' aportes de este dispositivo');
-    cuerpo.innerHTML = aviso(icon('alert-triangle'), (c.motivo === 'padre_inexistente' ? 'La meta ya no está en la nube.' : 'La meta se eliminó desde otro dispositivo.')
-        + (n === 1 ? ' Este aporte lo registraste aquí y quedó sin meta.' : ' Estos aportes los registraste aquí y quedaron sin meta.'))
-      + `<p class="cfg-sub-tit">${n === 1 ? 'Aporte sin subir' : 'Aportes sin subir'}</p>`
-      + filasLista(aportes.map(a => [fechaCortaChoque(a.fecha), money(Number(a.monto) || 0)]).concat(aportes.length > 1 ? [['Total', money(total)]] : []))
-      + `<p class="cfg-nota">Si restauras la meta, vuelve en todos tus dispositivos junto con ${n === 1 ? 'este aporte' : 'estos ' + n + ' aportes'}.</p>`;
-    txtLocal = 'Restaurar la meta';
-    txtOtro = n === 1 ? 'Descartar el aporte' : 'Descartar los ' + n + ' aportes';
-    otroPeligro = true;
+    const listaAportes = `<p class="cfg-sub-tit">${n === 1 ? 'Aporte sin subir' : 'Aportes sin subir'}</p>`
+      + filasLista(aportes.map(a => [fechaCortaChoque(a.fecha), money(Number(a.monto) || 0)]).concat(aportes.length > 1 ? [['Total', money(total)]] : []));
+    if(c.motivo === 'padre_cerrado'){
+      cuerpo.innerHTML = aviso(icon('alert-triangle'), 'La meta se finalizó en otro dispositivo. Agregaste ' + (n === 1 ? '1 aporte' : n + ' aportes') + ' aquí.')
+        + listaAportes
+        + `<p class="cfg-nota">${n === 1 ? 'El aporte se sube' : 'Los aportes se suben'} en los dos casos. Si reabres la meta, vuelve a estar activa en todos tus dispositivos.</p>`;
+      txtLocal = 'Reabrir la meta';
+      txtOtro = 'Mantenerla finalizada';
+    } else {
+      cuerpo.innerHTML = aviso(icon('alert-triangle'), (c.motivo === 'padre_inexistente' ? 'La meta ya no está en la nube.' : 'La meta se eliminó desde otro dispositivo.')
+          + (n === 1 ? ' Este aporte lo registraste aquí y quedó sin meta.' : ' Estos aportes los registraste aquí y quedaron sin meta.'))
+        + listaAportes
+        + `<p class="cfg-nota">Si restauras la meta, vuelve en todos tus dispositivos junto con ${n === 1 ? 'este aporte' : 'estos ' + n + ' aportes'}.</p>`;
+      txtLocal = 'Restaurar la meta';
+      txtOtro = n === 1 ? 'Descartar el aporte' : 'Descartar los ' + n + ' aportes';
+      otroPeligro = true;
+    }
   } else {
     const r = lecturaChoque(c, local), f = r.L || r.N || c.servidor || {};
     tit.textContent = nombreRegistroChoque(c.tabla, f, local, choques);
@@ -16599,6 +16609,15 @@ function hijosPendientesDeMeta(goalId, local, base, pend, nube, excluir){
 // no conoce. La meta se queda, con el rev del tombstone (adoptarRev soloRev: la base no cambia),
 // y cada aporte queda como choque «padre_eliminado» con `padre` = { clave, rev } (pantalla 17):
 // restaurar_padre sube la meta con ese rev; descartar quita los aportes y recién ahí la borra.
+// Lo mismo con el CIERRE de una meta (goal_end_month_key pasa de null a un valor: «eliminar» una
+// meta con aportes la finaliza): no se aplica, la meta sigue abierta aquí con el rev remoto y sus
+// aportes quedan como choque «padre_cerrado» con `padre` = { clave, rev, fila } (fila remota
+// reducida): reabrir sube la meta abierta con ese rev; mantener aplica aquí la fila remota.
+function finEnJson(json){ const f = filaJsonChoque(json); return f ? f.goal_end_month_key ?? null : null; }
+function esCierreDeMeta(a, local){
+  return a.tabla === 'goals' && a.accion === 'aplicar' && !a.borrada && a.rev != null
+    && ((local || {}).goals || {})[a.clave] !== undefined && finEnJson(local.goals[a.clave]) == null && finEnJson(a.json) != null;
+}
 function planPuestaAlDia(p){
   const acciones = [];
   const local = p.local || {}, base = p.base || {}, revs = p.revs || {}, nube = p.nube || {};
@@ -16626,12 +16645,14 @@ function planPuestaAlDia(p){
   if(!p.pendientes) return acciones;
   const salida = [];
   acciones.forEach(a => {
-    const hijos = (a.tabla === 'goals' && a.accion === 'aplicarBorrado' && a.rev != null)
-      ? hijosPendientesDeMeta(a.clave, local, base, pend, nube) : [];
+    const borrado = a.tabla === 'goals' && a.accion === 'aplicarBorrado' && a.rev != null;
+    const cierre = !borrado && esCierreDeMeta(a, local);
+    const hijos = (borrado || cierre) ? hijosPendientesDeMeta(a.clave, local, base, pend, nube) : [];
     if(!hijos.length){ salida.push(a); return; }
-    salida.push({ ...a, accion: 'adoptarRev', soloRev: true, retenida: true });
-    hijos.forEach(h => salida.push({ accion: 'choque', motivo: 'padre_eliminado', tabla: 'goal_aportes', clave: h, rev: null, json: null,
-                                     fila: null, borrada: false, padre: { clave: a.clave, rev: a.rev } }));
+    salida.push({ ...a, accion: 'adoptarRev', soloRev: true, retenida: cierre ? 'cierre' : 'borrado' });
+    const padre = cierre ? { clave: a.clave, rev: a.rev, fila: reducirFilaChoque('goals', a.fila) } : { clave: a.clave, rev: a.rev };
+    hijos.forEach(h => salida.push({ accion: 'choque', motivo: cierre ? 'padre_cerrado' : 'padre_eliminado', tabla: 'goal_aportes', clave: h, rev: null, json: null,
+                                     fila: null, borrada: false, padre }));
   });
   return salida;
 }
@@ -16883,6 +16904,8 @@ function opsNoPausadas(ops, choques){
      padre_inexistente restaurar_padre (la meta vuelve y el aporte sale)  | descartar (se quita el aporte)
      Con choque.padre (meta retenida en la puesta al día): restaurar_padre sube la meta con el rev del
      tombstone; descartar aplica el tombstone de la meta cuando ya no le quedan aportes pendientes.
+     padre_cerrado     reabrir (la meta abierta sale con el rev remoto)   | mantener (se aplica aquí la
+                       fila remota de la meta: queda finalizada); en los dos, el aporte sale.
    Conservar/restaurar ASEGURAN la op en la cola (upsert de lo local, o delete si lo local no está)
    y fijan base = lo local para que el diff siguiente no la duplique: así la fila nunca queda viva
    acá y borrada en la nube sin choque, aunque el tombstone tenga el mismo contenido. Toda
@@ -16895,12 +16918,13 @@ const DECISIONES_CHOQUE = {
   no_existe: ['conservar', 'eliminar'],
   padre_eliminado: ['restaurar_padre', 'descartar'],
   padre_inexistente: ['restaurar_padre', 'descartar'],
+  padre_cerrado: ['reabrir', 'mantener'],       // la meta se finalizó en el otro; los aportes salen igual
   campo: ['local', 'nube']                      // T11 · Fase 4: un campo de config_compartida
 };
 // «Conservar todos los de este dispositivo»: la decisión que deja lo local en cada motivo.
 function decisionLocalPara(motivo){
   const d = { version: 'conservar', eliminado: 'restaurar', no_existe: 'conservar',
-              padre_eliminado: 'restaurar_padre', padre_inexistente: 'restaurar_padre', campo: 'local' }[motivo];
+              padre_eliminado: 'restaurar_padre', padre_inexistente: 'restaurar_padre', padre_cerrado: 'reabrir', campo: 'local' }[motivo];
   if(!d) throw errorSync('decision_invalida', 'Motivo de choque desconocido: ' + motivo);
   return d;
 }
@@ -16939,6 +16963,16 @@ function planResolverChoque(choque, decision, ctx){
   const L = localDe(t, k);
   const servidorVivo = !!c.servidor && c.servidor.deleted_at == null;
   const revServidor = c.rev != null ? Number(c.rev) : (c.servidor && c.servidor.rev != null ? Number(c.servidor.rev) : null);
+  // padre_*: el aporte local sale (upsert de L, base = L).
+  const planAporte = () => {
+    const aporte = planChoqueVacio();
+    aporte.quitarChoques.push({ tabla: t, clave: k });
+    const op = opDe(t, k);
+    if(!(op && op.tipo === 'upsert' && jsonCanonico(op.fila) === L)) aporte.encolar.push({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(L) });
+    fijarEnPlan(aporte.base, t, k, L);
+    fijarEnPlan(aporte.revs, t, k, servidorVivo ? revServidor : null);
+    return aporte;
+  };
   switch(c.motivo + '/' + decision){
     case 'version/conservar':
       asegurarOpLocal(t, k, L);
@@ -17007,13 +17041,28 @@ function planResolverChoque(choque, decision, ctx){
       } else {
         throw errorSync('no_aplica', 'La meta ' + goalId + ' no existe ni acá ni en la nube');
       }
-      const aporte = planChoqueVacio();
-      aporte.quitarChoques.push({ tabla: t, clave: k });
-      const op = opDe(t, k);
-      if(!(op && op.tipo === 'upsert' && jsonCanonico(op.fila) === L)) aporte.encolar.push({ tabla: t, clave: k, tipo: 'upsert', fila: JSON.parse(L) });
-      fijarEnPlan(aporte.base, t, k, L);
-      fijarEnPlan(aporte.revs, t, k, servidorVivo ? revServidor : null);
-      return combinarPlanes([combinado, aporte]);
+      return combinarPlanes([combinado, planAporte()]);
+    }
+    case 'padre_cerrado/reabrir':
+    case 'padre_cerrado/mantener': {
+      // Meta retenida abierta en la puesta al día (su cierre remoto no se aplicó). reabrir: la meta
+      // local (abierta) sale con el rev remoto. mantener: se aplica aquí la fila remota (finalizada).
+      if(L === undefined) throw errorSync('no_aplica', 'El aporte ' + k + ' ya no está en este dispositivo');
+      const g = (c.padre && c.padre.clave) || JSON.parse(L).goal_id;
+      const revMeta = c.padre && c.padre.rev != null ? Number(c.padre.rev) : null;
+      if(decision === 'reabrir'){
+        if(localDe('goals', g) === undefined) throw errorSync('no_aplica', 'La meta ' + g + ' ya no está en este dispositivo');
+        asegurarOpLocal('goals', g, localDe('goals', g));
+        fijarEnPlan(plan.revs, 'goals', g, revMeta);
+      } else {
+        const fila = c.padre && c.padre.fila;
+        if(!fila || fila.deleted_at != null) throw errorSync('sin_servidor', 'No está la versión de la nube de la meta ' + g);
+        plan.estado.push({ accion: 'aplicar', tabla: 'goals', clave: g, fila });
+        fijarEnPlan(plan.base, 'goals', g, canonicoFilaNube('goals', fila, x.userId));
+        fijarEnPlan(plan.revs, 'goals', g, revMeta);
+        plan.quitarOps.push({ tabla: 'goals', clave: g });
+      }
+      return combinarPlanes([plan, planAporte()]);
     }
     default:
       throw errorSync('decision_invalida', '«' + decision + '» no aplica a un choque «' + c.motivo + '»');
@@ -17738,8 +17787,9 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
   const choques = efectivas.filter(a => a.accion === 'choque');
   if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia',
                                                                           ...(a.padre ? { padre: a.padre } : {}) })));
-  efectivas.filter(a => a.retenida).forEach(a => console.info('[Sync] la meta ' + a.clave + ' se eliminó en otro dispositivo, pero tiene aportes '
-    + 'sin subir: se mantiene aquí hasta decidir (restaurar la meta o descartar los aportes).'));
+  efectivas.filter(a => a.retenida).forEach(a => console.info(a.retenida === 'cierre'
+    ? '[Sync] la meta ' + a.clave + ' se finalizó en otro dispositivo, pero tiene aportes sin subir: sigue abierta aquí hasta decidir (reabrirla o mantenerla finalizada).'
+    : '[Sync] la meta ' + a.clave + ' se eliminó en otro dispositivo, pero tiene aportes sin subir: se mantiene aquí hasta decidir (restaurar la meta o descartar los aportes).'));
   // T11 · Fase 2 (c): una fila con choque que llega de nuevo (adoptarRev: p. ej. ahora igual a lo
   // local) actualiza la versión de la nube que guarda el choque; limpiarChoquesSync decide después.
   const vigentes = leerChoquesVigentes(ctx.userId);

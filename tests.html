@@ -1931,6 +1931,40 @@ async function runTests(){
             `restaurar: rev=${rp.revs.goals && rp.revs.goals.g1} · descartar uno de dos: borra meta=${borraMeta(dSolo)} · los dos: borra meta=${borraMeta(dGrupo)} rev=${dGrupo.revs.goals && dGrupo.revs.goals.g1} · sin padre: ${borraMeta(dSinPadre)}`);
         }
 
+        // Cierre remoto de una meta con aportes pendientes (padre_cerrado): planPuestaAlDia no lo
+        // aplica (la meta sigue abierta con el rev remoto) y cada aporte queda como choque con
+        // padre = { clave, rev, fila }; reabrir sube la meta abierta; mantener aplica la fila remota.
+        {
+          const apX = JSON.stringify({ ...JSON.parse(S.goal_aportes.ap1), id: 'apX', monto: 777 });
+          const SX = { ...S, goal_aportes: { ...S.goal_aportes, apX } };
+          const cerrada = meta({ ...g1, goal_end_month_key: 24321 }, 80, { modificado_por: 'dev-otro' });
+          const nubeC = nubeDe({ goals: [cerrada] });
+          const revsC = { goals: { g1: 53 }, goal_aportes: { ap1: 55 } };
+          const pCon = win.planPuestaAlDia({ local: SX, base: S, revs: revsC, nube: nubeC, pendientes: new Set(['goal_aportes|apX']) });
+          const pSin = win.planPuestaAlDia({ local: S, base: S, revs: revsC, nube: nubeC, pendientes: new Set() });
+          const aMeta = p => p.find(a => a.tabla === 'goals' && a.clave === 'g1');
+          const chs = pCon.filter(a => a.accion === 'choque');
+          const okPuesta = aMeta(pCon).accion === 'adoptarRev' && aMeta(pCon).soloRev && aMeta(pCon).retenida === 'cierre' && aMeta(pCon).rev === 80
+            && chs.length === 1 && chs[0].motivo === 'padre_cerrado' && chs[0].clave === 'apX' && chs[0].padre.clave === 'g1' && chs[0].padre.rev === 80
+            && chs[0].padre.fila.goal_end_month_key === 24321 && chs[0].padre.fila.txid === undefined
+            && aMeta(pSin).accion === 'aplicar' && !pSin.some(a => a.accion === 'choque');
+          const cC = { tabla: 'goal_aportes', clave: 'apX', motivo: 'padre_cerrado', servidor: null, rev: null, padre: chs[0] && chs[0].padre };
+          const ctxC = { ...ctxDe(SX), base: S, revs: revsC };
+          const re = P(cC, 'reabrir', ctxC);
+          const ma = P(cC, 'mantener', ctxC);
+          const opMeta = re.encolar.find(o => o.tabla === 'goals' && o.clave === 'g1');
+          const okRe = opMeta && opMeta.fila.goal_end_month_key == null && re.revs.goals.g1 === 80 && tieneOp(re, 'goal_aportes', 'apX') && re.estado.length === 0;
+          const okMa = !tieneOp(ma, 'goals', 'g1') && ma.estado.length === 1 && ma.estado[0].accion === 'aplicar' && ma.estado[0].fila.goal_end_month_key === 24321
+            && ma.base.goals.g1 === win.canonicoFilaNube('goals', cerrada, USER) && ma.revs.goals.g1 === 80 && tieneOp(ma, 'goal_aportes', 'apX')
+            && ma.base.goal_aportes.apX === apX;
+          const sinFila = codigo(() => P({ ...cC, padre: { clave: 'g1', rev: 80 } }, 'mantener', ctxC));
+          const malo = codigo(() => P(cC, 'restaurar_padre', ctxC));
+          assert(okPuesta && okRe && okMa && sinFila === 'sin_servidor' && malo === 'decision_invalida' && win.decisionLocalPara('padre_cerrado') === 'reabrir'
+            && win.eval('DECISIONES_CHOQUE.padre_cerrado.join()') === 'reabrir,mantener',
+            'T11 · cierre con aportes pendientes: planPuestaAlDia no aplica el cierre (adoptarRev soloRev) y deja «padre_cerrado» con padre = { clave, rev, fila reducida }; sin aportes pendientes se aplica; reabrir sube la meta abierta con el rev remoto + el aporte; mantener aplica la fila remota (finalizada) y sube el aporte; decisionLocalPara = reabrir',
+            `puesta=${okPuesta} ${JSON.stringify(pCon.map(a => a.accion + ' ' + a.tabla + ' ' + a.clave + (a.motivo ? ' ' + a.motivo : '')))} · sin=${aMeta(pSin).accion} · reabrir=${okRe} · mantener=${okMa} · sinFila=${sinFila} · malo=${malo}`);
+        }
+
         // Errores explícitos (nunca un no-op silencioso) y decisionLocalPara
         const errores = [
           ['version/eliminar', codigo(() => P(cVersion, 'eliminar', ctxDe(SE))), 'decision_invalida'],
@@ -2423,6 +2457,25 @@ async function runTests(){
           assert(despues.every(Boolean) && igualTodo && alm.leerChoques(U5).length === 7,
             'T11 · Fase 3: «Decidir después» solo cierra el detalle (la lista sigue abierta) y no cambia nada: localStorage, estado y los 7 choques intactos',
             JSON.stringify({ despues, igualTodo }));
+          // Pantalla 17 con «padre_cerrado»: la meta se finalizó en el otro; mismo agrupado por meta.
+          {
+            const padre = { clave: 'g2', rev: 62, fila: { ...JSON.parse(S.goals.g2), goal_end_month_key: 24321, rev: 62 } };
+            alm.guardarChoques(U5, choques.map(c => (c.clave === 'apA' || c.clave === 'apB') ? { ...c, motivo: 'padre_cerrado', padre } : c));
+            win.renderListaChoques();
+            const txtLista = $('choquesLista').textContent;
+            const mc = detalle('meta|g2');
+            win.abrirDetalleChoque('meta|g2');
+            $('btnChoqueDespues').click();
+            const sigue = !$('sheetChoque').classList.contains('open') && alm.leerChoques(U5).filter(c => c.motivo === 'padre_cerrado').length === 2;
+            alm.guardarChoques(U5, choques);
+            win.renderListaChoques();
+            assert(mc.abierta && mc.tit === 'Viaje a Chiloé' && mc.sub === 'Meta · 2 aportes de este dispositivo'
+              && mc.cuerpo.includes('La meta se finalizó en otro dispositivo. Agregaste 2 aportes aquí.') && mc.cuerpo.includes('$20.000') && mc.cuerpo.includes('$15.000') && mc.cuerpo.includes('$35.000')
+              && mc.local === 'Reabrir la meta' && mc.otro === 'Mantenerla finalizada' && !mc.peligro && mc.despues === 'Decidir después' && sigue
+              && txtLista.includes('2 aportes · su meta se finalizó en el otro'),
+              'T11 · cierre con aportes pendientes · 17: «La meta se finalizó en otro dispositivo. Agregaste 2 aportes aquí.», «Reabrir la meta» (principal), «Mantenerla finalizada» (secundario, no destructivo) y «Decidir después»; agrupado por meta',
+              JSON.stringify({ mc, sigue }));
+          }
           // Error de resolverChoques: texto en español de Chile y la hoja no queda colgada.
           win.esPestanaLiderSync = () => false;
           win.abrirDetalleChoque('expenses|e1');
@@ -4592,6 +4645,28 @@ async function runTests(){
       && r.metaNube === 'borrada' && r.nubeIgualLocal,
       'T11 · padre sin hijos pendientes: el tombstone de la meta se aplica en la puesta al día como siempre (se borra aquí, sin choques)',
       JSON.stringify(r));
+    for(const decision of ['reabrir', 'mantener']){
+      r = await correr(escenarioUnDispositivo, { padre: 'cierre_' + decision });
+      assert(r && !r.error && r.metaTrasPuesta && r.abiertaTrasPuesta && r.aportesTrasPuesta.join() === 'apM0,apM1,apM2' && r.revMeta === r.revTombstone && r.enviosAportes === 0
+        && r.choquesTrasPuesta.join() === 'padre_cerrado goal_aportes apM1,padre_cerrado goal_aportes apM2' && r.nombre17.join() === 'Viaje a Chiloé'
+        && r.colaTrasPuesta.join() === 'upsert goal_aportes apM1,upsert goal_aportes apM2',
+        `T11 · cierre con aportes pendientes (${decision}): la meta se finaliza en el otro dispositivo mientras hay 2 aportes sin subir -> el cierre NO se aplica aquí (sigue abierta, con el rev remoto), sus aportes quedan en pausa como «padre_cerrado» y la pantalla 17 muestra el nombre de la meta`,
+        JSON.stringify(r));
+      const ok = decision === 'reabrir'
+        ? r && r.meta && r.abierta && r.finNube === null
+        : r && r.meta && !r.abierta && r.finNube === r.fin;
+      assert(r && !r.error && r.codigo === null && ok && r.aportes.join() === 'apM0,apM1,apM2' && r.metaNube === 'viva' && r.aportesNube.join() === 'apM0,apM1,apM2'
+        && r.choques.length === 0 && r.cola === 0 && r.nubeIgualLocal,
+        decision === 'reabrir'
+          ? 'T11 · cierre con aportes pendientes: «Reabrir la meta» sube la meta abierta con el rev remoto y los 2 aportes -> la meta queda abierta en la nube con sus aportes, 0 choques, la cola vacía y la nube igual a lo local'
+          : 'T11 · cierre con aportes pendientes: «Mantenerla finalizada» aplica aquí la fila remota y sube los 2 aportes -> meta finalizada en los dos lados con los aportes en la nube, 0 choques, la cola vacía y la nube igual a lo local',
+        JSON.stringify(r));
+    }
+    r = await correr(escenarioUnDispositivo, { padre: 'cierre_sin_hijos' });
+    assert(r && !r.error && r.metaTrasPuesta && !r.abiertaTrasPuesta && r.choquesTrasPuesta.length === 0 && r.revMeta === r.revTombstone && r.choques.length === 0 && r.cola === 0
+      && r.finNube === r.fin && r.nubeIgualLocal,
+      'T11 · cierre sin aportes pendientes: el cierre de la meta se aplica en la puesta al día como siempre (queda finalizada aquí, sin choques)',
+      JSON.stringify(r));
     r = await correr(escenarioUnDispositivo, { borrarLocal: true });
     assert(r && !r.error && r.h1Propia && r.deviceConservado && r.sinCola && r.h1Local && r.choques === 0 && r.cola === 0 && r.nubeIgualLocal,
       'T11 · 1a: tras borrarDatosLocalesTelora (conserva telora_device_id, borra la cola) la fila propia de la nube (h1) no se adopta por la regla nueva: vuelve como fila remota normal, con 0 choques',
@@ -4903,34 +4978,44 @@ async function escenarioUnDispositivo(opts){
     // su aporte apM0) mientras este, sin conexión, le agrega 2 aportes. 'sin_hijos': sin aportes
     // nuevos. 'ver': solo la puesta al día y el envío; 'restaurar' / 'descartar': además se resuelve
     // el grupo de la pantalla 17 con restaurar_padre / descartar.
+    // 'cierre_*': el otro dispositivo FINALIZA la meta (goal_end_month_key = mes actual, sin
+    // tombstone). 'cierre_ver' / 'cierre_reabrir' / 'cierre_mantener' / 'cierre_sin_hijos'.
     if(opts.padre){
+      const cierre = String(opts.padre).indexOf('cierre') === 0;
+      const sinHijos = opts.padre === 'sin_hijos' || opts.padre === 'cierre_sin_hijos';
       const alm = A.eval('syncAlmacen');
       const metaLocal = () => A.eval('state.goals.some(g => g.id === "gM")');
       const aportesLocal = () => JSON.parse(A.eval('JSON.stringify((state.goals.find(g => g.id === "gM") || { aportes: [] }).aportes.map(a => a.id))'));
-      if(opts.padre !== 'sin_hijos'){
+      const metaAbierta = () => A.eval('(state.goals.find(g => g.id === "gM") || {}).goalEndMonthKey') == null;
+      if(!sinHijos){
         srv.offline = true;
         editar(A, `state.goals.find(g => g.id === 'gM').aportes.push({ id:'apM1', fecha:'2026-09-05', monto:10000, tipo:'manual' }, { id:'apM2', fecha:'2026-09-06', monto:15000, tipo:'manual' });`);
         await procesar(A, B);
         srv.offline = false;
       }
-      const tomb = new Date().toISOString();
-      srv.cambiarRemoto('goal_aportes', 'apM0', { deleted_at: tomb });
-      srv.cambiarRemoto('goals', 'gM', { deleted_at: tomb });
+      const fin = A.eval('monthKey(mesActualReal())');
+      if(cierre) srv.cambiarRemoto('goals', 'gM', { goal_end_month_key: fin });
+      else {
+        const tomb = new Date().toISOString();
+        srv.cambiarRemoto('goal_aportes', 'apM0', { deleted_at: tomb });
+        srv.cambiarRemoto('goals', 'gM', { deleted_at: tomb });
+      }
       const llamadasAntes = srv.llamadas.length;
       await procesar(A, B);                     // puesta al día y envío
       const choques = alm.leerChoques(U);
       const nombre17 = A.itemsChoquesUi(choques, A.construirSnapshot(A.eval('state'), U, D))
         .filter(it => it.tipo === 'meta').map(it => A.nombreMetaChoque(it.goalId, A.construirSnapshot(A.eval('state'), U, D), choques));
       const r = {
-        metaTrasPuesta: metaLocal(), aportesTrasPuesta: aportesLocal(),
+        metaTrasPuesta: metaLocal(), abiertaTrasPuesta: metaAbierta(), aportesTrasPuesta: aportesLocal(),
         choquesTrasPuesta: choques.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave).sort(), nombre17,
         colaTrasPuesta: alm.leerCola(U).map(o => o.tipo + ' ' + o.tabla + ' ' + o.clave).sort(),
         revMeta: (alm.leerRevs(U).goals || {}).gM, revTombstone: srv.filas.goals.gM.rev,
         enviosAportes: srv.llamadas.length - llamadasAntes
       };
-      if(opts.padre === 'restaurar' || opts.padre === 'descartar'){
+      const decision = { restaurar: 'restaurar_padre', descartar: 'descartar', cierre_reabrir: 'reabrir', cierre_mantener: 'mantener' }[opts.padre];
+      if(decision){
         r.codigo = null;
-        try{ await A.resolverChoques(choques, opts.padre === 'restaurar' ? 'restaurar_padre' : 'descartar'); }catch(e){ r.codigo = e.codigo || String(e); }
+        try{ await A.resolverChoques(choques, decision); }catch(e){ r.codigo = e.codigo || String(e); }
         await quieto(A, B);
         await procesar(A, B);
       }
@@ -4943,9 +5028,9 @@ async function escenarioUnDispositivo(opts){
         claves.forEach(k => { if(!nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
       });
       return Object.assign(r, {
-        meta: metaLocal(), aportes: aportesLocal(),
+        meta: metaLocal(), abierta: metaAbierta(), aportes: aportesLocal(),
         choques: alm.leerChoques(U).map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave), cola: alm.leerCola(U).length,
-        metaNube: g.deleted_at ? 'borrada' : 'viva',
+        metaNube: g.deleted_at ? 'borrada' : 'viva', finNube: g.goal_end_month_key ?? null, fin,
         aportesNube: Object.keys(ap).filter(k => !ap[k].deleted_at).sort(), nubeIgualLocal: distintas.length === 0, distintas
       });
     }
