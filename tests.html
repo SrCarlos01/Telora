@@ -1503,10 +1503,10 @@ async function runTests(){
       {
         const flag = win.eval('SYNC_MULTI_ESCRITOR_ACTIVA');
         const ov = win.permiteOverrideMulti;
-        assert(flag === false && win.multiActiva() === false
+        assert(flag === true && win.multiActiva() === true
           && ov('localhost', '?multi=1') && ov('127.0.0.1', '?x=2&multi=1')
           && !ov('telora.cl', '?multi=1') && !ov('www.telora.cl', '?multi=1') && !ov('localhost', '') && !ov('localhost', '?multi=0'),
-          'T7: SYNC_MULTI_ESCRITOR_ACTIVA = false (y multiActiva() = false acá); ?multi=1 solo fuerza el modo en localhost / 127.0.0.1',
+          'T7: SYNC_MULTI_ESCRITOR_ACTIVA = true (y multiActiva() = true acá); ?multi=1 solo fuerza el modo en localhost / 127.0.0.1',
           `flag=${flag} · multiActiva=${win.multiActiva()}`);
       }
       // Nombre del dispositivo (D6)
@@ -1523,7 +1523,7 @@ async function runTests(){
         const fila = JSON.parse(win.construirSnapshot(fx(), USER, DEV, { nombreDispositivo: 'Chrome en Windows' }).config_dispositivo[DEV]);
         const filaSin = JSON.parse(snap(fx()).config_dispositivo[DEV]);
         assert(malos.length === 0 && fila.nombre_dispositivo === 'Chrome en Windows' && !('nombre_dispositivo' in filaSin),
-          'T7 (D6): nombre del dispositivo desde el user agent; solo va en config_dispositivo si se pide (con la bandera en false la fila no cambia)',
+          'T7 (D6): nombre del dispositivo desde el user agent; solo va en config_dispositivo si se pide (sin pedirlo, la fila no cambia)',
           malos.join(' · ') || 'ok');
       }
       // JSON canónico de la nube = JSON de la foto local
@@ -2360,7 +2360,7 @@ async function runTests(){
         }
       }
       // T11 · Fase 3: interfaz de choques (pantallas 14–18) en el iframe principal. La bandera
-      // sigue en false (multiActiva() = false aquí): la sesión multi la da syncCtx.multi.
+      // está en true, pero la fila no depende de ella: la sesión multi la da syncCtx.multi.
       {
         const U5 = 'u-t11-f3', D5 = 'dev-t11-f3';
         const alm = win.eval('syncAlmacen');
@@ -2402,8 +2402,8 @@ async function runTests(){
           const sinMulti = $('cuentaFilaChoques').hidden;
           win.eval(`syncCtx = { userId: '${U5}', deviceId: '${D5}', esEscritor: false, multi: true };`); win.renderEstadoCuenta();
           const entrada = { sinSesion, sinMulti, visible: !$('cuentaFilaChoques').hidden, n: $('cuentaChoquesN').textContent, bandera: win.eval('multiActiva()') };
-          assert(entrada.sinSesion && entrada.sinMulti && entrada.visible && entrada.n === '7' && entrada.bandera === false,
-            'T11 · Fase 3: la fila «Cambios por revisar» de Tu cuenta solo aparece en una sesión con varios escritores y muestra el conteo de choques (7); la bandera sigue en false',
+          assert(entrada.sinSesion && entrada.sinMulti && entrada.visible && entrada.n === '7' && entrada.bandera === true,
+            'T11 · Fase 3: la fila «Cambios por revisar» de Tu cuenta solo aparece en una sesión con varios escritores y muestra el conteo de choques (7); con la bandera en true, sin sesión multi sigue oculta',
             JSON.stringify(entrada));
           // Pantalla 14: la fila abre la lista.
           const lsCero = fotoLS(), stCero = win.eval('JSON.stringify(state)');

@@ -16082,10 +16082,10 @@ const PULL_INICIAL_ACTIVO = false;
 // petición nueva a la red ni ninguna clave telora_sync_* en localStorage.
 const ESCRITURA_CONTINUA_ACTIVA = true;
 // S1 · T7: varios escritores (compare-and-set por RPC, puesta al día por cursor, tombstones).
-// false en producción: la activación es por cuenta (sync_activar_multi) y, para probar, se puede
-// forzar con ?multi=1 SOLO en localhost / 127.0.0.1 (queda en sessionStorage de esa pestaña para
-// sobrevivir la vuelta del login). Con false todo se comporta exactamente como el escritor único.
-const SYNC_MULTI_ESCRITOR_ACTIVA = false;
+// true en producción: cada cuenta pasa a 'multi:v2' (sync_activar_multi) al activar la escritura
+// continua. Con false, ?multi=1 lo fuerza SOLO en localhost / 127.0.0.1 (queda en sessionStorage de
+// esa pestaña para sobrevivir la vuelta del login) y todo lo demás se comporta como el escritor único.
+const SYNC_MULTI_ESCRITOR_ACTIVA = true;
 const SYNC_MULTI_OVERRIDE = (()=>{
   try{
     if(!esHostLocalSync(location.hostname)) return false;
