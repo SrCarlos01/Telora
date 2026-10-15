@@ -1911,6 +1911,26 @@ async function runTests(){
           'T11 · Fase 1: restaurar_padre: con choque «eliminado» de la meta -> se restaura como derivado; meta solo acá -> se reinserta (sin rev) junto al aporte; meta en ningún lado -> no_aplica',
           `con choque: encolar=${pa.encolar.map(o => o.tabla + ' ' + o.clave)} derivados=${JSON.stringify(pa.choquesDerivados)} · solo acá: ${pb.encolar.map(o => o.tabla + ' ' + o.clave)} · ninguno: ${pc}`);
 
+        // Meta retenida en la puesta al día (choque.padre): restaurar_padre la sube con el rev del
+        // tombstone; descartar aplica su tombstone solo si no le quedan aportes pendientes fuera del grupo.
+        {
+          const apX = JSON.stringify({ ...JSON.parse(S.goal_aportes.ap1), id: 'apX', monto: 777 });
+          const SX = { ...S, goal_aportes: { ...S.goal_aportes, apX } };
+          const ctxX = (grupo) => ({ ...ctxDe(SX), base: S, resolviendo: grupo ? new Set(grupo) : undefined });
+          const cP = k => ({ tabla: 'goal_aportes', clave: k, motivo: 'padre_eliminado', servidor: null, rev: null, padre: { clave: 'g1', rev: 70 } });
+          const borraMeta = p => p.estado.some(e => e.tabla === 'goals' && e.clave === 'g1' && e.accion === 'aplicarBorrado');
+          const rp = P(cP('ap1'), 'restaurar_padre', ctxX());
+          const dSolo = P(cP('ap1'), 'descartar', ctxX(['goal_aportes|ap1']));
+          const dGrupo = win.combinarPlanes(['ap1', 'apX'].map(k => P(cP(k), 'descartar', ctxX(['goal_aportes|ap1', 'goal_aportes|apX']))));
+          const dSinPadre = P({ ...cP('ap1'), padre: undefined }, 'descartar', ctxX(['goal_aportes|ap1', 'goal_aportes|apX']));
+          assert(tieneOp(rp, 'goals', 'g1') && rp.revs.goals.g1 === 70 && tieneOp(rp, 'goal_aportes', 'ap1')
+            && !borraMeta(dSolo) && !(dSolo.revs.goals && 'g1' in dSolo.revs.goals)
+            && borraMeta(dGrupo) && dGrupo.revs.goals.g1 === 70 && dGrupo.base.goals.g1 === null && dGrupo.quitarOps.length === 2
+            && !borraMeta(dSinPadre),
+            'T11 · padre con hijos pendientes: con choque.padre, restaurar_padre sube la meta con el rev del tombstone; descartar aplica el tombstone solo cuando el grupo incluye todos sus aportes pendientes (sin padre, como antes)',
+            `restaurar: rev=${rp.revs.goals && rp.revs.goals.g1} · descartar uno de dos: borra meta=${borraMeta(dSolo)} · los dos: borra meta=${borraMeta(dGrupo)} rev=${dGrupo.revs.goals && dGrupo.revs.goals.g1} · sin padre: ${borraMeta(dSinPadre)}`);
+        }
+
         // Errores explícitos (nunca un no-op silencioso) y decisionLocalPara
         const errores = [
           ['version/eliminar', codigo(() => P(cVersion, 'eliminar', ctxDe(SE))), 'decision_invalida'],
@@ -4551,6 +4571,27 @@ async function runTests(){
         `T11 · Fase 1: dos dispositivos, choque «version» resuelto desde la pestaña líder con «${decision}» -> 0 choques, la cola vacía, la nube igual a lo local (e1 = ${esperado}); la pestaña no líder recibe «no_lider»`,
         JSON.stringify(r));
     }
+    for(const decision of ['restaurar', 'descartar']){
+      r = await correr(escenarioUnDispositivo, { padre: decision });
+      assert(r && !r.error && r.metaTrasPuesta && r.aportesTrasPuesta.join() === 'apM1,apM2' && r.revMeta === r.revTombstone && r.enviosAportes === 0
+        && r.choquesTrasPuesta.join() === 'padre_eliminado goal_aportes apM1,padre_eliminado goal_aportes apM2' && r.nombre17.join() === 'Viaje a Chiloé'
+        && r.colaTrasPuesta.join() === 'upsert goal_aportes apM1,upsert goal_aportes apM2',
+        `T11 · padre con hijos pendientes (${decision}): el tombstone de la meta llega mientras hay 2 aportes sin subir -> la meta NO se borra aquí (queda con el rev del tombstone), sus aportes quedan en pausa como «padre_eliminado» y la pantalla 17 muestra el nombre real de la meta`,
+        JSON.stringify(r));
+      const ok = decision === 'restaurar'
+        ? r && r.meta && r.aportes.join() === 'apM1,apM2' && r.metaNube === 'viva' && r.aportesNube.join() === 'apM1,apM2'
+        : r && !r.meta && r.aportes.length === 0 && r.metaNube === 'borrada' && r.aportesNube.length === 0;
+      assert(r && !r.error && r.codigo === null && ok && r.choques.length === 0 && r.cola === 0 && r.nubeIgualLocal,
+        decision === 'restaurar'
+          ? 'T11 · padre con hijos pendientes: «Restaurar la meta» (restaurar_padre) sube la meta con el rev del tombstone y luego los 2 aportes -> meta y aportes vivos en la nube, 0 choques, la cola vacía y la nube igual a lo local'
+          : 'T11 · padre con hijos pendientes: «Descartar los aportes» quita sus ops, los borra aquí y recién ahí aplica el tombstone de la meta -> 0 choques, la cola vacía y la nube igual a lo local',
+        JSON.stringify(r));
+    }
+    r = await correr(escenarioUnDispositivo, { padre: 'sin_hijos' });
+    assert(r && !r.error && !r.metaTrasPuesta && r.choquesTrasPuesta.length === 0 && r.revMeta === r.revTombstone && r.choques.length === 0 && r.cola === 0
+      && r.metaNube === 'borrada' && r.nubeIgualLocal,
+      'T11 · padre sin hijos pendientes: el tombstone de la meta se aplica en la puesta al día como siempre (se borra aquí, sin choques)',
+      JSON.stringify(r));
     r = await correr(escenarioUnDispositivo, { borrarLocal: true });
     assert(r && !r.error && r.h1Propia && r.deviceConservado && r.sinCola && r.h1Local && r.choques === 0 && r.cola === 0 && r.nubeIgualLocal,
       'T11 · 1a: tras borrarDatosLocalesTelora (conserva telora_device_id, borra la cola) la fila propia de la nube (h1) no se adopta por la regla nueva: vuelve como fila remota normal, con 0 choques',
@@ -4756,6 +4797,8 @@ async function escenarioUnDispositivo(opts){
     const st = fixtureBase();
     st.expenses.push({ id:'e1', date:'2026-09-01', nombre:'Pan', amount:2000, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
     if(opts.union) st.expenses.push({ id:'x1', date:'2026-09-02', nombre:'Solo aquí', amount:700, category:'Comida', method:'Efectivo', description:'', tipo:'Casual', debtId:null, cuentaId:'acc1' });
+    if(opts.padre) st.goals.push({ id:'gM', name:'Viaje a Chiloé', indefinida:false, montoObjetivo:500000, fechaLimite:'2026-12-31', fechaCreacion:'2026-09-01',
+      aportes: [{ id:'apM0', fecha:'2026-09-02', monto:5000, tipo:'manual' }] });
     localStorage.setItem('misfinanzas_data', JSON.stringify(st));
     let fA = await nuevaPestana(), fB = await nuevaPestana();
     let A = instalar(fA, 'A', true), B = instalar(fB, 'B', false);
@@ -4854,6 +4897,57 @@ async function escenarioUnDispositivo(opts){
         choques: alm.leerChoques(U).length, cola: alm.leerCola(U).length, nubeIgualLocal: distintas.length === 0, distintas,
         e1Nube: srv.filas.expenses.e1.amount, e1Local: A.eval('state.expenses.find(e => e.id === "e1").amount')
       };
+    }
+
+    // T11 · padre con hijos pendientes: el otro dispositivo borra la meta gM (tombstone de gM y de
+    // su aporte apM0) mientras este, sin conexión, le agrega 2 aportes. 'sin_hijos': sin aportes
+    // nuevos. 'ver': solo la puesta al día y el envío; 'restaurar' / 'descartar': además se resuelve
+    // el grupo de la pantalla 17 con restaurar_padre / descartar.
+    if(opts.padre){
+      const alm = A.eval('syncAlmacen');
+      const metaLocal = () => A.eval('state.goals.some(g => g.id === "gM")');
+      const aportesLocal = () => JSON.parse(A.eval('JSON.stringify((state.goals.find(g => g.id === "gM") || { aportes: [] }).aportes.map(a => a.id))'));
+      if(opts.padre !== 'sin_hijos'){
+        srv.offline = true;
+        editar(A, `state.goals.find(g => g.id === 'gM').aportes.push({ id:'apM1', fecha:'2026-09-05', monto:10000, tipo:'manual' }, { id:'apM2', fecha:'2026-09-06', monto:15000, tipo:'manual' });`);
+        await procesar(A, B);
+        srv.offline = false;
+      }
+      const tomb = new Date().toISOString();
+      srv.cambiarRemoto('goal_aportes', 'apM0', { deleted_at: tomb });
+      srv.cambiarRemoto('goals', 'gM', { deleted_at: tomb });
+      const llamadasAntes = srv.llamadas.length;
+      await procesar(A, B);                     // puesta al día y envío
+      const choques = alm.leerChoques(U);
+      const nombre17 = A.itemsChoquesUi(choques, A.construirSnapshot(A.eval('state'), U, D))
+        .filter(it => it.tipo === 'meta').map(it => A.nombreMetaChoque(it.goalId, A.construirSnapshot(A.eval('state'), U, D), choques));
+      const r = {
+        metaTrasPuesta: metaLocal(), aportesTrasPuesta: aportesLocal(),
+        choquesTrasPuesta: choques.map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave).sort(), nombre17,
+        colaTrasPuesta: alm.leerCola(U).map(o => o.tipo + ' ' + o.tabla + ' ' + o.clave).sort(),
+        revMeta: (alm.leerRevs(U).goals || {}).gM, revTombstone: srv.filas.goals.gM.rev,
+        enviosAportes: srv.llamadas.length - llamadasAntes
+      };
+      if(opts.padre === 'restaurar' || opts.padre === 'descartar'){
+        r.codigo = null;
+        try{ await A.resolverChoques(choques, opts.padre === 'restaurar' ? 'restaurar_padre' : 'descartar'); }catch(e){ r.codigo = e.codigo || String(e); }
+        await quieto(A, B);
+        await procesar(A, B);
+      }
+      const g = srv.filas.goals.gM, ap = srv.filas.goal_aportes || {};
+      const local = A.construirSnapshot(A.eval('state'), U, D);
+      const nube = A.indexarNube(Object.fromEntries(Object.keys(srv.filas).map(t => [t, Object.values(srv.filas[t])])), U);
+      const distintas = [];
+      A.eval('SYNC_TABLAS_MULTI').forEach(t => {
+        const claves = new Set(Object.keys(nube[t] || {}).filter(k => !nube[t][k].borrada).concat(Object.keys(local[t] || {})));
+        claves.forEach(k => { if(!nube[t][k] || nube[t][k].borrada || nube[t][k].json !== local[t][k]) distintas.push(t + ' ' + k); });
+      });
+      return Object.assign(r, {
+        meta: metaLocal(), aportes: aportesLocal(),
+        choques: alm.leerChoques(U).map(c => c.motivo + ' ' + c.tabla + ' ' + c.clave), cola: alm.leerCola(U).length,
+        metaNube: g.deleted_at ? 'borrada' : 'viva',
+        aportesNube: Object.keys(ap).filter(k => !ap[k].deleted_at).sort(), nubeIgualLocal: distintas.length === 0, distintas
+      });
     }
 
     // T11 · Fase 4: los dos dispositivos cambian la configuración. 'listas': aquí «Mascotas», allá

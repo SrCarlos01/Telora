@@ -16571,9 +16571,27 @@ function filaEsPropia(R, deviceId){
   return !!deviceId && !!R && !!R.fila && R.fila.modificado_por === deviceId;
 }
 
+// Aportes locales de la meta goalId que todavía no están en la nube: con op en la cola (pend =
+// Set de claveOpSync) o fuera de la base (sin encolar todavía). Sin los que ya trae `nube`
+// (esos tienen su propia decisión) ni los de `excluir` (Set de 'goal_aportes|id').
+function hijosPendientesDeMeta(goalId, local, base, pend, nube, excluir){
+  const L = (local || {}).goal_aportes || {}, B = (base || {}).goal_aportes || {}, N = (nube || {}).goal_aportes || {};
+  return Object.keys(L).filter(k => {
+    const ck = 'goal_aportes|' + k;
+    if(tieneClave(N, k) || (excluir && excluir.has(ck))) return false;
+    let f; try{ f = JSON.parse(L[k]); }catch(_){ return false; }
+    return !!f && f.goal_id === goalId && ((pend && pend.has(ck)) || B[k] === undefined);
+  });
+}
+
 // Puesta al día. completa = la respuesta trae TODAS las filas (lectura completa): lo que la base
 // conoce y la nube ya no tiene fue borrado físicamente (cliente viejo, purga).
 // p.deviceId (T11 · 1a): habilita la regla de fila propia de decidirFilaRemota.
+// T11 · padre con hijos pendientes (solo con p.pendientes, es decir, en la puesta al día): el
+// tombstone de una meta NO se aplica acá mientras tenga aportes locales pendientes que la nube
+// no conoce. La meta se queda, con el rev del tombstone (adoptarRev soloRev: la base no cambia),
+// y cada aporte queda como choque «padre_eliminado» con `padre` = { clave, rev } (pantalla 17):
+// restaurar_padre sube la meta con ese rev; descartar quita los aportes y recién ahí la borra.
 function planPuestaAlDia(p){
   const acciones = [];
   const local = p.local || {}, base = p.base || {}, revs = p.revs || {}, nube = p.nube || {};
@@ -16598,7 +16616,17 @@ function planPuestaAlDia(p){
       acciones.push({ ...d, tabla: t, clave: k, rev: null, json: null, fila: null, borrada: true });
     });
   });
-  return acciones;
+  if(!p.pendientes) return acciones;
+  const salida = [];
+  acciones.forEach(a => {
+    const hijos = (a.tabla === 'goals' && a.accion === 'aplicarBorrado' && a.rev != null)
+      ? hijosPendientesDeMeta(a.clave, local, base, pend, nube) : [];
+    if(!hijos.length){ salida.push(a); return; }
+    salida.push({ ...a, accion: 'adoptarRev', soloRev: true, retenida: true });
+    hijos.forEach(h => salida.push({ accion: 'choque', motivo: 'padre_eliminado', tabla: 'goal_aportes', clave: h, rev: null, json: null,
+                                     fila: null, borrada: false, padre: { clave: a.clave, rev: a.rev } }));
+  });
+  return salida;
 }
 
 // Cola del escritor único al pasar a varios escritores: sus ops no tienen base_rev. Esa cola solo
@@ -16832,7 +16860,8 @@ function opsNoPausadas(ops, choques){
 
 /* ---- T11 · Fase 1: resolución de choques (núcleo puro) ----
    planResolverChoque(choque, decision, ctx) -> plan, sin DOM ni almacenamiento.
-     ctx  = { local, base, revs, cola, choques, userId }  (local/base = fotos canónicas)
+     ctx  = { local, base, revs, cola, choques, userId, resolviendo }  (local/base = fotos canónicas;
+            resolviendo = Set 'tabla|clave' del grupo que se resuelve junto; sin él, solo este choque)
      plan = { estado:  [{ accion: 'aplicar'|'aplicarBorrado', tabla, clave, fila }]  (aplicarFilasAEstado)
               encolar: [{ tabla, clave, tipo, fila }]          ops a asegurar en la cola
               revs:    { tabla: { clave: rev | null } }         null = se borra el rev (sale como INSERT)
@@ -16845,6 +16874,8 @@ function opsNoPausadas(ops, choques){
      no_existe         conservar (lo local sale como INSERT)             | eliminar
      padre_eliminado,
      padre_inexistente restaurar_padre (la meta vuelve y el aporte sale)  | descartar (se quita el aporte)
+     Con choque.padre (meta retenida en la puesta al día): restaurar_padre sube la meta con el rev del
+     tombstone; descartar aplica el tombstone de la meta cuando ya no le quedan aportes pendientes.
    Conservar/restaurar ASEGURAN la op en la cola (upsert de lo local, o delete si lo local no está)
    y fijan base = lo local para que el diff siguiente no la duplique: así la fila nunca queda viva
    acá y borrada en la nube sin choque, aunque el tombstone tenga el mismo contenido. Toda
@@ -16931,6 +16962,23 @@ function planResolverChoque(choque, decision, ctx){
       fijarEnPlan(plan.base, t, k, null);
       fijarEnPlan(plan.revs, t, k, (c.motivo === 'eliminado' || servidorVivo) ? revServidor : null);
       plan.quitarOps.push({ tabla: t, clave: k });
+      if(c.padre && c.padre.clave != null && localDe('goals', c.padre.clave) !== undefined){
+        // Meta retenida en la puesta al día: recién ahora se aplica su tombstone, si ya no le
+        // quedan otros aportes pendientes fuera de este grupo. Sus aportes ya sincronizados se
+        // van con ella (base null: el diff no los borra en la nube).
+        const g = c.padre.clave;
+        const pend = new Set((x.cola || []).map(claveOpSync));
+        const grupo = x.resolviendo || new Set([t + '|' + k]);
+        if(!hijosPendientesDeMeta(g, x.local, x.base, pend, null, grupo).length){
+          plan.estado.push({ accion: 'aplicarBorrado', tabla: 'goals', clave: g, fila: null });
+          fijarEnPlan(plan.base, 'goals', g, null);
+          fijarEnPlan(plan.revs, 'goals', g, c.padre.rev != null ? Number(c.padre.rev) : null);
+          Object.keys((x.local || {}).goal_aportes || {}).forEach(h => {
+            if(h === k || grupo.has('goal_aportes|' + h)) return;
+            if((filaJsonChoque(x.local.goal_aportes[h]) || {}).goal_id === g) fijarEnPlan(plan.base, 'goal_aportes', h, null);
+          });
+        }
+      }
       break;
     case 'padre_eliminado/restaurar_padre':
     case 'padre_inexistente/restaurar_padre': {
@@ -16947,6 +16995,8 @@ function planResolverChoque(choque, decision, ctx){
         // tombstone y no se conoce su rev, el reenvío puede volver a chocar («eliminado»).
         asegurarOpLocal('goals', goalId, localDe('goals', goalId));
         if(c.motivo === 'padre_inexistente') fijarEnPlan(plan.revs, 'goals', goalId, null);
+        // Meta retenida en la puesta al día: sale con el rev de su tombstone (el UPDATE la revive).
+        else if(c.padre && c.padre.clave === goalId && c.padre.rev != null) fijarEnPlan(plan.revs, 'goals', goalId, Number(c.padre.rev));
       } else {
         throw errorSync('no_aplica', 'La meta ' + goalId + ' no existe ni acá ni en la nube');
       }
@@ -17679,7 +17729,10 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
   syncAlmacen.guardarBase(ctx.userId, nb.base);
   syncAlmacen.guardarRevs(ctx.userId, nb.revs);
   const choques = efectivas.filter(a => a.accion === 'choque');
-  if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia' })));
+  if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia',
+                                                                          ...(a.padre ? { padre: a.padre } : {}) })));
+  efectivas.filter(a => a.retenida).forEach(a => console.info('[Sync] la meta ' + a.clave + ' se eliminó en otro dispositivo, pero tiene aportes '
+    + 'sin subir: se mantiene aquí hasta decidir (restaurar la meta o descartar los aportes).'));
   // T11 · Fase 2 (c): una fila con choque que llega de nuevo (adoptarRev: p. ej. ahora igual a lo
   // local) actualiza la versión de la nube que guarda el choque; limpiarChoquesSync decide después.
   const vigentes = leerChoquesVigentes(ctx.userId);
@@ -17910,7 +17963,8 @@ function aplicarResolucionChoques(ctx, choques, decision){
     revs: syncAlmacen.leerRevs(ctx.userId) || {},
     cola: syncAlmacen.leerCola(ctx.userId),
     choques: leerChoquesVigentes(ctx.userId),
-    userId: ctx.userId
+    userId: ctx.userId,
+    resolviendo: new Set(choques.map(c => c.tabla + '|' + c.clave))
   };
   // 1) Todos los planes, sin escribir nada (cualquier error corta aquí).
   const plan = combinarPlanes(choques.map(c => planResolverChoque(c, decision === 'local_todos' ? decisionLocalPara(c.motivo) : decision, pctx)));
