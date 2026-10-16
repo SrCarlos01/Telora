@@ -12,6 +12,8 @@
 
    Qué hace (solo POST; el uid sale SOLO del JWT, jamás del cuerpo de la petición):
      1. Obtiene el usuario con el JWT del header Authorization. Sin JWT válido -> 401.
+        Reautenticación (S2): el JWT debe venir de un inicio de sesión de hace como mucho 10 min
+        (claims.amr). Si no -> 401 { error: "reauth_required" }, ANTES de cualquier borrado.
      2. auth.admin.deleteUser(uid, false): borrado real (no soft delete). Las 9 tablas tienen
         FK user_id -> auth.users(id) ON DELETE CASCADE, así que sus filas se van con el usuario
         y, desde ese instante, ningún insert con ese user_id puede volver a entrar (23503).
@@ -22,7 +24,11 @@
    Respuesta: { ok, verificacion: { tabla: 0, ... }, borradasExplicitas?: { tabla: n } }.
    Logs sin datos personales: solo el uid truncado. */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+// Versión exacta: la misma del cliente (supabase.min.js). Al actualizar uno, actualizar el otro.
+import { createClient } from "npm:@supabase/supabase-js@2.117.1";
+
+// S2: ventana de reautenticación (segundos) para eliminar la cuenta.
+const VENTANA_REAUTH_SEG = 600;
 
 // Orden hijo -> padre para un borrado explícito: goal_aportes antes que goals.
 const TABLAS = [
@@ -88,6 +94,36 @@ function claimsDeUsuarioValidos(c: any, ahora: number) {
   return !!c && typeof c.sub === "string" && c.sub !== "" && c.role === "authenticated" &&
     typeof c.exp === "number" && c.exp > ahora;
 }
+
+// S2 — Reautenticación: true si ALGÚN método de claims.amr ([{ method, timestamp }], tiempo en
+// segundos) se usó hace como mucho ventanaSeg. Falla cerrada: sin amr, amr que no es arreglo,
+// elementos sin timestamp numérico o ahoraSeg inválido -> false. "token_refresh" no cuenta:
+// refrescar el token no es volver a autenticarse.
+// deno-lint-ignore no-explicit-any
+function autenticacionReciente(claims: any, ahoraSeg: number, ventanaSeg = 600) {
+  if (!claims || typeof claims !== "object" || !Array.isArray(claims.amr)) return false;
+  if (typeof ahoraSeg !== "number" || !Number.isFinite(ahoraSeg)) return false;
+  if (typeof ventanaSeg !== "number" || !Number.isFinite(ventanaSeg) || ventanaSeg < 0) return false;
+  const desde = ahoraSeg - ventanaSeg;
+  return claims.amr.some((m) =>
+    !!m && typeof m === "object" && m.method !== "token_refresh" &&
+    typeof m.timestamp === "number" && Number.isFinite(m.timestamp) && m.timestamp >= desde);
+}
+
+// Payload de un JWT (sin verificar la firma: solo se usa con un token que auth.getUser ya
+// aceptó). Cualquier forma inesperada -> null.
+function payloadDeJwt(jwt: string) {
+  try {
+    const partes = String(jwt).split(".");
+    if (partes.length !== 3) return null;
+    const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+    const o = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0))));
+    return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+  } catch (_) {
+    return null;
+  }
+}
 // </puro>
 
 // JWKS del proyecto que Supabase inyecta (SUPABASE_JWKS = {"keys": [...]}). Si no está o no
@@ -140,9 +176,13 @@ Deno.serve(async (req: Request) => {
   // 1) uid SOLO desde el JWT.
   let uid = "";
   let usuarioExiste = true;
+  let claimsToken: unknown = null;   // claims del JWT para la reautenticación (S2)
   const { data: datosUsuario, error: errUsuario } = await admin.auth.getUser(jwt);
   if (!errUsuario && datosUsuario?.user?.id) {
     uid = datosUsuario.user.id;
+    // auth.getUser ya aceptó este token; su payload da amr. Si el sub no calza, no se usa.
+    const p = payloadDeJwt(jwt);
+    claimsToken = p && p.sub === uid ? p : null;
   } else if (esUsuarioInexistente(errUsuario)) {
     // Reintento idempotente: el usuario ya no existe. Sin gateway que verifique, la firma se
     // verifica aquí (getClaims con el JWKS del proyecto) antes de confiar en el sub.
@@ -158,8 +198,16 @@ Deno.serve(async (req: Request) => {
     }
     uid = (claims as { sub: string }).sub;
     usuarioExiste = false;
+    claimsToken = claims;
   } else {
     return responder(origen, 401, { ok: false, error: "no_autenticado" });
+  }
+
+  // 1b) S2: inicio de sesión reciente, ANTES de cualquier borrado (también en el reintento
+  // idempotente, que puede borrar filas sueltas).
+  if (!autenticacionReciente(claimsToken, Math.floor(Date.now() / 1000), VENTANA_REAUTH_SEG)) {
+    console.info("[eliminar-cuenta] reautenticación requerida para " + uidCorto(uid));
+    return responder(origen, 401, { ok: false, error: "reauth_required" });
   }
 
   // 2) Borrado real del usuario (CASCADE en las 9 tablas).

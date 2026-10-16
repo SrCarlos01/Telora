@@ -3612,6 +3612,13 @@ button:active{ transform:scale(0.93); }
       <input type="text" id="inpEliminarCuentaConfirma" autocomplete="off" autocapitalize="characters" spellcheck="false">
     </div>
     <p class="sheet-note" id="eliminarCuentaError" role="alert" style="color:var(--danger);" hidden></p>
+    <!-- S2 (Día 24): la función exige un inicio de sesión reciente (reauth_required). El botón
+         abre el inicio de sesión con el que entró (Google o código); al volver se reabre esta hoja
+         vacía y hay que confirmar de nuevo (retomarEliminacionTrasReauth). -->
+    <div id="eliminarCuentaReauth" hidden>
+      <p class="sheet-note" role="alert" style="color:var(--cream);">Por seguridad, vuelve a iniciar sesión para eliminar tu cuenta.</p>
+      <button type="button" class="btn-primary" id="btnEliminarCuentaReauth" style="margin-top:0;">Continuar con Google</button>
+    </div>
     <button class="btn-danger" id="btnEliminarCuentaConfirmar" disabled>Eliminar mi cuenta para siempre</button>
     <button class="btn-ghost" id="btnEliminarCuentaCancelar" data-close>Cancelar</button>
   </div>
@@ -18667,6 +18674,8 @@ try{
       if(session){
         sesionConocida = { userId: session.user && session.user.id, token: session.access_token };
         intentarSubidaInicial(session);
+        // S2: de vuelta de la reautenticación para eliminar la cuenta (solo reabre la confirmación).
+        setTimeout(()=> retomarEliminacionTrasReauth(session), 0);
       } else {
         desactivarRealtime(); detenerEscrituraContinua();   // sesión cerrada (acá, en otra pestaña o por expiración)
         // T2b: cierre que esta pestaña no pidió (otra pestaña, refresco rechazado): ¿se eliminó la cuenta?
@@ -18691,7 +18700,8 @@ try{
 // «sin sesión» para que el avatar y la invitación no queden esperando.
 if(!supa) renderCuentaUsuario(null);
 
-document.getElementById('btnLoginGoogle').onclick = async ()=>{
+// También la usa la reautenticación de «Eliminar mi cuenta» (S2).
+async function iniciarLoginGoogle(){
   if(!supa || !navigator.onLine){
     showToast('Necesitas conexión a internet para iniciar sesión.', 'error', 5000);
     return;
@@ -18706,7 +18716,8 @@ document.getElementById('btnLoginGoogle').onclick = async ()=>{
     console.warn('Cuenta de usuario: signInWithOAuth', e);
     showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
   }
-};
+}
+document.getElementById('btnLoginGoogle').onclick = ()=> iniciarLoginGoogle();
 
 /* ==================== ENTRAR CON CÓDIGO POR CORREO (Tanda L1) ====================
    signInWithOtp() SIN emailRedirectTo: Supabase manda un código de 6 dígitos (la plantilla
@@ -18938,7 +18949,9 @@ window.addEventListener('online', pintarLoginCorreo);
 window.addEventListener('offline', pintarLoginCorreo);
 pintarLoginCorreo();
 
-document.getElementById('btnLogout').onclick = async ()=>{
+// Cierra la sesión solo en este dispositivo; los datos y la cola de sync quedan aquí. También
+// la usa la reautenticación por código de «Eliminar mi cuenta» (S2).
+async function cerrarSesionLocal(){
   if(!supa) return;
   desactivarRealtime();   // antes del signOut: el canal se cierra con el token todavía válido
   detenerEscrituraContinua();   // Tanda 4a: base y cola quedan guardadas bajo su user_id
@@ -18949,6 +18962,10 @@ document.getElementById('btnLogout').onclick = async ()=>{
   catch(e){ console.warn('Cuenta de usuario: signOut', e); }
   finally{ cierreSesionPropio = false; }
   renderCuentaUsuario(null);
+}
+document.getElementById('btnLogout').onclick = async ()=>{
+  if(!supa) return;
+  await cerrarSesionLocal();
   showToast('Sesión cerrada. Tus datos siguen en este dispositivo.');
 };
 
@@ -19161,6 +19178,90 @@ function mostrarErrorEliminarCuenta(codigo){
   p.hidden = false;
 }
 
+/* S2 (Día 24): la Edge Function exige un inicio de sesión de hace ≤ 10 min y, si no, responde
+   reauth_required SIN borrar nada (flujoEliminarCuenta ya restauró la sync; lo local no se toca).
+   Se ofrece volver a entrar con el mismo método; una marca en sessionStorage (sobrevive a la
+   ida y vuelta de Google en la misma pestaña) hace que, con la sesión nueva de esa misma cuenta,
+   se reabra la confirmación VACÍA: nunca se elimina sola, hay que escribir ELIMINAR otra vez.
+   El servidor es quien decide; lo de acá (amr del token) solo evita reabrir con la sesión vieja. */
+const CLAVE_REAUTH_ELIMINAR = 'telora_reauth_eliminar';   // sessionStorage: { userId, ts }
+const REAUTH_ELIMINAR_VIGENCIA_MS = 15 * 60 * 1000;
+const REAUTH_VENTANA_SEG = 600;   // igual que VENTANA_REAUTH_SEG de la Edge Function
+
+function payloadJwtCliente(jwt){
+  try{
+    const partes = String(jwt).split('.');
+    if(partes.length !== 3) return null;
+    const b64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    const o = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : null;
+  }catch(_){ return null; }
+}
+// Misma regla que autenticacionReciente() de la Edge Function (falla cerrada).
+function autenticacionRecienteCliente(claims, ahoraSeg, ventanaSeg = REAUTH_VENTANA_SEG){
+  if(!claims || typeof claims !== 'object' || !Array.isArray(claims.amr)) return false;
+  if(typeof ahoraSeg !== 'number' || !Number.isFinite(ahoraSeg)) return false;
+  const desde = ahoraSeg - ventanaSeg;
+  return claims.amr.some(m => !!m && typeof m === 'object' && m.method !== 'token_refresh' &&
+    typeof m.timestamp === 'number' && Number.isFinite(m.timestamp) && m.timestamp >= desde);
+}
+// Cómo entró: el método más reciente de amr ('oauth' = Google; código u otro = correo). Sin
+// amr legible, el proveedor de la cuenta.
+function metodoLoginReauth(session){
+  const amr = (payloadJwtCliente(session && session.access_token) || {}).amr;
+  const ms = Array.isArray(amr) ? amr.filter(m => m && typeof m.timestamp === 'number' && m.method !== 'token_refresh') : [];
+  if(ms.length){
+    const ult = ms.reduce((a, b) => (b.timestamp > a.timestamp ? b : a));
+    return ult.method === 'oauth' ? 'google' : 'correo';
+  }
+  const prov = session && session.user && session.user.app_metadata && session.user.app_metadata.provider;
+  return prov === 'google' ? 'google' : 'correo';
+}
+function textoBotonReauth(metodo){ return metodo === 'google' ? 'Continuar con Google' : 'Entrar con tu correo'; }
+
+function mostrarReauthEliminarCuenta(metodo){
+  document.getElementById('eliminarCuentaError').hidden = true;
+  const btn = document.getElementById('btnEliminarCuentaReauth');
+  btn.dataset.metodo = metodo === 'google' ? 'google' : 'correo';
+  btn.textContent = textoBotonReauth(btn.dataset.metodo);
+  document.getElementById('eliminarCuentaReauth').hidden = false;
+}
+function ocultarReauthEliminarCuenta(){ document.getElementById('eliminarCuentaReauth').hidden = true; }
+
+function marcarReauthEliminar(userId, ahoraMs = Date.now()){
+  try{ sessionStorage.setItem(CLAVE_REAUTH_ELIMINAR, JSON.stringify({ userId, ts: ahoraMs })); }catch(_){}
+}
+function leerReauthEliminar(ahoraMs = Date.now()){
+  try{
+    const o = JSON.parse(sessionStorage.getItem(CLAVE_REAUTH_ELIMINAR) || 'null');
+    if(o && typeof o.userId === 'string' && o.userId && typeof o.ts === 'number' &&
+       ahoraMs - o.ts >= 0 && ahoraMs - o.ts <= REAUTH_ELIMINAR_VIGENCIA_MS) return o;
+    if(o) sessionStorage.removeItem(CLAVE_REAUTH_ELIMINAR);   // vencida o malformada
+  }catch(_){}
+  return null;
+}
+function borrarReauthEliminar(){ try{ sessionStorage.removeItem(CLAVE_REAUTH_ELIMINAR); }catch(_){} }
+
+// Pura: 'reabrir' (misma cuenta, sesión nueva), 'otra-cuenta' (se descarta la marca) o
+// 'esperar' (sin marca, sin sesión o todavía la sesión vieja, p. ej. si canceló en Google).
+function decisionTrasReauth(marca, session, ahoraSeg){
+  if(!marca || !session || !session.user || !session.user.id) return 'esperar';
+  if(session.user.id !== marca.userId) return 'otra-cuenta';
+  return autenticacionRecienteCliente(payloadJwtCliente(session.access_token), ahoraSeg) ? 'reabrir' : 'esperar';
+}
+// La llama onAuthStateChange con cada sesión. Solo reabre la confirmación: no elimina nada.
+function retomarEliminacionTrasReauth(session){
+  const marca = leerReauthEliminar();
+  if(!marca) return;
+  const d = decisionTrasReauth(marca, session, Math.floor(Date.now() / 1000));
+  if(d === 'esperar') return;
+  borrarReauthEliminar();
+  if(d !== 'reabrir') return;
+  abrirCuenta();
+  document.getElementById('btnEliminarCuenta').onclick();   // hoja vacía: casilla y ELIMINAR en blanco
+}
+
 let eliminandoCuenta = false;
 function actualizarBotonesEliminarCuenta(enLinea = navigator.onLine !== false){
   const est = estadoBotonEliminarCuenta(enLinea);
@@ -19182,8 +19283,29 @@ document.getElementById('btnEliminarCuenta').onclick = ()=>{
   document.getElementById('inpEliminarCuentaConfirma').value = '';
   document.getElementById('chkEliminarCuentaLocal').checked = false;
   document.getElementById('eliminarCuentaError').hidden = true;
+  ocultarReauthEliminarCuenta();
   actualizarBotonesEliminarCuenta();
   openSheet('sheetEliminarCuenta');
+};
+// S2: volver a entrar. Google: misma redirección que «Continuar con Google» (la sesión sigue
+// abierta hasta que vuelve la nueva). Código: el formulario vive en el estado «sin sesión» de
+// «Tu cuenta», así que se cierra la sesión solo aquí (datos y cola quedan en el dispositivo,
+// como «Cerrar sesión») y se abre ese formulario con el correo ya escrito.
+document.getElementById('btnEliminarCuentaReauth').onclick = async ()=>{
+  if(eliminandoCuenta) return;
+  if(!supa || navigator.onLine === false){ mostrarErrorEliminarCuenta('sin_conexion'); return; }
+  const { data } = await supa.auth.getSession();
+  const s = data && data.session;
+  if(!s || !s.user || !s.user.id){ ocultarReauthEliminarCuenta(); mostrarErrorEliminarCuenta('sin_sesion'); return; }
+  const metodo = document.getElementById('btnEliminarCuentaReauth').dataset.metodo || metodoLoginReauth(s);
+  marcarReauthEliminar(s.user.id);
+  if(metodo === 'google'){ await iniciarLoginGoogle(); return; }
+  const correo = s.user.email || '';
+  await cerrarSesionLocal();
+  closeSheet('sheetEliminarCuenta');
+  reiniciarLoginCorreo();
+  document.getElementById('inpLoginCorreo').value = correo;
+  abrirCuenta(correo ? 'btnLoginEnviarCodigo' : 'inpLoginCorreo');
 };
 document.getElementById('inpEliminarCuentaConfirma').addEventListener('input', ()=> actualizarBotonesEliminarCuenta());
 document.getElementById('btnEliminarCuentaRespaldo').onclick = ()=> abrirTarjetaRespaldo();
@@ -19212,7 +19334,8 @@ document.getElementById('btnEliminarCuentaConfirmar').onclick = async ()=>{
   actualizarBotonesEliminarCuenta();
   if(!r.ok){
     console.warn('[Eliminar cuenta] no se pudo eliminar: ' + r.error);
-    mostrarErrorEliminarCuenta(r.error);
+    if(r.error === 'reauth_required') mostrarReauthEliminarCuenta(metodoLoginReauth(data && data.session));
+    else mostrarErrorEliminarCuenta(r.error);
     return;
   }
   if(borrarLocal) return;   // borrarDatosLocales() ya recargó la app; el toast sale tras la recarga

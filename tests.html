@@ -3202,6 +3202,169 @@ async function runTests(){
         win.recargarPorBorradoLocal = origJ;
       }
     }
+
+    // ---- (l) S2 · Día 24: reauth_required (respuesta simulada; sin red) ----
+    // supa se reemplaza por un stub; el localStorage real se fotografía antes y después para
+    // probar que no se borra nada. La marca de reautenticación vive en sessionStorage y se limpia.
+    {
+      const b64url = s => btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const jwtCon = p => b64url('{"alg":"ES256"}') + '.' + b64url(JSON.stringify(p)) + '.firma';
+      const ahoraSeg = () => Math.floor(win.Date.now() / 1000);
+      const sesion = (metodo, haceSeg, extra) => ({
+        access_token: jwtCon({ sub: UID, role: 'authenticated', amr: [{ method: metodo, timestamp: ahoraSeg() - haceSeg }] }),
+        user: Object.assign({ id: UID, email: 'prueba@ejemplo.cl', app_metadata: { provider: metodo === 'oauth' ? 'google' : 'email' }, user_metadata: {} }, extra || {})
+      });
+      const fotoLs = () => { const o = {}; for(let i = 0; i < win.localStorage.length; i++){ const k = win.localStorage.key(i); o[k] = win.localStorage.getItem(k); } return JSON.stringify(Object.entries(o).sort()); };
+      // El iframe está oculto (sin layout): «visible» = ni él ni un ancestro con hidden o display:none.
+      const visible = el => { for(let n = el; n && n !== win.document.body; n = n.parentElement){ if(n.hidden || n.style.display === 'none') return false; } return !!el; };
+      const errorInvoke = cuerpo => ({ data: null, error: { name: 'FunctionsHttpError', context: { json: async () => cuerpo } } });
+      const origL = { supa: win.eval('supa'), showToast: win.showToast, abrirTarjetaRespaldo: win.abrirTarjetaRespaldo };
+      const stub = { invocaciones: 0, signOuts: [], oauth: [], sesion: null, respuesta: null,
+        auth: {
+          getSession: async () => ({ data: { session: stub.sesion }, error: null }),
+          signOut: async o => { stub.signOuts.push(o); stub.sesion = null; return { error: null }; },
+          signInWithOAuth: async o => { stub.oauth.push(o); return { error: null }; },
+          signInWithOtp: async () => ({ error: null })
+        },
+        functions: { invoke: async () => { stub.invocaciones++; return stub.respuesta; } },
+        removeChannel(){}
+      };
+      win.__t2bLStub = stub;
+      const cerrarHojas = () => ['sheetEliminarCuenta', 'sheetCuenta', 'sheetConfig'].forEach(id => win.closeSheet(id));
+      const abrirYConfirmar = async (sesionStub, respuesta) => {
+        stub.sesion = sesionStub; stub.respuesta = respuesta;
+        win.renderCuentaUsuario(sesionStub);
+        win.abrirCuenta();
+        $('btnEliminarCuenta').onclick();
+        $('chkEliminarCuentaLocal').checked = true;   // con la casilla marcada: igual no se borra nada
+        $('inpEliminarCuentaConfirma').value = 'ELIMINAR';
+        $('inpEliminarCuentaConfirma').dispatchEvent(new win.Event('input'));
+        await $('btnEliminarCuentaConfirmar').onclick();
+      };
+      try{
+        win.eval('supa = window.__t2bLStub;');
+        win.showToast = () => {};
+        win.sessionStorage.removeItem('telora_reauth_eliminar');
+
+        // (l1) Orquestación: reauth_required es una falla más -> restaura y reanuda; no cierra sesión ni borra lo local.
+        const logL = [];
+        const rL = await win.flujoEliminarCuenta(UID, true, {
+          detenerSync: () => ({ realtime: false, escritura: false }), esperarSyncInactiva: async () => true,
+          apartarSync: () => { logL.push('apartar'); return {}; }, restaurarSync: () => logL.push('restaurar'),
+          reanudarSync: () => logL.push('reanudar'), invocar: async () => ({ ok: false, error: 'reauth_required' }),
+          limpiarEstadoCuenta: () => logL.push('limpiarEstado'), cerrarSesion: async () => logL.push('cerrarSesion'),
+          borrarDatosLocales: () => logL.push('borrarLocal')
+        });
+        assert(!rL.ok && rL.error === 'reauth_required' && JSON.stringify(logL) === JSON.stringify(['apartar', 'restaurar', 'reanudar']),
+          'T2b (l1): reauth_required -> la cola vuelve y la sync se reanuda; NO se limpia la cuenta, NO se cierra sesión, NO se borra lo local',
+          JSON.stringify({ rL, logL }));
+
+        // (l2) El 401 { error: 'reauth_required' } de la función llega como ese código.
+        stub.respuesta = errorInvoke({ ok: false, error: 'reauth_required' });
+        const rInv = await win.depsEliminarCuenta().invocar();
+        assert(!rInv.ok && rInv.error === 'reauth_required',
+          'T2b (l2): invocar() traduce el 401 { error: "reauth_required" } de la Edge Function a error "reauth_required"', JSON.stringify(rInv));
+
+        // (l3) Interfaz: mensaje en la misma hoja + botón para volver a entrar; nada se borra.
+        const antesLs = fotoLs();
+        await abrirYConfirmar(sesion('oauth', 3600), errorInvoke({ ok: false, error: 'reauth_required' }));
+        const reauth = $('eliminarCuentaReauth'), btnR = $('btnEliminarCuentaReauth');
+        const l3 = {
+          hojaAbierta: $('sheetEliminarCuenta').classList.contains('open'),
+          reauthVisible: visible(reauth), texto: reauth.querySelector('p').textContent,
+          boton: btnR.textContent, botonVisible: visible(btnR), errorOculto: $('eliminarCuentaError').hidden,
+          invocaciones: stub.invocaciones, signOuts: stub.signOuts.length, lsIgual: fotoLs() === antesLs,
+          sesionSigue: !!stub.sesion
+        };
+        assert(l3.hojaAbierta && l3.reauthVisible && l3.texto === 'Por seguridad, vuelve a iniciar sesión para eliminar tu cuenta.'
+          && l3.boton === 'Continuar con Google' && l3.botonVisible && l3.errorOculto && l3.invocaciones === 2
+          && l3.signOuts === 0 && l3.lsIgual && l3.sesionSigue,
+          'T2b (l3): reauth_required -> en la misma hoja «Por seguridad, vuelve a iniciar sesión…» con «Continuar con Google» (entró con Google); sin cerrar sesión ni tocar el almacenamiento local, aun con la casilla marcada',
+          JSON.stringify(l3));
+
+        // (l4) Otro error -> el mensaje actual; el aviso de reautenticación no aparece.
+        await abrirYConfirmar(sesion('oauth', 3600), errorInvoke({ ok: false, error: 'error_borrando_usuario' }));
+        const l4 = { reauthOculto: $('eliminarCuentaReauth').hidden, error: $('eliminarCuentaError').hidden ? '' : $('eliminarCuentaError').textContent, lsIgual: fotoLs() === antesLs };
+        assert(l4.reauthOculto && l4.error.startsWith('No se pudo eliminar tu cuenta. Inténtalo de nuevo más tarde. Si el problema sigue, escríbenos a privacidad@telora.cl') && l4.lsIgual,
+          'T2b (l4): cualquier otro error mantiene el mensaje actual («No se pudo eliminar tu cuenta…») y no muestra el aviso de reautenticación',
+          JSON.stringify(l4));
+
+        // (l5) Entró con código: el botón dice «Entrar con tu correo»; al tocarlo se cierra la sesión
+        // SOLO en este dispositivo, se abre el formulario con el correo escrito y queda la marca.
+        await abrirYConfirmar(sesion('otp', 3600), errorInvoke({ ok: false, error: 'reauth_required' }));
+        const textoCorreo = $('btnEliminarCuentaReauth').textContent;
+        stub.signOuts.length = 0;
+        await $('btnEliminarCuentaReauth').onclick();
+        const marca = JSON.parse(win.sessionStorage.getItem('telora_reauth_eliminar') || 'null');
+        const l5 = {
+          textoCorreo, signOuts: JSON.stringify(stub.signOuts), hojaEliminarCerrada: !$('sheetEliminarCuenta').classList.contains('open'),
+          cuentaAbierta: $('sheetCuenta').classList.contains('open'), formulario: visible($('loginCorreoPaso1')),
+          correo: $('inpLoginCorreo').value, marca: marca && marca.userId, lsIgual: fotoLs() === antesLs
+        };
+        assert(l5.textoCorreo === 'Entrar con tu correo' && l5.signOuts === '[{"scope":"local"}]' && l5.hojaEliminarCerrada && l5.cuentaAbierta
+          && l5.formulario && l5.correo === 'prueba@ejemplo.cl' && l5.marca === UID && l5.lsIgual,
+          'T2b (l5): entró con código -> «Entrar con tu correo» cierra la sesión solo aquí (scope local), abre «Tu cuenta» con el correo escrito y deja la marca; los datos locales siguen',
+          JSON.stringify(l5));
+
+        // (l6) De vuelta con la sesión NUEVA de la misma cuenta: se reabre la confirmación vacía, sin eliminar.
+        const invAntes = stub.invocaciones;
+        stub.sesion = sesion('otp', 5);
+        win.renderCuentaUsuario(stub.sesion);
+        win.retomarEliminacionTrasReauth(stub.sesion);
+        const l6 = {
+          hoja: $('sheetEliminarCuenta').classList.contains('open'), confirmaVacia: $('inpEliminarCuentaConfirma').value === '',
+          casilla: $('chkEliminarCuentaLocal').checked, finalDeshabilitado: $('btnEliminarCuentaConfirmar').disabled,
+          reauthOculto: $('eliminarCuentaReauth').hidden, invocaciones: stub.invocaciones - invAntes,
+          marcaBorrada: win.sessionStorage.getItem('telora_reauth_eliminar') === null
+        };
+        assert(l6.hoja && l6.confirmaVacia && !l6.casilla && l6.finalDeshabilitado && l6.reauthOculto && l6.invocaciones === 0 && l6.marcaBorrada,
+          'T2b (l6): con la sesión nueva de la misma cuenta se reabre la confirmación VACÍA (ELIMINAR y casilla en blanco, botón final deshabilitado) y no se invoca la función',
+          JSON.stringify(l6));
+        cerrarHojas();
+
+        // (l7) Google: el botón usa el mismo inicio de sesión (sin cerrar la sesión); volver con la
+        // sesión vieja (canceló) no reabre nada y la marca sigue; con otra cuenta, se descarta.
+        await abrirYConfirmar(sesion('oauth', 3600), errorInvoke({ ok: false, error: 'reauth_required' }));
+        stub.signOuts.length = 0; stub.oauth.length = 0;
+        await $('btnEliminarCuentaReauth').onclick();
+        const g = { oauth: stub.oauth.map(o => o.provider).join(), signOuts: stub.signOuts.length, marca: !!win.sessionStorage.getItem('telora_reauth_eliminar') };
+        cerrarHojas();
+        win.retomarEliminacionTrasReauth(sesion('oauth', 3600));
+        const vieja = { hoja: $('sheetEliminarCuenta').classList.contains('open'), marca: !!win.sessionStorage.getItem('telora_reauth_eliminar') };
+        win.retomarEliminacionTrasReauth(sesion('oauth', 5, { id: 'otra-cuenta' }));
+        const otra = { hoja: $('sheetEliminarCuenta').classList.contains('open'), marca: !!win.sessionStorage.getItem('telora_reauth_eliminar') };
+        assert(g.oauth === 'google' && g.signOuts === 0 && g.marca && !vieja.hoja && vieja.marca && !otra.hoja && !otra.marca,
+          'T2b (l7): Google -> signInWithOAuth sin cerrar sesión; con la sesión vieja no se reabre (la marca espera) y con otra cuenta la marca se descarta',
+          JSON.stringify({ g, vieja, otra }));
+
+        // (l8) Puras del cliente: misma regla que la Edge Function; marca vencida no vale.
+        const A = 1790000000, rc = win.autenticacionRecienteCliente;
+        const p8 = {
+          reciente: rc({ amr: [{ method: 'otp', timestamp: A - 30 }] }, A), borde: rc({ amr: [{ method: 'otp', timestamp: A - 600 }] }, A),
+          vencido: rc({ amr: [{ method: 'oauth', timestamp: A - 601 }] }, A), sinAmr: rc({ sub: 'x' }, A), nulo: rc(null, A),
+          strings: rc({ amr: ['pwd'] }, A), refresco: rc({ amr: [{ method: 'oauth', timestamp: A - 9999 }, { method: 'token_refresh', timestamp: A }] }, A),
+          varios: rc({ amr: [{ method: 'oauth', timestamp: A - 9999 }, { method: 'otp', timestamp: A - 10 }] }, A),
+          metodoGoogle: win.metodoLoginReauth(sesion('oauth', 10)), metodoCodigo: win.metodoLoginReauth(sesion('otp', 10)),
+          metodoSinToken: win.metodoLoginReauth({ user: { app_metadata: { provider: 'google' } } }),
+          marcaVencida: (win.marcarReauthEliminar(UID, win.Date.now() - 16 * 60 * 1000), win.leerReauthEliminar()) === null
+        };
+        assert(p8.reciente && p8.borde && !p8.vencido && !p8.sinAmr && !p8.nulo && !p8.strings && !p8.refresco && p8.varios
+          && p8.metodoGoogle === 'google' && p8.metodoCodigo === 'correo' && p8.metodoSinToken === 'google' && p8.marcaVencida,
+          'T2b (l8): autenticacionRecienteCliente (falla cerrada, token_refresh no cuenta), método de entrada desde amr y marca vencida (> 15 min) descartada',
+          JSON.stringify(p8));
+      }finally{
+        win.__t2bLStubOrig = origL.supa; win.eval('supa = window.__t2bLStubOrig;');
+        delete win.__t2bLStub; delete win.__t2bLStubOrig;
+        win.showToast = origL.showToast;
+        try{ win.sessionStorage.removeItem('telora_reauth_eliminar'); }catch(_){}
+        cerrarHojas();
+        win.reiniciarLoginCorreo();
+        $('chkEliminarCuentaLocal').checked = false; $('inpEliminarCuentaConfirma').value = '';
+        win.ocultarReauthEliminarCuenta(); $('eliminarCuentaError').hidden = true;
+        win.renderCuentaUsuario(null);
+        win.actualizarBotonesEliminarCuenta(true);
+      }
+    }
   }
 
   // ==================== T2b — Edge Function: lógica pura de index.ts ====================
@@ -3214,9 +3377,10 @@ async function runTests(){
       const m = txt.match(/\/\/ <puro>[\s\S]*?\n\/\/ <\/puro>/);
       if(!m) throw new Error('no se encontró el bloque <puro>');
       const js = m[0].replace(/(\w)\s*:\s*(?:any|number|string|boolean)(?=\s*[,)])/g, '$1');
-      puro = new Function(js + '\nreturn { elegirClaveSecreta, claimsDeUsuarioValidos };')();
+      puro = new Function(js + '\nreturn { elegirClaveSecreta, claimsDeUsuarioValidos, autenticacionReciente, payloadDeJwt };')();
     }catch(e){ detalleCarga = e.message; }
-    assert(!!puro && typeof puro.elegirClaveSecreta === 'function' && typeof puro.claimsDeUsuarioValidos === 'function',
+    assert(!!puro && typeof puro.elegirClaveSecreta === 'function' && typeof puro.claimsDeUsuarioValidos === 'function'
+      && typeof puro.autenticacionReciente === 'function' && typeof puro.payloadDeJwt === 'function',
       'T2b (k): el bloque «puro» de supabase/functions/eliminar-cuenta/index.ts se extrae y evalúa', detalleCarga);
     if(puro){
       const f = puro.elegirClaveSecreta;
@@ -3249,6 +3413,40 @@ async function runTests(){
       };
       assert(rc.valido && !rc.anon && !rc.serviceRole && !rc.vencido && !rc.sinSub && !rc.expTexto && !rc.nulo,
         'T2b (k): claimsDeUsuarioValidos exige sub, role = authenticated y exp vigente', JSON.stringify(rc));
+
+      // S2 · Día 24 (sustituye a deno test: no hay deno en este equipo): reautenticación.
+      const ar = puro.autenticacionReciente;
+      const ra = {
+        reciente:   ar({ amr: [{ method: 'oauth', timestamp: ahora - 30 }] }, ahora, 600),
+        borde:      ar({ amr: [{ method: 'otp', timestamp: ahora - 600 }] }, ahora, 600),
+        vencido:    ar({ amr: [{ method: 'oauth', timestamp: ahora - 601 }] }, ahora, 600),
+        porDefecto: ar({ amr: [{ method: 'otp', timestamp: ahora - 599 }] }, ahora),
+        sinAmr:     ar({ sub: 'uid-x', role: 'authenticated' }, ahora),
+        nulo:       ar(null, ahora),
+        amrObjeto:  ar({ amr: { method: 'otp', timestamp: ahora } }, ahora),
+        amrStrings: ar({ amr: ['pwd', 'otp'] }, ahora),
+        tsTexto:    ar({ amr: [{ method: 'otp', timestamp: String(ahora) }] }, ahora),
+        tsNaN:      ar({ amr: [{ method: 'otp', timestamp: NaN }] }, ahora),
+        elemNulo:   ar({ amr: [null] }, ahora),
+        ahoraMalo:  ar({ amr: [{ method: 'otp', timestamp: ahora }] }, NaN),
+        variosUnoReciente: ar({ amr: [{ method: 'oauth', timestamp: ahora - 86400 }, { method: 'otp', timestamp: ahora - 60 }] }, ahora),
+        variosViejos:      ar({ amr: [{ method: 'oauth', timestamp: ahora - 86400 }, { method: 'otp', timestamp: ahora - 700 }] }, ahora),
+        soloRefresco:      ar({ amr: [{ method: 'oauth', timestamp: ahora - 86400 }, { method: 'token_refresh', timestamp: ahora }] }, ahora)
+      };
+      assert(ra.reciente && ra.borde && !ra.vencido && ra.porDefecto && !ra.sinAmr && !ra.nulo && !ra.amrObjeto && !ra.amrStrings
+        && !ra.tsTexto && !ra.tsNaN && !ra.elemNulo && !ra.ahoraMalo && ra.variosUnoReciente && !ra.variosViejos && !ra.soloRefresco,
+        'T2b (k): autenticacionReciente — reciente, en el borde (600 s), vencido, sin amr, amr malformado y varios métodos (basta uno reciente; token_refresh no cuenta)',
+        JSON.stringify(ra));
+      const b64u = t => btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const pj = puro.payloadDeJwt;
+      const carga = { sub: 'uid-ñ', amr: [{ method: 'otp', timestamp: ahora }] };
+      const utf8 = String.fromCharCode(...new TextEncoder().encode(JSON.stringify(carga)));
+      const rp = {
+        ok: JSON.stringify(pj('x.' + b64u(utf8) + '.y')) === JSON.stringify(carga),
+        dosPartes: pj('x.y'), basura: pj('x.%%%.y'), arreglo: pj('x.' + b64u('[1]') + '.y'), vacio: pj('')
+      };
+      assert(rp.ok && rp.dosPartes === null && rp.basura === null && rp.arreglo === null && rp.vacio === null,
+        'T2b (k): payloadDeJwt decodifica base64url (UTF-8) y devuelve null ante cualquier forma inesperada', JSON.stringify(rp));
     }
   }
 
