@@ -249,7 +249,32 @@ begin
   v_out := v_out || format(E'i) %s · lectura completa -> cursor; cambios_desde trae lo nuevo · %s\n', case when v_ok then 'OK' else 'FALLA' end, left(v_det, 400));
 
   -- ---------------------------------------------------------------- j) otro uid (RLS)
+  -- RPC sobre expenses + acceso directo a las 9 tablas con RLS. Por tabla, con los claims de un
+  -- uid ajeno: select ve 0 filas, insert con user_id del dueño falla con 42501 por RLS (se evalúa
+  -- antes que NOT NULL/UNIQUE; otro SQLSTATE, o 42501 por falta de GRANT, es FALLA), update/delete
+  -- afectan 0 filas.
+  -- Una tabla sin filas del dueño se informa como [sin filas]: ahí update/delete = 0 no prueba
+  -- nada. Al final, como dueño: update que cambia user_id a uno ajeno falla (WITH CHECK).
+  declare
+    v_tablas constant text[] := array['config_compartida','config_dispositivo','cuentas_financieras','debts',
+                                      'expenses','goal_aportes','goals','incomes','transfers'];
+    v_t      text;
+    v_dueno  int;
+    v_ve     int;
+    v_ins    text;
+    v_upd    int;
+    v_del    int;
+    v_tok    boolean;
+    v_rls    text := '';
+    v_wc     text;
+    v_ndueno jsonb := '{}';
   begin
+    -- Filas del dueño por tabla (con sus propios claims, antes de cambiar).
+    foreach v_t in array v_tablas loop
+      execute format('select count(*) from public.%I where user_id = $1', v_t) into v_dueno using v_uid;
+      v_ndueno := v_ndueno || jsonb_build_object(v_t, v_dueno);
+    end loop;
+
     perform set_config('request.jwt.claims',
       json_build_object('sub', gen_random_uuid()::text, 'role', 'authenticated')::text, true);
     r := public.sync_lectura_completa();
@@ -260,20 +285,51 @@ begin
     get diagnostics v_cnt = row_count;
     delete from public.expenses where id like 't7prueba-%';
     get diagnostics v_prev = row_count;
-    perform set_config('request.jwt.claims', v_claims, true);
     v_ok := jsonb_array_length(r->'filas'->'expenses') = 0
             and r2->0->>'estado' = 'choque' and r2->0->>'motivo' = 'no_existe'
-            and v_cnt = 0 and v_prev = 0
+            and v_cnt = 0 and v_prev = 0;
+    v_det := format('ve=%s filas · RPC=%s/%s · update directo=%s · delete directo=%s',
+                    jsonb_array_length(r->'filas'->'expenses'), r2->0->>'estado', r2->0->>'motivo', v_cnt, v_prev);
+
+    foreach v_t in array v_tablas loop
+      execute format('select count(*) from public.%I', v_t) into v_ve;
+      begin
+        execute format('insert into public.%I (user_id) values ($1)', v_t) using v_uid;
+        v_ins := 'ENTRÓ';
+      exception when others then
+        v_ins := sqlstate || case when sqlerrm ilike '%row-level security%' then '/rls' else '' end;
+      end;
+      execute format('update public.%I set user_id = user_id where user_id = $1', v_t) using v_uid;
+      get diagnostics v_upd = row_count;
+      execute format('delete from public.%I where user_id = $1', v_t) using v_uid;
+      get diagnostics v_del = row_count;
+      v_dueno := (v_ndueno->>v_t)::int;
+      v_tok := v_ve = 0 and v_ins = '42501/rls' and v_upd = 0 and v_del = 0;
+      v_ok  := v_ok and v_tok;
+      v_rls := v_rls || format(E'\n     %s %s: ve=%s insert=%s update=%s delete=%s%s',
+                               case when v_tok then 'ok' else 'FALLA' end, v_t, v_ve, v_ins, v_upd, v_del,
+                               case when v_dueno = 0 then ' [sin filas del dueño]' else format(' (dueño: %s)', v_dueno) end);
+    end loop;
+    perform set_config('request.jwt.claims', v_claims, true);
+
+    -- Como dueño: mover su fila a otro user_id debe chocar con el WITH CHECK del update.
+    begin
+      update public.expenses set user_id = gen_random_uuid() where user_id = v_uid and id = 't7prueba-e2';
+      v_wc := 'ENTRÓ';
+    exception when others then
+      v_wc := sqlstate || case when sqlerrm ilike '%row-level security%' then '/rls' else '' end;
+    end;
+    v_ok := v_ok and v_wc = '42501/rls'
             and (select amount::text from public.expenses where user_id = v_uid and id = 't7prueba-e2') = '12345';
-    v_det := format('ve=%s filas · RPC=%s/%s · update directo=%s · delete directo=%s · e2 intacto=%s',
-                    jsonb_array_length(r->'filas'->'expenses'), r2->0->>'estado', r2->0->>'motivo', v_cnt, v_prev,
-                    (select amount::text from public.expenses where user_id = v_uid and id = 't7prueba-e2'));
+    v_det := v_det || format(' · e2 intacto=%s · dueño cambia user_id=%s',
+                             (select amount::text from public.expenses where user_id = v_uid and id = 't7prueba-e2'), v_wc)
+                   || v_rls;
   exception when others then
     perform set_config('request.jwt.claims', v_claims, true);
     v_ok := false; v_det := 'ERROR ' || sqlstate || ' ' || sqlerrm;
   end;
   v_n := v_n + 1; if v_ok then v_okn := v_okn + 1; end if;
-  v_out := v_out || format(E'j) %s · otro uid no ve ni modifica nada · %s\n', case when v_ok then 'OK' else 'FALLA' end, left(v_det, 400));
+  v_out := v_out || format(E'j) %s · otro uid no ve ni modifica nada (9 tablas) · %s\n', case when v_ok then 'OK' else 'FALLA' end, left(v_det, 2000));
 
   -- ---------------------------------------------------------------- k) lote de 200 ops (tiempo)
   begin
