@@ -4363,6 +4363,121 @@ async function runTests(){
     }
   }
 
+  // ==================== Día 24 · XSS: sinks X1–X5 con un respaldo importado ====================
+  // Categoría, método y fuente (y un id) con una carga HTML entran por migrateBackup (el mismo
+  // camino que «Restaurar respaldo») y se pintan en Resumen (lista + dona), Historial (chips),
+  // formularios (selects) y la hoja de migrar categoría: nada se ejecuta y el texto se ve
+  // literal. Ida y vuelta: el value de cada <option>/data-* devuelve el nombre exacto.
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const stOrig = win.eval('JSON.stringify(state)');
+    const chartOrig = win.eval('chartView.resumen');
+    const hTabOrig = win.eval('hTab');
+    const orig = { saveState: win.saveState, flash: win.flashSaveButton };
+    const cerrar = () => [...d.querySelectorAll('.sheet-overlay.open')].forEach(o => win.closeSheet(o.id));
+    const P = '"><img src=x onerror="window.__xss=1">';
+    const RARO = `Café & "Té" <b>'s`;                        // & < > " '
+    const opts = id => [...$(id).options].map(o => ({ v: o.value, t: o.textContent }));
+    try{
+      win.saveState = () => true;
+      win.flashSaveButton = () => {};
+      delete win.__xss;
+      const st = fixtureBase();
+      st.schemaVersion = win.eval('CURRENT_SCHEMA_VERSION');
+      st.config.categorias.push(P, RARO);
+      st.config.metodos.push(P);
+      st.config.fuentes.push(P);
+      st.expenses.push({ id:P, date:isoRel(0, 1), amount:5000, tipo:'Casual', category:P, method:P, nombre:'Gasto P', description:'', cuentaId:'acc1' });
+      st.expenses.push({ id:'xraro', date:isoRel(0, 1), amount:3000, tipo:'Casual', category:RARO, method:'Efectivo', nombre:'Gasto raro', description:'', cuentaId:'acc1' });
+      st.incomes.push({ id:'xing', date:isoRel(0, 1), amount:9000, tipo:'Casual', source:P, nombre:'Ingreso P', description:'', cuentaId:'acc1' });
+      const parsed = JSON.parse(JSON.stringify(st));                        // lo que lee FileReader
+      const validacion = win.validateBackupShape(parsed);
+      win.eval('state = migrateBackup(' + JSON.stringify(parsed) + ');'); resetCaches(win);
+
+      // (a) Resumen: lista + dona.
+      win.eval("chartView.resumen = 'lista';");
+      win.renderResumen();
+      const filas = [...d.querySelectorAll('.cat-row[data-cat]')];
+      const filaP = filas.find(el => el.dataset.cat === P), filaR = filas.find(el => el.dataset.cat === RARO);
+      const segs = [...d.querySelectorAll('#rDona .dona-seg')];
+      const segR = segs.find(el => el.dataset.cat === RARO);
+      if(segR) segR.dispatchEvent(new win.MouseEvent('click', { bubbles:true }));
+      const tip = $('rDonaTip').textContent;
+      const resumen = { filaP: !!filaP && filaP.querySelector('.name').textContent === P, filaR: !!filaR,
+        segP: segs.some(el => el.dataset.cat === P), segR: !!segR, tip: tip.startsWith(RARO + ' · ') };
+
+      // (a) Historial: chips de categoría + filas (id con la carga).
+      win.eval("hTab = 'gastos'; hFilterCats.clear();");
+      win.renderHistorial();
+      const chips = [...d.querySelectorAll('#hCatCarousel [data-hcat]')].filter(b => b.dataset.hcat !== '__all');
+      const chipP = chips.find(b => decodeURIComponent(b.dataset.hcat) === P);
+      const chipR = chips.find(b => decodeURIComponent(b.dataset.hcat) === RARO);
+      if(chipR) chipR.click();
+      const filtro = win.eval('JSON.stringify([...hFilterCats])');
+      const filasHist = [...d.querySelectorAll('[data-editexpense]')].map(el => el.dataset.editexpense);
+      win.eval('hFilterCats.clear();'); win.renderHistorial();
+      const historial = { chipP: !!chipP && chipP.querySelector('span:last-child').textContent === P, chipR: !!chipR,
+        filtro: filtro === JSON.stringify([RARO]), soloRaro: filasHist.length === 1 && filasHist[0] === 'xraro' };
+      const idP = [...d.querySelectorAll('[data-editexpense]')].some(el => el.dataset.editexpense === P);
+
+      // (a)+(b) Formularios: selects de categoría, método y fuente; editar y guardar conserva el nombre.
+      win.openGastoForm(P);
+      const gCat = opts('gCategoria'), gMet = opts('gMetodo');
+      const formP = { cat: $('gCategoria').value === P, met: $('gMetodo').value === P,
+        optCat: gCat.some(o => o.v === P && o.t === P) && gCat.some(o => o.v === RARO && o.t === RARO),
+        optMet: gMet.some(o => o.v === P && o.t === P) };
+      $('btnSaveGasto').onclick();
+      const gP = win.eval('JSON.stringify(state.expenses.find(e => e.id === ' + JSON.stringify(P) + '))');
+      cerrar();
+      win.openGastoForm('xraro');
+      const formR = $('gCategoria').value === RARO;
+      $('btnSaveGasto').onclick();
+      const gR = win.eval('JSON.stringify(state.expenses.find(e => e.id === "xraro"))');
+      cerrar();
+      win.openIngresoForm('xing');
+      const iFue = opts('iFuente');
+      const fuente = $('iFuente').value === P && iFue.some(o => o.v === P && o.t === P);
+      cerrar();
+      const guardadoP = JSON.parse(gP || 'null'), guardadoR = JSON.parse(gR || 'null');
+      const vuelta = { formP, formR, fuente,
+        gP: !!guardadoP && guardadoP.category === P && guardadoP.method === P,
+        gR: !!guardadoR && guardadoR.category === RARO };
+
+      // (a)+(b) Hoja de migrar: eliminar la categoría P moviendo sus gastos a RARO.
+      const idxP = win.eval('state.config.categorias.indexOf(' + JSON.stringify(P) + ')');
+      win.abrirMigracionConfig('categorias', idxP, P, 1);
+      const dest = opts('cfgMigrarDestino');
+      const migrarOpts = dest.some(o => o.v === RARO && o.t === RARO) && !dest.some(o => o.v === P);
+      $('cfgMigrarDestino').value = RARO;
+      const selRaro = $('cfgMigrarDestino').value === RARO;
+      $('cfgMigrarConfirm').onclick();
+      const migrado = win.eval('JSON.stringify({ cat: state.expenses.find(e => e.id === ' + JSON.stringify(P) + ').category, sigue: state.config.categorias.includes(' + JSON.stringify(P) + ') })');
+      cerrar();
+
+      await new Promise(r => setTimeout(r, 150));                           // un onerror inyectado ya habría corrido
+      const imgs = d.querySelectorAll('img[src="x"]').length;
+      assert(validacion === null && win.__xss === undefined && imgs === 0
+        && Object.values(resumen).every(Boolean) && Object.values(historial).every(Boolean) && idP
+        && Object.values(formP).every(Boolean) && migrarOpts,
+        'Día 24 (XSS): un respaldo con categoría/método/fuente/id = carga HTML se pinta literal en Resumen (lista + dona), Historial (chips + filas), formularios (selects) y la hoja de migrar; window.__xss queda indefinido',
+        JSON.stringify({ validacion, xss: win.__xss, imgs, resumen, historial, idP, formP, migrarOpts }));
+      assert(vuelta.formR && vuelta.fuente && vuelta.gP && vuelta.gR && selRaro && migrado === JSON.stringify({ cat: RARO, sigue: false })
+        && resumen.tip && historial.filtro && historial.soloRaro,
+        'Día 24 (XSS): ida y vuelta con & < > " \' — value del option/data-cat === nombre original; filtro del Historial, toque en la dona, guardar gasto y migrar categoría siguen funcionando',
+        JSON.stringify({ vuelta, selRaro, migrado, tip: resumen.tip, filtro: historial.filtro, soloRaro: historial.soloRaro }));
+    }catch(e){
+      assert(false, 'Día 24 (XSS): excepción durante las pruebas de escape', e && e.stack || String(e));
+    }finally{
+      try{
+        cerrar();
+        win.saveState = orig.saveState; win.flashSaveButton = orig.flash;
+        win.eval('state = ' + stOrig + '; chartView.resumen = ' + JSON.stringify(chartOrig) + '; hTab = ' + JSON.stringify(hTabOrig)
+          + '; hFilterCats.clear(); editingExpenseId = null; editingIncomeId = null; migracionConfigCtx = null;'); resetCaches(win);
+        delete win.__xss;
+      }catch(_){}
+    }
+  }
+
   // ==================== Tanda P2 · Fase B: Metas sin datos ====================
   {
     const d = win.document, $ = id => d.getElementById(id);

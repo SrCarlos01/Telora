@@ -4437,7 +4437,7 @@ function applyFixedRangeMeta(occ, refDate){
 function rangoFijoRowBits(occ, kind){   // kind: 'gasto' | 'ingreso'
   if(!occ || !occ.esRangoFijo) return null;
   const btn = isReadOnly() ? '' :
-    `<button type="button" class="li-cff-btn" data-cff-id="${occ.id}" data-cff-kind="${kind}" data-cff-mk="${String(occ.date).slice(0,7)}">Confirmar fecha</button>`;
+    `<button type="button" class="li-cff-btn" data-cff-id="${escAttr(occ.id)}" data-cff-kind="${kind}" data-cff-mk="${String(occ.date).slice(0,7)}">Confirmar fecha</button>`;
   return {
     fechaTxt: `Entre el ${occ.rangoDiaInicio} y el ${occ.rangoDiaFin}`,
     badge: '<span class="li-badge li-badge-rango">Rango</span>',
@@ -6066,7 +6066,7 @@ document.getElementById('iRangoChk').addEventListener('change', syncIngresoRango
 /* ==================== SELECTS dinámicos ==================== */
 function fillSelect(id, options, selected){
   const sel = document.getElementById(id);
-  sel.innerHTML = options.map(o=>`<option value="${o}" ${o===selected?'selected':''}>${o}</option>`).join('');
+  sel.innerHTML = options.map(o=>`<option value="${escAttr(o)}" ${o===selected?'selected':''}>${escHtml(o)}</option>`).join('');
 }
 
 /* ==================== Tanda P2 · Fase A: registro rápido v2 ====================
@@ -7529,20 +7529,20 @@ function renderMetas(){
     ) : '';
 
     // Lápiz de edición (siempre visible) + acciones dentro del bloque colapsable.
-    const editBtn = `<button class="card-edit" data-editgoal="${g.id}" aria-label="Editar meta">${icon('edit')}</button>`;
+    const editBtn = `<button class="card-edit" data-editgoal="${escAttr(g.id)}" aria-label="Editar meta">${icon('edit')}</button>`;
     const expandInner =
       rachaMetaHtml(g) +
       autoNote +
       aportesListHtml +
-      `<button class="debt-action" data-aportar="${g.id}">Aportar</button>` +
-      `<button class="debt-action" data-auto="${g.id}">${aa.activo ? 'Editar aporte automático' : 'Activar aporte automático'}</button>` +
-      `<button class="debt-action" data-calc="${g.id}">Calculadora</button>`;
+      `<button class="debt-action" data-aportar="${escAttr(g.id)}">Aportar</button>` +
+      `<button class="debt-action" data-auto="${escAttr(g.id)}">${aa.activo ? 'Editar aporte automático' : 'Activar aporte automático'}</button>` +
+      `<button class="debt-action" data-calc="${escAttr(g.id)}">Calculadora</button>`;
     const pauseBadge = pausada ? `<span class="goal-pause-badge">${icon('pause')} pausada</span>` : '';
     const compBadge = g.cuentaId === 'compartida' ? ' <span class="li-badge">Compartida</span>' : '';   // Tanda L3
 
     if(g.indefinida){
       return `
-    <div class="debt-card goal-card${pausada ? ' paused' : ''}" data-goalcard="${g.id}">
+    <div class="debt-card goal-card${pausada ? ' paused' : ''}" data-goalcard="${escAttr(g.id)}">
       ${editBtn}
       <div class="debt-top">
         <div class="debt-top-main">
@@ -7566,7 +7566,7 @@ function renderMetas(){
     const pct = g.montoObjetivo > 0 ? Math.min(100, Math.round(ahorrado / g.montoObjetivo * 100)) : 0;
     const done = pct >= 100;
     return `
-    <div class="debt-card goal-card${done ? ' done' : ''}${pausada ? ' paused' : ''}" data-goalcard="${g.id}">
+    <div class="debt-card goal-card${done ? ' done' : ''}${pausada ? ' paused' : ''}" data-goalcard="${escAttr(g.id)}">
       ${editBtn}
       <div class="debt-top">
         <div class="debt-top-main">
@@ -8486,7 +8486,7 @@ function renderResumen(){
   } else {
     box.style.display = ''; chartBox.style.display = 'none';
     box.innerHTML = listaRows.map(([cat,val])=>`
-      <div class="cat-row" data-cat="${cat}">
+      <div class="cat-row" data-cat="${escAttr(cat)}">
         <div class="left"><span class="cat-sw" style="background:${colorDeCategoria(cat)}"></span>${catIcon(cat, 'cat-icon')}<span class="name">${escHtml(cat)}</span></div>
         <span class="val">${money(val)}</span>${topeBar(cat, val)}
       </div>`).join('');
@@ -8524,7 +8524,7 @@ function renderDonaResumen(dona){
     const frac = s.value / d.total;
     const pct = Math.round(frac * 100);
     const a0 = ang, a1 = ang + frac * Math.PI * 2; ang = a1;
-    const attrs = `class="dona-seg" data-cat="${s.label}" data-monto="${Math.round(s.value)}" data-pct="${pct}"`;
+    const attrs = `class="dona-seg" data-cat="${escAttr(s.label)}" data-monto="${Math.round(s.value)}" data-pct="${pct}"`;
     if(frac >= 0.9995){
       return `<circle cx="${cx}" cy="${cy}" r="${((r+rin)/2).toFixed(2)}" fill="none" stroke="${s.color}" stroke-width="${(r-rin).toFixed(2)}" ${attrs}></circle>`;
     }
@@ -9954,7 +9954,7 @@ function renderHistSearchControls(){
       car.dataset.key = cats.join('|');
       car.innerHTML =
         `<button type="button" class="hist-cat-chip" data-hcat="__all">Todas</button>` +
-        cats.map(c=> `<button type="button" class="hist-cat-chip" data-hcat="${encodeURIComponent(c)}">${catIcon(c)}<span>${c}</span></button>`).join('');
+        cats.map(c=> `<button type="button" class="hist-cat-chip" data-hcat="${encodeURIComponent(c)}">${catIcon(c)}<span>${escHtml(c)}</span></button>`).join('');
       car.querySelectorAll('[data-hcat]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
           const raw = btn.dataset.hcat;
@@ -10346,7 +10346,7 @@ function renderHistorial(){
         const check = e.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
         const unpaidBadge = e.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
         return `
-      <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${e.debtId}" style="--li-accent:${colorDeCategoria(e.category)};">
+      <div class="list-item cuota-virtual${e.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${escAttr(e.debtId)}" style="--li-accent:${colorDeCategoria(e.category)};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${e.description ? escHtml(e.description) : '<span class="li-muted">Sin descripción</span>'}</span></p>
@@ -10371,7 +10371,7 @@ function renderHistorial(){
       // aparece al expandir el Detalle, dentro de .li-sub.
       const nom = e.nombre || e.description || '';
       return `
-      <div class="list-item${expCls}" data-editexpense="${e.id}" style="--li-accent:${liAccentDia(e.date, colorDeCategoria(e.category))};">
+      <div class="list-item${expCls}" data-editexpense="${escAttr(e.id)}" style="--li-accent:${liAccentDia(e.date, colorDeCategoria(e.category))};">
         <div class="li-icon">${catIcon(e.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span></p>
@@ -10405,7 +10405,7 @@ function renderHistorial(){
       const rb = rangoFijoRowBits(i, 'ingreso');
       const fuente = (i.source && String(i.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${i.id}" style="--li-accent:${liAccentDia(i.date, colorDeFuente(fuente))};">
+      <div class="list-item income${expCls}" data-editincome="${escAttr(i.id)}" style="--li-accent:${liAccentDia(i.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${nom ? escHtml(nom) : '<span class="li-muted">Sin nombre</span>'}</span></p>
@@ -10519,7 +10519,7 @@ function renderHistorialTodo(box){
       const rb = rangoFijoRowBits(it, 'ingreso');
       const fuente = (it.source && String(it.source).trim()) || 'Sin fuente';
       return `
-      <div class="list-item income${expCls}" data-editincome="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeFuente(fuente))};">
+      <div class="list-item income${expCls}" data-editincome="${escAttr(it.id)}" style="--li-accent:${liAccentDia(it.date, colorDeFuente(fuente))};">
         <div class="li-icon">${icon('arrow-down-left')}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span></p>
@@ -10566,7 +10566,7 @@ function renderHistorialTodo(box){
       const check = it.paid ? `<span class="li-cuota-check" title="Cuota pagada">${icon('check')}</span>` : '';
       const unpaidBadge = it.paid ? '' : '<span class="li-badge li-badge-unpaid">Sin pagar</span>';
       return `
-      <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${it.debtId}" style="--li-accent:${colorDeCategoria(it.category)};">
+      <div class="list-item cuota-virtual${it.paid ? ' cuota-paid' : ''}${expCls}" data-cuotavirtual="${escAttr(it.debtId)}" style="--li-accent:${colorDeCategoria(it.category)};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin descripción</span>'}</span></p>
@@ -10597,7 +10597,7 @@ function renderHistorialTodo(box){
       }
     }
     return `
-      <div class="list-item${expCls}" data-editexpense="${it.id}" style="--li-accent:${liAccentDia(it.date, colorDeCategoria(it.category))};">
+      <div class="list-item${expCls}" data-editexpense="${escAttr(it.id)}" style="--li-accent:${liAccentDia(it.date, colorDeCategoria(it.category))};">
         <div class="li-icon">${catIcon(it.category)}</div>
         <div class="li-body">
           <p class="li-title"><span class="li-title-text">${it.name ? escHtml(it.name) : '<span class="li-muted">Sin nombre</span>'}</span></p>
@@ -10800,11 +10800,11 @@ function renderCuotas(){
       const aviso = est.porConfirmar
         ? `<p class="debt-manual-note">${icon('alert-triangle')} Por confirmar — la fecha de vencimiento ya pasó, pero no has confirmado el pago.</p>`
         : '';
-      actionHtml = `${aviso}<button class="debt-action" data-markpaid="${d.id}">Marcar como pagada este mes</button>`;
+      actionHtml = `${aviso}<button class="debt-action" data-markpaid="${escAttr(d.id)}">Marcar como pagada este mes</button>`;
     } else { // pagadas
       actionHtml = `
       <p class="debt-manual-note">${icon('check')} Pago confirmado.</p>
-      <button class="debt-action undo" data-markactiva="${d.id}">Marcar como pendiente</button>`;
+      <button class="debt-action undo" data-markactiva="${escAttr(d.id)}">Marcar como pendiente</button>`;
     }
 
     return `
@@ -10828,7 +10828,7 @@ function renderCuotas(){
         </div>
         <p class="debt-purchase-date">Fecha de compra: <b>${fmtDate(d.purchaseDate)}</b></p>
         ${actionHtml}
-        ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${d.id}">Ir a la compra original</button>` : ''}
+        ${tieneOrigen ? `<button class="debt-action undo" data-cuotaorigen="${escAttr(d.id)}">Ir a la compra original</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -11021,13 +11021,14 @@ function contarUso(key, item){
                                 + state.debts.filter(d=> d.category === item).length;
   return 0;
 }
-const escAttr = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
 const escHtml = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+// Atributos entre comillas: mismo escape completo que el texto (& < > " ').
+const escAttr = escHtml;
 
 function renderConfigList(key, boxId){
   const box = document.getElementById(boxId);
@@ -11220,7 +11221,7 @@ function abrirMigracionConfig(key, idx, item, n){
       `Antes de eliminarla, mueve ${n===1?'ese registro':'esos registros'} a otra ${t.destino}.`;
   }
   const sel = document.getElementById('cfgMigrarDestino');
-  sel.innerHTML = destinos.map(d=>`<option value="${escAttr(d)}">${d}</option>`).join('');
+  sel.innerHTML = destinos.map(d=>`<option value="${escAttr(d)}">${escHtml(d)}</option>`).join('');
   const notaCuotas = document.getElementById('cfgMigrarNotaCuotas');
   const conDeuda = esMet ? state.expenses.filter(e=> e.method === item && e.debtId).length : 0;
   if(conDeuda > 0){
