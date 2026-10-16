@@ -14,6 +14,7 @@
      1. Obtiene el usuario con el JWT del header Authorization. Sin JWT válido -> 401.
         Reautenticación (S2): el JWT debe venir de un inicio de sesión de hace como mucho 10 min
         (claims.amr). Si no -> 401 { error: "reauth_required" }, ANTES de cualquier borrado.
+        No se exige en el reintento idempotente (el usuario ya fue eliminado).
      2. auth.admin.deleteUser(uid, false): borrado real (no soft delete). Las 9 tablas tienen
         FK user_id -> auth.users(id) ON DELETE CASCADE, así que sus filas se van con el usuario
         y, desde ese instante, ningún insert con ese user_id puede volver a entrar (23503).
@@ -110,6 +111,15 @@ function autenticacionReciente(claims: any, ahoraSeg: number, ventanaSeg = 600) 
     typeof m.timestamp === "number" && Number.isFinite(m.timestamp) && m.timestamp >= desde);
 }
 
+// ¿Responder reauth_required? Solo si el usuario TODAVÍA existe y su inicio de sesión no es
+// reciente. En el reintento idempotente (usuario ya eliminado; firma verificada con getClaims)
+// NO se exige: la eliminación ya se autorizó y se hizo, y «volver a entrar» crearía una cuenta
+// nueva (signInWithOtp con shouldCreateUser / Google) en vez de reautenticar la eliminada.
+// deno-lint-ignore no-explicit-any
+function exigeReautenticacion(usuarioExiste: boolean, claims: any, ahoraSeg: number, ventanaSeg = 600) {
+  return usuarioExiste === true && !autenticacionReciente(claims, ahoraSeg, ventanaSeg);
+}
+
 // Payload de un JWT (sin verificar la firma: solo se usa con un token que auth.getUser ya
 // aceptó). Cualquier forma inesperada -> null.
 function payloadDeJwt(jwt: string) {
@@ -198,14 +208,13 @@ Deno.serve(async (req: Request) => {
     }
     uid = (claims as { sub: string }).sub;
     usuarioExiste = false;
-    claimsToken = claims;
   } else {
     return responder(origen, 401, { ok: false, error: "no_autenticado" });
   }
 
-  // 1b) S2: inicio de sesión reciente, ANTES de cualquier borrado (también en el reintento
-  // idempotente, que puede borrar filas sueltas).
-  if (!autenticacionReciente(claimsToken, Math.floor(Date.now() / 1000), VENTANA_REAUTH_SEG)) {
+  // 1b) S2: inicio de sesión reciente, ANTES de cualquier borrado. Solo con el usuario aún
+  // existente: en el reintento idempotente no se exige (ver exigeReautenticacion).
+  if (exigeReautenticacion(usuarioExiste, claimsToken, Math.floor(Date.now() / 1000), VENTANA_REAUTH_SEG)) {
     console.info("[eliminar-cuenta] reautenticación requerida para " + uidCorto(uid));
     return responder(origen, 401, { ok: false, error: "reauth_required" });
   }

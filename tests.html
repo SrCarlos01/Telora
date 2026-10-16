@@ -3377,10 +3377,11 @@ async function runTests(){
       const m = txt.match(/\/\/ <puro>[\s\S]*?\n\/\/ <\/puro>/);
       if(!m) throw new Error('no se encontró el bloque <puro>');
       const js = m[0].replace(/(\w)\s*:\s*(?:any|number|string|boolean)(?=\s*[,)])/g, '$1');
-      puro = new Function(js + '\nreturn { elegirClaveSecreta, claimsDeUsuarioValidos, autenticacionReciente, payloadDeJwt };')();
+      puro = new Function(js + '\nreturn { elegirClaveSecreta, claimsDeUsuarioValidos, autenticacionReciente, payloadDeJwt, exigeReautenticacion };')();
     }catch(e){ detalleCarga = e.message; }
     assert(!!puro && typeof puro.elegirClaveSecreta === 'function' && typeof puro.claimsDeUsuarioValidos === 'function'
-      && typeof puro.autenticacionReciente === 'function' && typeof puro.payloadDeJwt === 'function',
+      && typeof puro.autenticacionReciente === 'function' && typeof puro.payloadDeJwt === 'function'
+      && typeof puro.exigeReautenticacion === 'function',
       'T2b (k): el bloque «puro» de supabase/functions/eliminar-cuenta/index.ts se extrae y evalúa', detalleCarga);
     if(puro){
       const f = puro.elegirClaveSecreta;
@@ -3437,6 +3438,17 @@ async function runTests(){
         && !ra.tsTexto && !ra.tsNaN && !ra.elemNulo && !ra.ahoraMalo && ra.variosUnoReciente && !ra.variosViejos && !ra.soloRefresco,
         'T2b (k): autenticacionReciente — reciente, en el borde (600 s), vencido, sin amr, amr malformado y varios métodos (basta uno reciente; token_refresh no cuenta)',
         JSON.stringify(ra));
+      // exigeReautenticacion: decide el 401 reauth_required en Deno.serve. Con el usuario ya
+      // eliminado (reintento idempotente) nunca lo exige, aunque amr esté vencido o falte.
+      const ex = puro.exigeReautenticacion;
+      const vencidoAmr = { amr: [{ method: 'oauth', timestamp: ahora - 86400 }] }, recienteAmr = { amr: [{ method: 'otp', timestamp: ahora - 30 }] };
+      const re = {
+        existeVencido: ex(true, vencidoAmr, ahora, 600), existeReciente: ex(true, recienteAmr, ahora, 600), existeSinClaims: ex(true, null, ahora, 600),
+        inexistenteVencido: ex(false, vencidoAmr, ahora, 600), inexistenteSinAmr: ex(false, { sub: 'uid-x' }, ahora, 600), inexistenteNulo: ex(false, null, ahora, 600)
+      };
+      assert(re.existeVencido && !re.existeReciente && re.existeSinClaims && !re.inexistenteVencido && !re.inexistenteSinAmr && !re.inexistenteNulo,
+        'T2b (k): exigeReautenticacion — usuario existente con amr vencido o sin claims -> reauth_required; usuario inexistente (reintento idempotente) + amr vencido -> NO responde reauth_required',
+        JSON.stringify(re));
       const b64u = t => btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const pj = puro.payloadDeJwt;
       const carga = { sub: 'uid-ñ', amr: [{ method: 'otp', timestamp: ahora }] };
