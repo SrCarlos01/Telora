@@ -41,6 +41,20 @@
   th{background:var(--surface); color:var(--gold); font-weight:600;}
   td{color:var(--cream-dim);}
   tbody tr:last-child td{border-bottom:0;}
+  /* Teléfono: cada fila pasa a ser una ficha (rótulo de columna sobre cada dato, desde
+     data-label), para leer las tablas sin desplazamiento horizontal. */
+  @media (max-width:560px){
+    .tabla-scroll{overflow-x:visible;}
+    table{min-width:0;}
+    thead{display:none;}
+    tr, td{display:block;}
+    tbody tr{border-bottom:1px solid var(--border);}
+    tbody tr:last-child{border-bottom:0;}
+    td{border-bottom:0; padding:4px 12px;}
+    td:first-child{padding-top:12px; color:var(--cream); font-weight:600;}
+    td:last-child{padding-bottom:12px;}
+    td[data-label]:not(:first-child)::before{content:attr(data-label); display:block; font-size:12px; color:var(--gold); font-weight:600;}
+  }
   footer{max-width:680px; margin:0 auto; padding:18px 16px 32px; border-top:1px solid var(--border);
     font-size:13px; color:var(--cream-dim);}
   @media (min-width:720px){ main{padding-top:40px;} h1{font-size:34px;} }
@@ -52,9 +66,8 @@
 
 <h1>Política de Privacidad de Telora</h1>
 
-<p class="vigencia"><strong>Vigente desde:</strong> 1 de octubre de 2026<br>
-<strong>Última actualización:</strong> 6 de octubre de 2026<br>
-<strong>Versión:</strong> 1.2.1 — Corrección editorial: se actualiza la ruta de acceso a la cuenta; sin cambios en el tratamiento de datos.</p>
+<p class="vigencia"><strong>Vigente desde:</strong> 16 de octubre de 2026<br>
+<strong>Versión:</strong> 1.3</p>
 
 <p>Telora es una aplicación de finanzas personales que te ayuda a registrar tus gastos, ingresos, compras en cuotas y metas de ahorro. Esta política explica qué datos personales trata Telora, para qué, dónde se guardan y cómo puedes ejercer tus derechos. Se rige por la Ley N° 19.628 sobre Protección de la Vida Privada y sus modificaciones, incluida la Ley N° 21.719.</p>
 
@@ -68,7 +81,7 @@
 
 <p><strong>Sin iniciar sesión.</strong> Todo lo que registras (gastos, ingresos, cuotas, metas, cuentas y configuración) se guarda únicamente en el almacenamiento de tu navegador o dispositivo. Esos datos no se envían a ningún servidor y el responsable no tiene acceso a ellos. Si borras los datos del navegador o desinstalas la app sin un respaldo, se pierden.</p>
 
-<p><strong>Con sesión iniciada (opcional).</strong> Si inicias sesión (con Google o con tu correo), Telora puede mantener un respaldo de tus datos en la nube para que no se pierdan. Por ahora, ese respaldo se hace desde un solo dispositivo por cuenta: el primero en activarlo o el que tú elijas cuando la app te lo pregunte. En los demás dispositivos donde inicies sesión, lo que registres en ellos sigue guardado solo en ese dispositivo. Desde que inicias sesión aplica lo que se describe a continuación.</p>
+<p><strong>Con sesión iniciada (opcional).</strong> Si inicias sesión (con Google o con un código enviado a tu correo), Telora guarda una copia de tus datos en la nube y la mantiene sincronizada entre todos los dispositivos donde uses tu cuenta. Puedes registrar y editar desde cualquiera de ellos. Si dos dispositivos modifican el mismo registro antes de sincronizarse, Telora no descarta ninguna versión por su cuenta: te muestra el cambio en «Cambios por revisar» para que elijas cuál conservar. Desde que inicias sesión aplica lo que se describe a continuación.</p>
 
 <h2>3. Qué datos tratamos cuando inicias sesión</h2>
 
@@ -78,10 +91,10 @@
 <tr><th>Categoría</th><th>Datos</th><th>Origen</th></tr>
 </thead>
 <tbody>
-<tr><td>Identificación</td><td>Correo electrónico; si entras con Google, también el nombre y la foto de perfil de tu cuenta de Google; un identificador interno de usuario</td><td>Google, al iniciar sesión con Google, o tú, al ingresar tu correo para recibir un código de acceso</td></tr>
-<tr><td>Datos financieros que tú registras</td><td>Gastos, ingresos, compras en cuotas, gastos fijos, metas y aportes, transferencias entre cuentas, nombres de cuentas, categorías, métodos de pago y fuentes de ingreso, con sus montos, fechas y descripciones</td><td>Tú</td></tr>
-<tr><td>Datos del dispositivo</td><td>Un identificador aleatorio del dispositivo generado por Telora (no es el número de serie ni el identificador publicitario) y preferencias de visualización</td><td>Telora</td></tr>
-<tr><td>Datos técnicos</td><td>Fechas de creación y modificación de cada registro</td><td>Telora</td></tr>
+<tr><td data-label="Categoría">Identificación</td><td data-label="Datos">Correo electrónico; si entras con Google, también el nombre y la foto de perfil de tu cuenta de Google; un identificador interno de usuario</td><td data-label="Origen">Google, al iniciar sesión con Google, o tú, al ingresar tu correo para recibir un código de acceso</td></tr>
+<tr><td data-label="Categoría">Datos financieros que tú registras</td><td data-label="Datos">Gastos, ingresos, compras en cuotas, gastos fijos, metas y aportes, transferencias entre cuentas, nombres de cuentas, categorías, métodos de pago y fuentes de ingreso, con sus montos, fechas y descripciones</td><td data-label="Origen">Tú</td></tr>
+<tr><td data-label="Categoría">Datos del dispositivo</td><td data-label="Datos">Un identificador aleatorio de cada dispositivo generado por Telora (no es el número de serie ni el identificador publicitario); un nombre descriptivo del dispositivo obtenido del navegador y del sistema operativo (por ejemplo, «Chrome en Windows»); qué dispositivo hizo el último cambio de cada registro; y preferencias de visualización</td><td data-label="Origen">Telora</td></tr>
+<tr><td data-label="Categoría">Datos técnicos</td><td data-label="Datos">Fechas de creación y modificación de cada registro, un número de versión por registro y, si lo eliminaste, la marca y fecha de eliminación</td><td data-label="Origen">Telora</td></tr>
 </tbody>
 </table>
 </div>
@@ -98,11 +111,11 @@
 <tr><th>Finalidad</th><th>Base legal</th></tr>
 </thead>
 <tbody>
-<tr><td>Crear y mantener tu cuenta, autenticarte</td><td>Ejecución del contrato de servicio (los Términos de Uso)</td></tr>
-<tr><td>Respaldar tus datos financieros en la nube y restaurarlos</td><td>Ejecución del contrato de servicio, a tu solicitud al iniciar sesión</td></tr>
-<tr><td>Evitar que dos dispositivos escriban a la vez y se pierdan datos</td><td>Interés legítimo en la integridad de tus datos</td></tr>
-<tr><td>Responder tus solicitudes y consultas</td><td>Ejecución del contrato y cumplimiento legal</td></tr>
-<tr><td>Cumplir obligaciones legales</td><td>Obligación legal</td></tr>
+<tr><td data-label="Finalidad">Crear y mantener tu cuenta, autenticarte</td><td data-label="Base legal">Ejecución del contrato de servicio (los Términos de Uso)</td></tr>
+<tr><td data-label="Finalidad">Guardar tus datos en la nube, restaurarlos y sincronizarlos entre tus dispositivos</td><td data-label="Base legal">Ejecución del contrato de servicio, a tu solicitud al iniciar sesión</td></tr>
+<tr><td data-label="Finalidad">Detectar cuando dos dispositivos modifican el mismo registro, para que no se pierdan datos</td><td data-label="Base legal">Ejecución del contrato de servicio</td></tr>
+<tr><td data-label="Finalidad">Responder tus solicitudes y consultas</td><td data-label="Base legal">Ejecución del contrato y cumplimiento legal</td></tr>
+<tr><td data-label="Finalidad">Cumplir obligaciones legales</td><td data-label="Base legal">Obligación legal</td></tr>
 </tbody>
 </table>
 </div>
@@ -119,10 +132,10 @@
 <tr><th>Proveedor</th><th>Servicio</th><th>Ubicación de los datos</th></tr>
 </thead>
 <tbody>
-<tr><td>Supabase, Inc.</td><td>Base de datos y autenticación</td><td>Servidores en São Paulo, Brasil (región sa-east-1)</td></tr>
-<tr><td>Google LLC</td><td>Inicio de sesión con Google</td><td>Estados Unidos y otros países según las políticas de Google</td></tr>
-<tr><td>GitHub, Inc.</td><td>Alojamiento del sitio web telora.cl</td><td>Estados Unidos</td></tr>
-<tr><td>Plus Five Five, Inc. (Resend)</td><td>Envío de los correos con el código de acceso</td><td>Brasil (región São Paulo) y Estados Unidos</td></tr>
+<tr><td data-label="Proveedor">Supabase, Inc.</td><td data-label="Servicio">Base de datos, autenticación y sincronización en tiempo real</td><td data-label="Ubicación de los datos">Servidores en São Paulo, Brasil (región sa-east-1)</td></tr>
+<tr><td data-label="Proveedor">Google LLC</td><td data-label="Servicio">Inicio de sesión con Google y, si entras con Google, la foto de perfil que se muestra en la app</td><td data-label="Ubicación de los datos">Estados Unidos y otros países según las políticas de Google</td></tr>
+<tr><td data-label="Proveedor">GitHub, Inc.</td><td data-label="Servicio">Alojamiento del sitio web telora.cl</td><td data-label="Ubicación de los datos">Estados Unidos</td></tr>
+<tr><td data-label="Proveedor">Plus Five Five, Inc. (Resend)</td><td data-label="Servicio">Envío de los correos con el código de acceso</td><td data-label="Ubicación de los datos">Brasil (región São Paulo) y Estados Unidos</td></tr>
 </tbody>
 </table>
 </div>
@@ -137,7 +150,8 @@
 
 <ul>
 <li>Conservamos tus datos en la nube mientras tu cuenta exista, porque su única finalidad es que no los pierdas.</li>
-<li>Si solicitas eliminar tu cuenta, borramos tus datos de la nube en un plazo máximo de 30 días desde la solicitud. Los datos guardados en tu propio dispositivo permanecen ahí hasta que tú los borres.</li>
+<li><strong>Registros que eliminas:</strong> cuando borras un registro con la sesión iniciada, deja de mostrarse en todos tus dispositivos, pero en la nube se conserva marcado como eliminado (con su contenido) hasta que elimines tu cuenta. Esa marca es la que permite que tus otros dispositivos se enteren del borrado y no lo vuelvan a subir. Si quieres que el contenido de registros eliminados se borre antes, puedes pedirlo a privacidad@telora.cl (ver §9).</li>
+<li>Si eliminas tu cuenta, borramos todos tus datos de la nube, incluidos los registros marcados como eliminados, en un plazo máximo de 30 días desde la solicitud. Los datos guardados en tu propio dispositivo permanecen ahí hasta que tú los borres.</li>
 </ul>
 
 <h2>8. Seguridad</h2>
@@ -158,7 +172,8 @@
 <ul>
 <li>Responderemos en un plazo máximo de 30 días corridos, prorrogable por otros 30 si la solicitud lo justifica, con aviso previo.</li>
 <li>Ejercer tus derechos es gratuito.</li>
-<li>Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo), exportar a Excel, cerrar sesión y eliminar tu cuenta desde tu ícono de cuenta (arriba a la derecha en el teléfono; en el computador, el bloque de tu cuenta del menú lateral).</li>
+<li>Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo y exportar a Excel (Configuración → Tus datos → Respaldo y exportar), cerrar sesión y eliminar tu cuenta (toca tu avatar → «Tu cuenta» → «Eliminar mi cuenta»).</li>
+<li><strong>Supresión:</strong> eliminar tu cuenta borra todo de la nube. Si prefieres conservar la cuenta y suprimir solo el contenido de registros que ya eliminaste, escríbenos y lo haremos dentro del mismo plazo.</li>
 </ul>
 
 <p>Si consideras que no se respetaron tus derechos, puedes reclamar ante la Agencia de Protección de Datos Personales.</p>
@@ -171,9 +186,11 @@
 
 <p>Telora está dirigida a personas mayores de 18 años. No recopilamos conscientemente datos de menores de edad. Si detectamos una cuenta de un menor, eliminaremos sus datos de la nube.</p>
 
-<h2>12. Cambios a esta política</h2>
+<h2 id="cambios">12. Cambios a esta política</h2>
 
-<p>Si modificamos esta política, publicaremos la nueva versión en esta página con su fecha de vigencia. Si el cambio es relevante, te avisaremos dentro de la app antes de que entre en vigencia.</p>
+<p>Si modificamos esta política, publicaremos la nueva versión en esta página con su fecha de vigencia. Si el cambio es relevante, te avisaremos dentro de la app antes de que entre en vigencia y, cuando la ley lo exija, te pediremos tu consentimiento.</p>
+
+<p><strong>Cambios de la versión 1.3:</strong> describe la sincronización entre varios dispositivos (antes, el respaldo se hacía desde un solo dispositivo por cuenta); agrega el nombre descriptivo del dispositivo, la marca del dispositivo que hizo cada cambio y el número de versión de cada registro; explica que los registros eliminados se conservan marcados hasta que elimines tu cuenta y cómo pedir que se supriman antes.</p>
 
 <h2>13. Contacto</h2>
 

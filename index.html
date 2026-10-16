@@ -229,6 +229,7 @@ button{font-family:inherit;}
   border:1px solid var(--border); background:transparent; color:var(--cream-dim); white-space:nowrap;
 }
 .notice-bar .nb-primary{background:var(--gold); border-color:var(--gold); color:#1c1310; font-weight:600;}
+a.nb-ghost{text-decoration:none;}
 :root.hc .notice-bar{border-width:2px;}
 :root.hc .notice-bar-txt span{color:var(--cream);}
 
@@ -2420,6 +2421,18 @@ button:active{ transform:scale(0.93); }
     <span>Modo solo lectura activo</span>
   </div>
 
+  <!-- Tanda C (Día 24): aviso de Política 1.3 + Términos 1.1. A quien ya usaba Telora (datos al
+       cargar o sesión) hasta «Entendido» (flag local UI_FLAG_AVISO_LEGAL); lo reparte arbitrarAvisos(). -->
+  <div class="notice-bar" id="avisoLegal" role="region" aria-label="Actualización de la Política de Privacidad y los Términos" hidden>
+    <div class="notice-bar-txt">
+      <strong>Actualizamos la Política de Privacidad (1.3) y los Términos (1.1)</strong>
+    </div>
+    <div class="notice-bar-actions">
+      <a class="nb-ghost" id="alVerCambios" href="privacidad.html#cambios" target="_blank" rel="noopener">Ver cambios</a>
+      <button type="button" class="nb-primary" id="alEntendido">Entendido</button>
+    </div>
+  </div>
+
   <!-- Tanda Q · pto 4: recordatorio de respaldo semanal (posponible, no bloqueante) -->
   <div class="notice-bar" id="backupReminder" hidden>
     <div class="notice-bar-txt">
@@ -4225,6 +4238,7 @@ function escribirEstado(json){
   if(leerEstadoGuardadoRaw() !== __rawCargado) return 'rechazado';
   localStorage.setItem('misfinanzas_data', json);
   __rawCargado = json;
+  try{ marcarAvisoLegalSiInstalacionNueva(); }catch(_){}   // antes de declarar uiLocal: se omite
   return leerEstadoGuardadoRaw() === json ? 'ok' : 'carrera';
 }
 // Relee `state` desde localStorage (lo que dejó la otra pestaña) y repinta las pantallas. No
@@ -4298,6 +4312,8 @@ function saveStateQuiet(){
 }
 
 let state = loadState();
+// Tanda C: ¿había datos guardados al abrir? (aviso legal: una instalación nueva no lo ve).
+const HABIA_DATOS_AL_CARGAR = __rawCargado !== null;
 // Semilla para poder revertir el primer cambio si su guardado falla.
 try{ __lastGoodStateJSON = JSON.stringify(state); }catch(_){ __lastGoodStateJSON = null; }
 let currentDate = new Date();
@@ -14237,6 +14253,7 @@ function renderAccountSelector(){
    la marca dura al menos lo que dura la carga (`_mem`). */
 const UI_FLAG_INVITACION = 'telora_ui_invitacion_cuenta';
 const UI_FLAG_BIENVENIDA = 'telora_ui_bienvenida_cuenta';
+const UI_FLAG_AVISO_LEGAL = 'telora_ui_aviso_legal_1_3';   // Política 1.3 + Términos 1.1
 const uiLocal = {
   ls: null,
   _mem: new Set(),
@@ -14263,13 +14280,24 @@ function registrosParaInvitacion(st){
 function debeMostrarInvitacion({ sesion, registros, vista }){
   return sesion === false && !vista && registros >= INVITACION_UMBRAL;
 }
-// Árbitro: como máximo UNA barra de aviso a la vez. Sin sesión: invitación > respaldo >
-// instalar; con sesión (o aún sin saber): respaldo > instalar. updateBanner queda fuera.
-function elegirAviso({ sesion, invitacion, respaldo, instalar }){
+// Árbitro: como máximo UNA barra de aviso a la vez. Primero el aviso legal (con o sin sesión);
+// luego, sin sesión: invitación > respaldo > instalar; con sesión (o aún sin saber):
+// respaldo > instalar. updateBanner queda fuera.
+function elegirAviso({ sesion, legal = false, invitacion, respaldo, instalar }){
+  if(legal) return 'legal';
   if(sesion === false && invitacion) return 'invitacion';
   if(respaldo) return 'respaldo';
   if(instalar) return 'instalar';
   return null;
+}
+// Aviso legal (Política 1.3 + Términos 1.1): solo a quien ya usaba Telora — había datos al
+// cargar o hay sesión — y no lo cerró. Una instalación nueva no lo ve: su primer guardado sin
+// sesión confirmada lo marca visto (marcarAvisoLegalSiInstalacionNueva, desde escribirEstado).
+function debeMostrarAvisoLegal({ visto, habiaDatos, sesion }){
+  return !visto && (habiaDatos || sesion === true);
+}
+function marcarAvisoLegalSiInstalacionNueva(){
+  if(!HABIA_DATOS_AL_CARGAR && sesionUiEstado === false && !uiLocal.visto(UI_FLAG_AVISO_LEGAL)) uiLocal.marcar(UI_FLAG_AVISO_LEGAL);
 }
 // Candidatas que dejó initDataShieldBanners (respaldo semanal / instalar); cada «Ahora no»
 // o «Entendido» la apaga y se vuelve a arbitrar.
@@ -14277,7 +14305,10 @@ const avisosPendientes = { respaldo: false, instalar: false };
 function arbitrarAvisos(){
   const registros = registrosParaInvitacion();
   const invitacion = debeMostrarInvitacion({ sesion: sesionUiEstado, registros, vista: uiLocal.visto(UI_FLAG_INVITACION) });
-  const elegido = elegirAviso({ sesion: sesionUiEstado, invitacion, respaldo: avisosPendientes.respaldo, instalar: avisosPendientes.instalar });
+  const legal = debeMostrarAvisoLegal({ visto: uiLocal.visto(UI_FLAG_AVISO_LEGAL), habiaDatos: HABIA_DATOS_AL_CARGAR, sesion: sesionUiEstado });
+  const elegido = elegirAviso({ sesion: sesionUiEstado, legal, invitacion, respaldo: avisosPendientes.respaldo, instalar: avisosPendientes.instalar });
+  const al  = document.getElementById('avisoLegal');
+  if(al) al.hidden = elegido !== 'legal';
   const inv = document.getElementById('invitacionCuenta');
   const rem = document.getElementById('backupReminder');
   const ib  = document.getElementById('installBanner');
@@ -14299,6 +14330,10 @@ function marcarInvitacionVista(){
   arbitrarAvisos();
 }
 document.getElementById('invCuentaAhoraNo').onclick = ()=> marcarInvitacionVista();
+document.getElementById('alEntendido').onclick = ()=>{
+  uiLocal.marcar(UI_FLAG_AVISO_LEGAL);
+  arbitrarAvisos();
+};
 document.getElementById('invCuentaCrear').onclick = ()=>{
   marcarInvitacionVista();
   abrirCuenta();

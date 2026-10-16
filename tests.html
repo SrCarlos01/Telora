@@ -3694,6 +3694,8 @@ async function runTests(){
   // ==================== T23 · Fase 1: cuenta (avatar, hoja, invitación, bienvenida) ====================
   // Reloj fijo (instalarRelojPruebas). Nada toca el localStorage real: los flags de interfaz van a
   // un almacén en memoria (uiLocal.ls) y la sesión se simula con renderCuentaUsuario().
+  // El aviso legal (Tanda C) va primero en el árbitro: cada almacén nuevo lo marca visto en
+  // _mem para que estas pruebas vean las demás barras; tiene su propia prueba (pruebasAvisoLegal).
   {
     const d = win.document, $ = id => d.getElementById(id);
     const memLs = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), _m: m }; };
@@ -3711,7 +3713,7 @@ async function runTests(){
     const sesionAna = { user: { email: 'ana@ejemplo.cl', user_metadata: { full_name: 'Ana Pérez' } } };
     try{
       // (a) Umbral: 19 registros no invitan; 20 sí (gastos + ingresos), con punto dorado en el avatar.
-      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); avisosPendientes.respaldo = false; avisosPendientes.instalar = false;');
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL); avisosPendientes.respaldo = false; avisosPendientes.instalar = false;');
       win.renderCuentaUsuario(null);
       conRegistros(12, 7); win.arbitrarAvisos();
       const con19 = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso') };
@@ -3731,7 +3733,7 @@ async function runTests(){
       conRegistros(30, 10); win.arbitrarAvisos();
       const despues = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso') };
       // «Crear cuenta» también la marca vista, y además abre la hoja de cuenta.
-      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL);');
       win.arbitrarAvisos();
       const otraVez = visto('invitacionCuenta');
       $('invCuentaCrear').click();
@@ -3745,7 +3747,7 @@ async function runTests(){
         JSON.stringify({ trasAhoraNo, despues, otraVez, trasCrear }));
 
       // (c) Con sesión no aparece (ni el punto), aunque haya 25 registros y no esté vista.
-      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL);');
       conRegistros(20, 5);
       win.renderCuentaUsuario(sesionAna);
       const conSesion = { inv: visto('invitacionCuenta'), punto: $('btnCuentaAvatar').classList.contains('con-aviso'),
@@ -3765,7 +3767,7 @@ async function runTests(){
       const trasInv = barrasVisibles();
       win.eval('avisosPendientes.respaldo = false;'); win.arbitrarAvisos();
       const soloInstalar = barrasVisibles();
-      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); avisosPendientes.respaldo = true;');
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL); avisosPendientes.respaldo = true;');
       win.renderCuentaUsuario(sesionAna);
       const conS = barrasVisibles();
       const tabla = [
@@ -3787,7 +3789,7 @@ async function runTests(){
       const casos = { primera: b({}), yaVisto: b({ onboardingVistoAlCargar: true }), relanzado: b({ auto: false }),
         conSesion: b({ sesion: true }), sesionDesconocida: b({ sesion: null }), yaVista: b({ vista: true }) };
       // Integración: relanzar el tutorial y terminarlo no abre la bienvenida.
-      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear();');
+      win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL);');
       win.mostrarBienvenidaCuentaSiCorresponde({ auto: false });
       const relanzadaAbre = $('sheetBienvenidaCuenta').classList.contains('open');
       const flagRelanzado = win.eval('uiLocal.ls.getItem(UI_FLAG_BIENVENIDA)');
@@ -4821,6 +4823,28 @@ async function runTests(){
         'T11: después de los escenarios que recargan el iframe principal, winVigente() falla con un mensaje claro (ninguna prueba posterior usa un `win` recargado)',
         `mensaje=${msg}`);
     }
+
+    const al = await correr(pruebasAvisoLegal);
+    assert(al && !al.error && al.nueva.sesion === false && al.nueva.habiaDatos === false && !al.nueva.legal
+      && al.nueva.hayDatos && al.nueva.flagTrasGuardar === '1' && !al.nueva.legalTrasRecargar
+      && al.nueva.pura.join() === 'false,false,true,true,false',
+      'Tanda C: instalación nueva (sin datos al cargar ni sesión) -> el aviso legal no aparece; su primer guardado lo marca visto y tampoco aparece al recargar; con sesión o con datos previos sí',
+      JSON.stringify(al && (al.error || al.nueva)));
+    assert(al && !al.error && al.sinFlag.legal && al.sinFlag.otras.length === 0 && al.sinFlag.href === 'privacidad.html#cambios'
+      && al.sinFlag.texto === 'Actualizamos la Política de Privacidad (1.3) y los Términos (1.1)' && al.sinFlag.destino,
+      'Tanda C: sin el flag telora_ui_aviso_legal_1_3 el aviso legal aparece (único, sobre las demás barras) con «Ver cambios» → privacidad.html#cambios',
+      JSON.stringify(al && (al.error || al.sinFlag)));
+    assert(al && !al.error && al.sinFlag.noTapa,
+      'Tanda C: a 375 px el aviso legal no se superpone con la barra inferior (navegación y botón +)',
+      JSON.stringify(al && (al.error || al.sinFlag.rects)));
+    assert(al && !al.error && !al.trasCerrar.legal && al.trasCerrar.flag === '1' && al.trasCerrar.siguiente === 'installBanner',
+      'Tanda C: «Entendido» cierra el aviso, guarda el flag local y deja pasar la barra siguiente del árbitro',
+      JSON.stringify(al && (al.error || al.trasCerrar)));
+    assert(al && !al.error && al.trasRecargar.cargo && !al.trasRecargar.legal && al.trasRecargar.flag === '1',
+      'Tanda C: después de recargar la página el aviso legal no vuelve a aparecer',
+      JSON.stringify(al && (al.error || al.trasRecargar)));
+    assert(al && !al.error && al.tabla.join() === 'legal,legal,instalar',
+      'Tanda C: elegirAviso da prioridad al aviso legal con y sin sesión; sin él, sigue el orden de siempre', JSON.stringify(al && (al.error || al.tabla)));
   }
 
   renderResultados();
@@ -5439,6 +5463,89 @@ async function pruebasPestanas(){
     return out;
   }finally{
     marcos.forEach(f => f.remove());
+    Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
+    Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+  }
+}
+
+// ---- Tanda C: aviso de Política 1.3 + Términos 1.1 en una pestaña real (iframe propio a 375 px) ----
+// Instalación nueva (sin datos ni sesión): no aparece. Con datos previos y sin el flag: aparece;
+// «Entendido» lo cierra; tras recargar no vuelve. El localStorage del origen se fija para cada
+// caso (sin «instalar» descartado) y se restaura al final.
+async function pruebasAvisoLegal(){
+  const tick = ms => new Promise(r => setTimeout(r, ms));
+  const FLAG = 'telora_ui_aviso_legal_1_3';
+  const lsAntes = {};
+  for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:812px; border:0;';
+  const cargar = () => new Promise(res => {
+    f.addEventListener('load', async () => {
+      for(let n = 0; n < 250; n++){
+        try{ if(typeof f.contentWindow.arbitrarAvisos === 'function' && f.contentWindow.document.readyState === 'complete') break; }catch(_){}
+        await tick(20);
+      }
+      setTimeout(res, 50);
+    }, { once: true });
+  });
+  const out = {};
+  // Espera a que la app sepa si hay sesión (Supabase local responde sin sesión); tope 3 s.
+  const esperarSesion = async w => { for(let n = 0; n < 150 && w.eval('sesionUiEstado') === null; n++) await tick(20); return w.eval('sesionUiEstado'); };
+  try{
+    // (0) Instalación nueva: sin datos guardados ni sesión -> no aparece; su primer guardado lo
+    //     marca visto, así que tampoco aparece al recargar (ya con datos).
+    localStorage.removeItem(FLAG);
+    localStorage.removeItem('misfinanzas_install_dismissed');
+    localStorage.removeItem('misfinanzas_data');
+    let p = cargar(); f.src = 'index.html'; document.body.appendChild(f); await p;
+    let w = f.contentWindow;
+    const sesionNueva = await esperarSesion(w);
+    w.arbitrarAvisos();
+    out.nueva = { sesion: sesionNueva, habiaDatos: w.eval('HABIA_DATOS_AL_CARGAR'), legal: !w.document.getElementById('avisoLegal').hidden };
+    w.eval('saveStateQuiet()');
+    out.nueva.flagTrasGuardar = localStorage.getItem(FLAG);
+    out.nueva.hayDatos = localStorage.getItem('misfinanzas_data') !== null;
+    p = cargar(); w.location.reload(); await p;
+    w = f.contentWindow;
+    out.nueva.legalTrasRecargar = !w.document.getElementById('avisoLegal').hidden;
+    out.nueva.pura = [
+      w.debeMostrarAvisoLegal({ visto: false, habiaDatos: false, sesion: false }),
+      w.debeMostrarAvisoLegal({ visto: false, habiaDatos: false, sesion: null }),
+      w.debeMostrarAvisoLegal({ visto: false, habiaDatos: false, sesion: true }),
+      w.debeMostrarAvisoLegal({ visto: false, habiaDatos: true, sesion: false }),
+      w.debeMostrarAvisoLegal({ visto: true, habiaDatos: true, sesion: true })
+    ];
+
+    // (1) Ya usaba Telora: había datos al cargar.
+    localStorage.removeItem(FLAG);
+    localStorage.removeItem('misfinanzas_install_dismissed');
+    localStorage.setItem('misfinanzas_data', JSON.stringify(fixtureBase()));
+    p = cargar(); w.location.reload(); await p;
+    w = f.contentWindow; const $ = id => w.document.getElementById(id);
+    const visibles = () => ['avisoLegal', 'invitacionCuenta', 'backupReminder', 'installBanner'].filter(id => !$(id).hidden);
+    const r = el => { const b = el.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom) }; };
+    const barra = r($('avisoLegal')), zona = r(w.document.querySelector('.bottom-zone'));
+    out.sinFlag = {
+      legal: !$('avisoLegal').hidden,
+      otras: visibles().filter(id => id !== 'avisoLegal'),
+      texto: $('avisoLegal').querySelector('strong').textContent,
+      href: $('alVerCambios').getAttribute('href'),
+      destino: (await fetch('privacidad.html', { cache: 'no-store' }).then(x => x.text())).includes('<h2 id="cambios">12. Cambios a esta política</h2>'),
+      rects: { barra, zona }, noTapa: barra.bottom > barra.top && barra.bottom <= zona.top
+    };
+    $('alEntendido').click();
+    out.trasCerrar = { legal: !$('avisoLegal').hidden, flag: localStorage.getItem(FLAG), siguiente: visibles().join() };
+    out.tabla = [
+      w.elegirAviso({ sesion: true, legal: true, invitacion: true, respaldo: true, instalar: true }),
+      w.elegirAviso({ sesion: false, legal: true, invitacion: true, respaldo: true, instalar: true }),
+      w.elegirAviso({ sesion: true, legal: false, invitacion: false, respaldo: false, instalar: true })
+    ];
+    p = cargar(); w.location.reload(); await p;
+    w = f.contentWindow;
+    out.trasRecargar = { cargo: w !== null && typeof w.arbitrarAvisos === 'function', legal: !w.document.getElementById('avisoLegal').hidden, flag: localStorage.getItem(FLAG) };
+    return out;
+  }finally{
+    f.remove();
     Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
     Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
   }

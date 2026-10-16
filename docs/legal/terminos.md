@@ -1,8 +1,7 @@
 # Términos de Uso de Telora
 
-**Vigentes desde:** 28 de septiembre de 2026
-**Última actualización:** 6 de octubre de 2026
-**Versión:** 1.0.1 — Corrección editorial: se actualizan rutas de navegación; sin cambios en las condiciones.
+**Vigentes desde:** 16 de octubre de 2026
+**Versión:** 1.1
 
 Estos términos regulan el uso de Telora, disponible en telora.cl y como aplicación instalable. Telora es ofrecida por **Carlos Humberto Álvarez Navarrete**, persona natural, con domicilio en la comuna de Olivar, Región del Libertador General Bernardo O'Higgins, Chile (contacto: privacidad@telora.cl). Al usar Telora aceptas estos términos. Si no estás de acuerdo, no uses la aplicación.
 
@@ -20,14 +19,14 @@ Telora es una herramienta para registrar y organizar tus finanzas personales: ga
 ## 3. Requisitos para usar Telora
 
 - Debes ser mayor de 18 años.
-- Puedes usar Telora sin cuenta. Para respaldar tus datos en la nube debes iniciar sesión con una cuenta de Google propia, y eres responsable de mantenerla segura.
+- Puedes usar Telora sin cuenta. Para guardar tus datos en la nube y usarlos en varios dispositivos debes iniciar sesión con una cuenta de Google propia o con un correo electrónico propio, al que te enviaremos un código de acceso. Eres responsable de mantener segura esa cuenta o ese correo.
 
 ## 4. Tus datos
 
 - Los datos que registras son tuyos. Telora los trata según la [Política de Privacidad](privacidad.html).
 - Eres responsable de la exactitud de lo que ingresas; los cálculos de Telora dependen de ello.
 - **Sin sesión iniciada**, tus datos existen solo en tu dispositivo: si los borras o pierdes el dispositivo sin un respaldo descargado, no se pueden recuperar.
-- Con sesión iniciada, Telora puede mantener un respaldo en la nube desde un solo dispositivo por cuenta, como se explica en la [Política de Privacidad](privacidad.html). Aun así, te recomendamos descargar también un respaldo periódico desde Configuración → Respaldo.
+- **Con sesión iniciada**, Telora guarda tus datos en la nube y los sincroniza entre los dispositivos donde uses tu cuenta. Si dos dispositivos modifican el mismo registro antes de sincronizarse, la app te mostrará el cambio en «Cambios por revisar» para que elijas qué conservar. Aun así, te recomendamos descargar un respaldo periódico desde Configuración → Tus datos → Respaldo y exportar.
 
 ## 5. Uso aceptable
 
@@ -39,23 +38,23 @@ Telora se ofrece en su estado actual. Hacemos esfuerzos razonables para que func
 
 ## 7. Funciones de pago
 
-Actualmente Telora es gratuita. Si en el futuro se ofrecen funciones de pago (Premium), sus precios, período de facturación, renovación y forma de cancelación se informarán claramente antes de contratar, y estos términos se actualizarán. Nada de lo que hoy es gratuito para ti se cobrará sin tu aceptación expresa.
+Actualmente Telora es gratuita. Si en el futuro se ofrecen funciones de pago (Premium), sus precios, período de facturación, renovación, forma de cancelación y condiciones de retracto y reembolso se informarán claramente antes de contratar, y estos términos se actualizarán. Nada de lo que hoy es gratuito para ti se cobrará sin tu aceptación expresa.
 
 ## 8. Propiedad intelectual
 
-El nombre Telora, su diseño, código y contenidos pertenecen a su autor. El uso de la aplicación no te otorga derechos sobre ellos, más allá de usarla conforme a estos términos.
+El nombre Telora, su diseño, código y contenidos pertenecen a su autor. El uso de la aplicación no te otorga derechos sobre ellos, más allá de usarla conforme a estos términos. Telora incluye componentes de código abierto de terceros, que se rigen por sus propias licencias.
 
 ## 9. Responsabilidad
 
-En la medida permitida por la ley, Telora no será responsable por decisiones financieras tomadas con base en la información de la app, ni por pérdidas de datos causadas por el borrado del almacenamiento de tu dispositivo, por la pérdida de acceso a tu cuenta de Google o por fallas de proveedores externos. Nada en estos términos limita los derechos que te otorga la Ley N° 19.496 sobre Protección de los Derechos de los Consumidores.
+En la medida permitida por la ley, Telora no será responsable por decisiones financieras tomadas con base en la información de la app, ni por pérdidas de datos causadas por el borrado del almacenamiento de tu dispositivo, por la pérdida de acceso a tu cuenta de Google o a tu correo, o por fallas de proveedores externos. Nada en estos términos limita los derechos que te otorga la Ley N° 19.496 sobre Protección de los Derechos de los Consumidores.
 
 ## 10. Término
 
-Puedes dejar de usar Telora cuando quieras y solicitar la eliminación de tu cuenta escribiendo a privacidad@telora.cl. Podemos suspender una cuenta que infrinja estos términos, informándote el motivo.
+Puedes dejar de usar Telora cuando quieras. Puedes eliminar tu cuenta desde «Tu cuenta» (toca tu avatar) → «Eliminar mi cuenta», o solicitarlo escribiendo a privacidad@telora.cl. Podemos suspender una cuenta que infrinja estos términos, informándote el motivo.
 
 ## 11. Cambios a estos términos
 
-Publicaremos cualquier cambio en esta página con su fecha de vigencia. Si el cambio es relevante, te avisaremos dentro de la app antes de que entre en vigencia. Si sigues usando Telora después de esa fecha, se entiende que aceptas los nuevos términos.
+Publicaremos cualquier cambio en esta página con su fecha de vigencia. Si el cambio es relevante para tus derechos u obligaciones, te avisaremos dentro de la app antes de que entre en vigencia y te pediremos aceptarlo expresamente. Si no lo aceptas, puedes dejar de usar Telora y descargar o eliminar tus datos en cualquier momento. Los cambios que solo describen mejor el funcionamiento del servicio, sin afectar tus derechos u obligaciones, rigen desde su publicación.
 
 ## 12. Ley aplicable
 

@@ -1,8 +1,7 @@
 # Política de Privacidad de Telora
 
-**Vigente desde:** 1 de octubre de 2026
-**Última actualización:** 6 de octubre de 2026
-**Versión:** 1.2.1 — Corrección editorial: se actualiza la ruta de acceso a la cuenta; sin cambios en el tratamiento de datos.
+**Vigente desde:** 16 de octubre de 2026
+**Versión:** 1.3
 
 Telora es una aplicación de finanzas personales que te ayuda a registrar tus gastos, ingresos, compras en cuotas y metas de ahorro. Esta política explica qué datos personales trata Telora, para qué, dónde se guardan y cómo puedes ejercer tus derechos. Se rige por la Ley N° 19.628 sobre Protección de la Vida Privada y sus modificaciones, incluida la Ley N° 21.719.
 
@@ -16,7 +15,7 @@ Contacto para cualquier materia de privacidad: **privacidad@telora.cl**
 
 **Sin iniciar sesión.** Todo lo que registras (gastos, ingresos, cuotas, metas, cuentas y configuración) se guarda únicamente en el almacenamiento de tu navegador o dispositivo. Esos datos no se envían a ningún servidor y el responsable no tiene acceso a ellos. Si borras los datos del navegador o desinstalas la app sin un respaldo, se pierden.
 
-**Con sesión iniciada (opcional).** Si inicias sesión (con Google o con tu correo), Telora puede mantener un respaldo de tus datos en la nube para que no se pierdan. Por ahora, ese respaldo se hace desde un solo dispositivo por cuenta: el primero en activarlo o el que tú elijas cuando la app te lo pregunte. En los demás dispositivos donde inicies sesión, lo que registres en ellos sigue guardado solo en ese dispositivo. Desde que inicias sesión aplica lo que se describe a continuación.
+**Con sesión iniciada (opcional).** Si inicias sesión (con Google o con un código enviado a tu correo), Telora guarda una copia de tus datos en la nube y la mantiene sincronizada entre todos los dispositivos donde uses tu cuenta. Puedes registrar y editar desde cualquiera de ellos. Si dos dispositivos modifican el mismo registro antes de sincronizarse, Telora no descarta ninguna versión por su cuenta: te muestra el cambio en «Cambios por revisar» para que elijas cuál conservar. Desde que inicias sesión aplica lo que se describe a continuación.
 
 ## 3. Qué datos tratamos cuando inicias sesión
 
@@ -24,8 +23,8 @@ Contacto para cualquier materia de privacidad: **privacidad@telora.cl**
 | --- | --- | --- |
 | Identificación | Correo electrónico; si entras con Google, también el nombre y la foto de perfil de tu cuenta de Google; un identificador interno de usuario | Google, al iniciar sesión con Google, o tú, al ingresar tu correo para recibir un código de acceso |
 | Datos financieros que tú registras | Gastos, ingresos, compras en cuotas, gastos fijos, metas y aportes, transferencias entre cuentas, nombres de cuentas, categorías, métodos de pago y fuentes de ingreso, con sus montos, fechas y descripciones | Tú |
-| Datos del dispositivo | Un identificador aleatorio del dispositivo generado por Telora (no es el número de serie ni el identificador publicitario) y preferencias de visualización | Telora |
-| Datos técnicos | Fechas de creación y modificación de cada registro | Telora |
+| Datos del dispositivo | Un identificador aleatorio de cada dispositivo generado por Telora (no es el número de serie ni el identificador publicitario); un nombre descriptivo del dispositivo obtenido del navegador y del sistema operativo (por ejemplo, «Chrome en Windows»); qué dispositivo hizo el último cambio de cada registro; y preferencias de visualización | Telora |
+| Datos técnicos | Fechas de creación y modificación de cada registro, un número de versión por registro y, si lo eliminaste, la marca y fecha de eliminación | Telora |
 
 Telora **no** se conecta a tu banco, no conoce tus claves bancarias ni el número de tus tarjetas, y no recopila tu ubicación.
 
@@ -36,8 +35,8 @@ Telora **no** se conecta a tu banco, no conoce tus claves bancarias ni el númer
 | Finalidad | Base legal |
 | --- | --- |
 | Crear y mantener tu cuenta, autenticarte | Ejecución del contrato de servicio (los Términos de Uso) |
-| Respaldar tus datos financieros en la nube y restaurarlos | Ejecución del contrato de servicio, a tu solicitud al iniciar sesión |
-| Evitar que dos dispositivos escriban a la vez y se pierdan datos | Interés legítimo en la integridad de tus datos |
+| Guardar tus datos en la nube, restaurarlos y sincronizarlos entre tus dispositivos | Ejecución del contrato de servicio, a tu solicitud al iniciar sesión |
+| Detectar cuando dos dispositivos modifican el mismo registro, para que no se pierdan datos | Ejecución del contrato de servicio |
 | Responder tus solicitudes y consultas | Ejecución del contrato y cumplimiento legal |
 | Cumplir obligaciones legales | Obligación legal |
 
@@ -49,8 +48,8 @@ Telora usa proveedores que tratan datos por cuenta del responsable, solo para pr
 
 | Proveedor | Servicio | Ubicación de los datos |
 | --- | --- | --- |
-| Supabase, Inc. | Base de datos y autenticación | Servidores en São Paulo, Brasil (región sa-east-1) |
-| Google LLC | Inicio de sesión con Google | Estados Unidos y otros países según las políticas de Google |
+| Supabase, Inc. | Base de datos, autenticación y sincronización en tiempo real | Servidores en São Paulo, Brasil (región sa-east-1) |
+| Google LLC | Inicio de sesión con Google y, si entras con Google, la foto de perfil que se muestra en la app | Estados Unidos y otros países según las políticas de Google |
 | GitHub, Inc. | Alojamiento del sitio web telora.cl | Estados Unidos |
 | Plus Five Five, Inc. (Resend) | Envío de los correos con el código de acceso | Brasil (región São Paulo) y Estados Unidos |
 
@@ -63,7 +62,8 @@ Al iniciar sesión, tus datos se almacenan fuera de Chile, en Brasil (Supabase).
 ## 7. Cuánto tiempo conservamos tus datos
 
 - Conservamos tus datos en la nube mientras tu cuenta exista, porque su única finalidad es que no los pierdas.
-- Si solicitas eliminar tu cuenta, borramos tus datos de la nube en un plazo máximo de 30 días desde la solicitud. Los datos guardados en tu propio dispositivo permanecen ahí hasta que tú los borres.
+- **Registros que eliminas:** cuando borras un registro con la sesión iniciada, deja de mostrarse en todos tus dispositivos, pero en la nube se conserva marcado como eliminado (con su contenido) hasta que elimines tu cuenta. Esa marca es la que permite que tus otros dispositivos se enteren del borrado y no lo vuelvan a subir. Si quieres que el contenido de registros eliminados se borre antes, puedes pedirlo a privacidad@telora.cl (ver §9).
+- Si eliminas tu cuenta, borramos todos tus datos de la nube, incluidos los registros marcados como eliminados, en un plazo máximo de 30 días desde la solicitud. Los datos guardados en tu propio dispositivo permanecen ahí hasta que tú los borres.
 
 ## 8. Seguridad
 
@@ -80,7 +80,8 @@ Puedes ejercer en cualquier momento tus derechos de **acceso, rectificación, su
 
 - Responderemos en un plazo máximo de 30 días corridos, prorrogable por otros 30 si la solicitud lo justifica, con aviso previo.
 - Ejercer tus derechos es gratuito.
-- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo (Configuración → Respaldo), exportar a Excel, cerrar sesión y eliminar tu cuenta desde tu ícono de cuenta (arriba a la derecha en el teléfono; en el computador, el bloque de tu cuenta del menú lateral).
+- Muchas acciones las puedes hacer tú mismo en la app: editar o borrar cualquier registro, descargar un respaldo completo y exportar a Excel (Configuración → Tus datos → Respaldo y exportar), cerrar sesión y eliminar tu cuenta (toca tu avatar → «Tu cuenta» → «Eliminar mi cuenta»).
+- **Supresión:** eliminar tu cuenta borra todo de la nube. Si prefieres conservar la cuenta y suprimir solo el contenido de registros que ya eliminaste, escríbenos y lo haremos dentro del mismo plazo.
 
 Si consideras que no se respetaron tus derechos, puedes reclamar ante la Agencia de Protección de Datos Personales.
 
@@ -94,7 +95,9 @@ Telora está dirigida a personas mayores de 18 años. No recopilamos conscientem
 
 ## 12. Cambios a esta política
 
-Si modificamos esta política, publicaremos la nueva versión en esta página con su fecha de vigencia. Si el cambio es relevante, te avisaremos dentro de la app antes de que entre en vigencia.
+Si modificamos esta política, publicaremos la nueva versión en esta página con su fecha de vigencia. Si el cambio es relevante, te avisaremos dentro de la app antes de que entre en vigencia y, cuando la ley lo exija, te pediremos tu consentimiento.
+
+**Cambios de la versión 1.3:** describe la sincronización entre varios dispositivos (antes, el respaldo se hacía desde un solo dispositivo por cuenta); agrega el nombre descriptivo del dispositivo, la marca del dispositivo que hizo cada cambio y el número de versión de cada registro; explica que los registros eliminados se conservan marcados hasta que elimines tu cuenta y cómo pedir que se supriman antes.
 
 ## 13. Contacto
 
