@@ -3528,6 +3528,9 @@ async function runTests(){
 
       // (f) «+ Agregar»: abre el menú con 5 opciones y foco en la primera; flechas recorren; Esc cierra y devuelve el foco.
       const btn = d.getElementById('deskAddBtn'), menu = d.getElementById('deskAddMenu');
+      // Día 24 · A2: el onboarding abierto (iframe sin datos) deja el fondo inert; se cierra mientras se usa el menú.
+      const obAbiertoF = d.getElementById('sheetOnboarding').classList.contains('open');
+      if(obAbiertoF) win.closeSheet('sheetOnboarding');
       btn.click();
       const visibles = () => [...menu.querySelectorAll('.desk-add-item')].filter(b => !b.hidden).map(b => b.dataset.add);
       const rF = { abierto: !menu.hidden, expanded: btn.getAttribute('aria-expanded'), opciones: visibles().join(), foco: d.activeElement.dataset.add };
@@ -3535,6 +3538,7 @@ async function runTests(){
       tecla('ArrowUp'); tecla('ArrowUp'); rF.trasArribaX2 = d.activeElement.dataset.add;
       tecla('Escape');
       rF.trasEsc = { cerrado: menu.hidden, expanded: btn.getAttribute('aria-expanded'), focoEnBoton: d.activeElement === btn };
+      if(obAbiertoF) win.openSheet('sheetOnboarding');
       assert(rF.abierto && rF.expanded === 'true' && rF.opciones === 'gasto,ingreso,cuota,meta,transferencia' && rF.foco === 'gasto'
         && rF.trasAbajo === 'ingreso' && rF.trasArribaX2 === 'transferencia' && rF.trasEsc.cerrado && rF.trasEsc.expanded === 'false' && rF.trasEsc.focoEnBoton,
         'T20 E1 (f): «+ Agregar» abre el menú (5 opciones, foco en Gasto), las flechas lo recorren y Esc lo cierra devolviendo el foco', JSON.stringify(rF));
@@ -4047,6 +4051,9 @@ async function runTests(){
 
       // (h) Foco: el cierre del usuario (Escape / [data-close]) lo devuelve al avatar; closeSheet() programático no.
       iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:900px; border:0;'; void win.innerWidth; win.syncDeskLayout();
+      // Día 24 · A2: el onboarding abierto (iframe sin datos) deja el fondo inert; se cierra mientras se prueba el avatar.
+      const obAbiertoH = $('sheetOnboarding').classList.contains('open');
+      if(obAbiertoH) win.closeSheet('sheetOnboarding');
       av.focus(); av.click();
       const abierta = $('sheetCuenta').classList.contains('open');
       d.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -4058,6 +4065,7 @@ async function runTests(){
       $('inpLoginCorreo').focus();
       win.closeSheet('sheetCuenta');
       const programatico = d.activeElement === av;
+      if(obAbiertoH) win.openSheet('sheetOnboarding');
       iframe.style.cssText = 'display:none'; win.syncDeskLayout();
       assert(abierta && trasEscape.cerrada && trasEscape.foco && trasCerrar && !programatico,
         'T23 (h): el avatar abre #sheetCuenta; Escape y «cerrar» devuelven el foco al avatar; closeSheet() programático no lo mueve',
@@ -4858,6 +4866,175 @@ async function runTests(){
       try{
         abiertas.forEach(ov => ov.classList.remove('open'));
         if(fsPrev) raiz.style.setProperty('--font-scale', fsPrev); else raiz.style.removeProperty('--font-scale');
+        iframe.style.cssText = 'display:none'; win.syncDeskLayout();
+      }catch(_){}
+    }
+  }
+
+  // ==================== Día 24 · Tanda E: accesibilidad WCAG 2.1 AA (A1–A6) ====================
+  // iframe con layout a 375 px fuera de pantalla (foco y gestos necesitan render). Las hojas que
+  // ya estuvieran abiertas al empezar (p. ej. el onboarding) se cierran y se reabren al final.
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const raiz = d.documentElement;
+    const stOrig = win.eval('JSON.stringify(state)');
+    const pasoOrig = win.eval('onboardingPaso');
+    const abiertasAntes = [...d.querySelectorAll('.sheet-overlay.open')].map(o => o.id);
+    const cerrar = () => [...d.querySelectorAll('.sheet-overlay.open')].forEach(o => win.closeSheet(o.id));
+    const ocultoAT = el => !!el.closest('[aria-hidden="true"]');
+    const nombre = el => {
+      const al = (el.getAttribute('aria-label') || '').trim(); if(al) return al;
+      const lb = (el.getAttribute('aria-labelledby') || '').trim();
+      if(lb){ const t = lb.split(/\s+/).map(id => d.getElementById(id)).filter(Boolean).map(n => n.textContent.trim()).join(' ').trim(); if(t) return t; }
+      const ls = [...(el.labels || [])].map(l => l.textContent.trim()).join(' ').trim(); if(ls) return ls;
+      return (el.getAttribute('title') || '').trim();
+    };
+    const fondo = () => [...d.body.children].filter(n => n.tagName !== 'SCRIPT');
+    const inertes = () => fondo().filter(n => n.inert).map(n => n.id || n.className);
+    const tecla = key => d.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    // Razón de contraste WCAG 2.x: (L1 + 0,05) / (L2 + 0,05) con luminancia relativa sRGB.
+    const lumRel = hex => {
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex).trim());
+      return [m[1], m[2], m[3]].map(x => parseInt(x, 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+        .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+    };
+    const razon = (a, b) => { const x = lumRel(a), y = lumRel(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const rgb = hex => { const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim()); return `rgb(${parseInt(m[1],16)}, ${parseInt(m[2],16)}, ${parseInt(m[3],16)})`; };
+    try{
+      win.saveState = (orig => { win.__saveStateA11y = orig; return () => true; })(win.saveState);
+      cerrar();
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:900px; border:0;';
+      void win.innerWidth; win.syncDeskLayout();
+      win.renderAll(); win.renderConfig();
+      win.eval('onboardingPaso = 4; onboardingRender();');     // paso con campos dinámicos (montos de gastos fijos)
+
+      // (A1) Cada input/select/textarea (salvo type=hidden y los ocultos al lector con aria-hidden)
+      //      tiene nombre accesible; cada label[for] apunta a un campo existente.
+      const campos = [...d.querySelectorAll('input, select, textarea')].filter(el => el.type !== 'hidden' && !ocultoAT(el));
+      const sinNombre = campos.filter(el => !nombre(el)).map(el => el.id || el.name || el.outerHTML.slice(0, 80));
+      // Visibles: se muestra cada hoja (solo la clase, como en H1) y se cuentan los campos con caja.
+      const vistos = new Set(campos.filter(el => el.getClientRects().length));
+      [...d.querySelectorAll('.sheet-overlay')].forEach(ov => {
+        ov.classList.add('open');
+        ov.querySelectorAll('input, select, textarea').forEach(el => { if(el.getClientRects().length && !ocultoAT(el) && el.type !== 'hidden') vistos.add(el); });
+        ov.classList.remove('open');
+      });
+      const visibles = vistos.size;
+      const visiblesSinNombre = [...vistos].filter(el => !nombre(el)).length;
+      const forRotos = [...d.querySelectorAll('label[for]')].filter(l => !l.control).map(l => l.htmlFor);
+      const deben = ['mFecha', 'tFecha', 'expDesde', 'expHasta', 'gNumCuotas', 'tOrigen', 'intTasa', 'newCategoria', 'restoreFileInput'];
+      const obMontos = [...d.querySelectorAll('[data-ob-monto-idx]')];
+      assert(campos.length >= 60 && sinNombre.length === 0 && visibles >= 30 && visiblesSinNombre === 0 && forRotos.length === 0
+        && deben.every(id => nombre($(id))) && obMontos.length > 0 && obMontos.every(el => nombre(el).startsWith('Monto de ')),
+        'Día 24 A1: todo input/select/textarea tiene nombre accesible (label[for], label envolvente, aria-label o aria-labelledby) y ningún label[for] queda roto',
+        `campos: ${campos.length} (visibles a 375 px: ${visibles}) · sin nombre: ${sinNombre.join(', ') || 'ninguno'} · for rotos: ${forRotos.join(', ') || 'ninguno'} · ` +
+        deben.map(id => `${id}=«${nombre($(id))}»`).join(' '));
+
+      // (A2a) Cada .sheet-overlay: role=dialog, aria-modal=true y aria-labelledby a su propio título (h2/h3).
+      const hojas = [...d.querySelectorAll('.sheet-overlay')];
+      const DINAMICOS = ['choqueTitulo'];                                // se llena al abrir la hoja
+      const malas = hojas.filter(ov => {
+        const t = d.getElementById(ov.getAttribute('aria-labelledby') || '');
+        return ov.getAttribute('role') !== 'dialog' || ov.getAttribute('aria-modal') !== 'true' || !t || !ov.contains(t)
+          || !/^H[23]$/.test(t.tagName) || (!t.textContent.trim() && !DINAMICOS.includes(t.id));
+      }).map(ov => ov.id);
+      assert(hojas.length === 47 && malas.length === 0,
+        'Día 24 A2: las 47 hojas tienen role="dialog", aria-modal="true" y aria-labelledby a su título (h2/h3, dentro de la hoja)',
+        `hojas: ${hojas.length} · con problemas: ${malas.join(', ') || 'ninguna'} · onboarding → ${$('sheetOnboarding').getAttribute('aria-labelledby')} = «${($('obTitulo') || {}).textContent}»`);
+
+      // (A2b) inert: abrir/apilar/cerrar por Escape, [data-close], fondo y gesto; data-nodismiss; foco de vuelta.
+      const pasos = {};
+      pasos.inicio = inertes();
+      const btn = $('btnConfig');
+      btn.focus(); const focoInicial = d.activeElement === btn;
+      btn.click();
+      const cfg = $('sheetConfig');
+      pasos.config = { abierta: cfg.classList.contains('open'), app: $('app').inert, nav: $('deskNav').inert, hoja: cfg.inert,
+        bloqueantes: [...d.querySelectorAll('.blocker-overlay')].every(b => !b.inert),
+        toast: !$('toastHost') || !$('toastHost').inert };
+      $('btnAdd').focus(); pasos.config.sinFocoFondo = d.activeElement !== $('btnAdd');
+      win.abrirHojaConfig('cfgHojaApariencia');
+      const hija = $('cfgHojaApariencia');
+      pasos.apilada = { hija: hija.inert, padre: cfg.inert, app: $('app').inert };
+      tecla('Escape');
+      pasos.trasEscape = { hija: hija.classList.contains('open'), padre: cfg.inert, app: $('app').inert };
+      cfg.querySelector('.hoja-cerrar').click();
+      pasos.trasCerrar = { abierta: cfg.classList.contains('open'), inertes: inertes(), foco: focoInicial && d.activeElement === btn };
+      win.openSheet('sheetChoice');
+      const hojaCh = $('sheetChoice').querySelector('.sheet');
+      const pe = (tipo, y) => new win.PointerEvent(tipo, { pointerId: 951, pointerType: 'touch', isPrimary: true, clientX: 150, clientY: y, bubbles: true });
+      const conInertGesto = $('app').inert;
+      hojaCh.dispatchEvent(pe('pointerdown', 300)); hojaCh.dispatchEvent(pe('pointermove', 420)); hojaCh.dispatchEvent(pe('pointerup', 420));
+      pasos.gesto = { antes: conInertGesto, cerrada: !$('sheetChoice').classList.contains('open'), inertes: inertes() };
+      win.openSheet('sheetExportar');
+      $('sheetExportar').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+      pasos.fondo = { cerrada: !$('sheetExportar').classList.contains('open'), inertes: inertes() };
+      win.openSheet('sheetSyncBorradoMasivo');
+      tecla('Escape');
+      pasos.nodismiss = { sigue: $('sheetSyncBorradoMasivo').classList.contains('open'), app: $('app').inert };
+      win.closeSheet('sheetSyncBorradoMasivo');
+      pasos.final = inertes();
+      assert(pasos.inicio.length === 0
+        && pasos.config.abierta && pasos.config.app && pasos.config.nav && !pasos.config.hoja && pasos.config.bloqueantes && pasos.config.toast && pasos.config.sinFocoFondo
+        && !pasos.apilada.hija && pasos.apilada.padre && pasos.apilada.app
+        && !pasos.trasEscape.hija && !pasos.trasEscape.padre && pasos.trasEscape.app
+        && !pasos.trasCerrar.abierta && pasos.trasCerrar.inertes.length === 0 && pasos.trasCerrar.foco
+        && pasos.gesto.antes && pasos.gesto.cerrada && pasos.gesto.inertes.length === 0
+        && pasos.fondo.cerrada && pasos.fondo.inertes.length === 0
+        && pasos.nodismiss.sigue && pasos.nodismiss.app && pasos.final.length === 0,
+        'Día 24 A2: con una hoja abierta el fondo (#app, menú lateral, hojas de abajo) queda inert y la hoja no; solo la superior es interactiva; Escape, [data-close], fondo y gesto lo limpian; el foco vuelve al origen',
+        JSON.stringify(pasos));
+
+      // (A3/A4) Contraste ≥ 4,5:1 de --gold-dim y --danger-text contra --bg, --surface y --surface-2
+      //         en todas las paletas, con y sin alto contraste (valores reales que deja aplicarPaleta).
+      const paletas = JSON.parse(win.eval('JSON.stringify(Object.keys(PALETAS))'));
+      const bajos = [], minimos = {};
+      paletas.forEach(k => [false, true].forEach(hc => {
+        win.eval(`state.config.altoContraste = ${hc}; aplicarPaleta(${JSON.stringify(k)});`);
+        const v = t => raiz.style.getPropertyValue(t).trim();
+        ['--gold-dim', '--danger-text'].forEach(txt => ['--bg', '--surface', '--surface-2'].forEach(f => {
+          const r = razon(v(txt), v(f));
+          const clave = `${k}${hc ? '+hc' : ''} ${txt}`;
+          minimos[clave] = Math.min(minimos[clave] || 99, r);
+          if(r < 4.5) bajos.push(`${clave}/${f}: ${r.toFixed(2)}`);
+        }));
+      }));
+      win.eval('state.config.altoContraste = false; aplicarPaleta("cafe");');
+      const usaTexto = win.getComputedStyle(d.querySelector('.btn-danger')).color === rgb(raiz.style.getPropertyValue('--danger-text'))
+        && win.getComputedStyle(d.querySelector('.field label')).color === rgb(raiz.style.getPropertyValue('--gold-dim'));
+      assert(paletas.length >= 4 && bajos.length === 0 && usaTexto,
+        `Día 24 A3/A4: --gold-dim y --danger-text ≥ 4,5:1 contra bg, surface y surface-2 en las ${paletas.length} paletas y en alto contraste; .btn-danger y .field label los usan`,
+        `bajo 4,5: ${bajos.join(' · ') || 'ninguno'} · mínimos: ` + Object.entries(minimos).map(([k, r]) => `${k} ${r.toFixed(2)}`).join(' · '));
+
+      // (A5) Anillo de foco 2 px --gold con :focus-visible en los campos (regla presente y ganadora).
+      const reglas = [];
+      [...d.styleSheets].forEach(sh => { try{ [...sh.cssRules].forEach(r => reglas.push(r)); }catch(_){} });
+      const anillo = reglas.find(r => r.selectorText && r.selectorText.includes('.field input:focus-visible'));
+      const indice = r => reglas.indexOf(r);
+      const outlineNone = reglas.find(r => r.selectorText === '.field input:focus, .field select:focus, .field textarea:focus');
+      // Con var() en el atajo, los longhands (outlineStyle…) se leen vacíos: se compara el atajo.
+      assert(!!anillo && anillo.style.outline === '2px solid var(--gold)' && anillo.style.outlineOffset === '2px'
+        && ['.add-inline input:focus-visible', '.monto-hero:has(input:focus-visible)', '.hist-search-input:has(input:focus-visible)'].every(s => anillo.selectorText.includes(s))
+        && !!outlineNone && indice(anillo) > indice(outlineNone),
+        'Día 24 A5: los campos tienen anillo de foco :focus-visible de 2 px en --gold, declarado después de los :focus{outline:none}',
+        anillo ? `${anillo.selectorText} → ${anillo.style.outline}` : 'regla no encontrada');
+
+      // (A6) Ningún SVG dentro de un botón/label/enlace queda expuesto al lector (aria-hidden propio).
+      const svgExpuestos = [...d.querySelectorAll('button svg, label svg, a svg, [role="button"] svg')]
+        .filter(s => s.getAttribute('aria-hidden') !== 'true' && s.getAttribute('role') !== 'img').map(s => (s.closest('button, label, a, [role="button"]').id || s.closest('button, label, a, [role="button"]').className));
+      const cfgIc = [...d.querySelectorAll('#sheetConfig .cfg-ic svg')];
+      assert(svgExpuestos.length === 0 && cfgIc.length >= 9 && cfgIc.every(s => s.getAttribute('aria-hidden') === 'true'),
+        'Día 24 A6: los SVG decorativos de botones y filas con texto llevan aria-hidden="true"',
+        `expuestos: ${svgExpuestos.join(', ') || 'ninguno'} · íconos de Configuración: ${cfgIc.length}`);
+    }catch(e){
+      assert(false, 'Día 24 A1–A6: excepción durante las pruebas de accesibilidad', e && e.stack || String(e));
+    }finally{
+      try{
+        cerrar();
+        win.eval('state = ' + stOrig + '; aplicarPaleta(state.config.paleta || "cafe"); onboardingPaso = ' + pasoOrig + '; onboardingRender();');
+        resetCaches(win);
+        if(win.__saveStateA11y){ win.saveState = win.__saveStateA11y; delete win.__saveStateA11y; }
+        abiertasAntes.forEach(id => win.openSheet(id));
         iframe.style.cssText = 'display:none'; win.syncDeskLayout();
       }catch(_){}
     }

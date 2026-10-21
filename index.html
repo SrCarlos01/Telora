@@ -84,16 +84,19 @@
   --burgundy-light:#7A2A3D;
   --burgundy-dim:#4A1826;
   --gold:#C9A66B;
-  --gold-dim:#8A6A55;
+  --gold-dim:#A5836C;   /* Día 24 · A3: antes #8A6A55 (3,28:1 sobre surface-2); ahora ≥4,5:1 sobre bg/surface/surface-2 */
   --cream:#F3E9DD;
   --cream-dim:#B79A82;
   --danger:#B4544A;
+  /* Día 24 · A4: --danger como TEXTO (cifras de gasto, avisos, .btn-danger). --danger queda para
+     fondos y bordes: aclararlo bajaría el texto blanco de la etiqueta «Cuotas pendientes». */
+  --danger-text:#C2746C;
   --success:#7D9B69;
   /* Color por tipo de movimiento (Corrección Tanda I) — Historial, Resumen, Insights.
      Ingreso/gasto reusan success/danger (que sí siguen la paleta activa); cuota y
      aporte son tonos cálidos fijos que funcionan sobre todas las paletas oscuras. */
   --mv-ingreso:var(--success);
-  --mv-gasto:var(--danger);
+  --mv-gasto:var(--danger-text);
   --mv-cuota:#CE7C3A;
   --mv-aporte:#D9B24C;
   /* Tanda E0 (escritorio): colores que hoy eran fijos en el CSS, ahora como tokens con
@@ -246,7 +249,7 @@ a.nb-ghost{text-decoration:none;}
   max-width:400px; width:100%; padding:24px 22px calc(20px + env(safe-area-inset-bottom));
   text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.5);
 }
-.blocker-icon{color:var(--danger); line-height:0;}
+.blocker-icon{color:var(--danger-text); line-height:0;}
 .blocker-icon .icon{width:34px; height:34px;}
 .blocker-card h2{font-size:19px; font-weight:600; margin:10px 0 10px; color:var(--cream);}
 .blocker-body{font-size:13.5px; line-height:1.55; color:var(--cream-dim); margin:0 0 18px;}
@@ -372,7 +375,7 @@ a.nb-ghost{text-decoration:none;}
    visual que el resto de la tarjeta — es la única cifra que NO está descontada del
    Disponible. var(--danger) sigue la paleta activa + su redefinición en alto contraste,
    sin variable nueva. El formato atenuado de mes CERRADO (Tanda R3, arriba) no se toca. */
-#rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:var(--danger); font-weight:800; font-size:16px;}
+#rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:var(--danger-text); font-weight:800; font-size:16px;}
 #rDisponiblePendRow:not(.bx-cerrado) .bx-tag{background:var(--danger); color:var(--on-danger); border-color:var(--danger); font-weight:700;}
 :root.hc #rDisponiblePendRow:not(.bx-cerrado) .bx-v.neg{color:#fff;}
 /* Tanda R3 — en meses CERRADOS "Cuotas pendientes" es una nota informativa atenuada:
@@ -469,7 +472,7 @@ a.nb-ghost{text-decoration:none;}
 .dd-row.dd-total .dd-k{ color:var(--cream); font-weight:700; text-transform:uppercase;
   letter-spacing:.04em; font-size:12px; }
 .dd-row.dd-total .dd-v{ font-size:17px; font-weight:700; color:var(--gold); }
-.dd-descuadre{ color:var(--danger); font-weight:600; font-size:12.5px; line-height:1.5; margin:12px 0 0; }
+.dd-descuadre{ color:var(--danger-text); font-weight:600; font-size:12.5px; line-height:1.5; margin:12px 0 0; }
 .dd-ayuda{ color:var(--cream-dim); font-size:12.5px; line-height:1.5; margin:14px 0 0; }
 :root.hc .dd-row .dd-k, :root.hc .dd-row .dd-sg, :root.hc .dd-ayuda{ color:var(--cream); }
 :root.hc .dd-row.dd-total .dd-v{ color:var(--gold); }
@@ -520,7 +523,7 @@ a.nb-ghost{text-decoration:none;}
 .cat-tope .progress-track{margin-bottom:5px;}
 .cat-tope-txt{font-size:12px; color:var(--cream-dim);}
 .cat-tope.over .progress-fill{background:var(--danger);}
-.cat-tope.over .cat-tope-txt{color:var(--danger); font-weight:600;}
+.cat-tope.over .cat-tope-txt{color:var(--danger-text); font-weight:600;}
 
 .empty-state{
   text-align:center; padding:50px 20px; color:var(--cream-dim);
@@ -696,7 +699,7 @@ a.nb-ghost{text-decoration:none;}
 }
 :root.hc .mv-texto, :root.hc .mv-sug-tag, :root.hc .mv-limite{color:var(--cream);}
 :root.hc .mv-sug{border-width:2px;}
-.debt-manual-note.paused{color:var(--danger);}
+.debt-manual-note.paused{color:var(--danger-text);}
 /* Etiqueta "Sin confirmar": cuota que la fecha da por pagada pero el usuario nunca confirmó (Tanda M). */
 .cuota-sinconf{
   font-size:10px; text-transform:uppercase; letter-spacing:.04em; padding:2px 7px; border-radius:20px;
@@ -716,7 +719,7 @@ a.nb-ghost{text-decoration:none;}
 .goal-pause-badge{
   display:inline-flex; align-items:center; gap:4px; margin-top:4px;
   font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; padding:3px 8px; border-radius:20px;
-  background:rgba(180,84,74,0.16); color:var(--danger);
+  background:rgba(180,84,74,0.16); color:var(--danger-text);
 }
 .goal-pause-badge .icon{width:11px; height:11px;}
 .ahorrado-nota{font-size:10.5px; color:var(--gold-dim); font-weight:400;}
@@ -746,7 +749,7 @@ a.nb-ghost{text-decoration:none;}
 .aporte-row + .aporte-row{border-top:1px solid var(--border);}
 .aporte-info b{font-weight:600;}
 .aporte-del{
-  background:none; border:none; color:var(--danger); cursor:pointer; line-height:0;
+  background:none; border:none; color:var(--danger-text); cursor:pointer; line-height:0;
   min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
 }
 .aporte-del .icon{width:15px; height:15px;}
@@ -894,7 +897,7 @@ a.nb-ghost{text-decoration:none;}
   padding:9px 10px; min-height:38px;
 }
 .hist-rango-field input:focus{outline:none; border-color:var(--gold-dim); box-shadow:0 0 0 3px var(--focus-ring);}
-.hist-rango-err{margin:9px 0 0; font-size:12px; color:var(--danger); line-height:1.4;}
+.hist-rango-err{margin:9px 0 0; font-size:12px; color:var(--danger-text); line-height:1.4;}
 .hist-rango-actions{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap;}
 .hist-rango-apply, .hist-rango-clear{
   flex:1; min-width:120px; border-radius:var(--radius-sm); padding:9px 12px;
@@ -970,7 +973,7 @@ a.nb-ghost{text-decoration:none;}
 /* columna derecha (monto + saldo). Ancho acotado para no ahogar el texto de la izquierda. */
 .li-amount-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; max-width:42%;}
 .li-saldo{font-size:10px; color:var(--cream-dim); white-space:nowrap; letter-spacing:.01em;}
-.li-saldo.neg{color:var(--danger);}
+.li-saldo.neg{color:var(--danger-text);}
 /* nota secundaria en filas de compra a crédito (dentro de .li-body, bajo el detalle):
    aclara que al saldo solo le pesa la cuota, no el monto total de la compra. Acompaña al
    detalle: visible solo cuando la fila está expandida (igual que la fecha/categoría). */
@@ -991,7 +994,7 @@ a.nb-ghost{text-decoration:none;}
 .li-cuota-check{display:inline-flex; align-items:center; color:var(--success); flex-shrink:0;}
 .li-cuota-check .icon{width:14px; height:14px; stroke-width:3;}
 /* fila virtual de cuota AÚN sin pagar: segunda etiqueta junto a "CUOTA" */
-.li-badge.li-badge-unpaid{background:rgba(180,84,74,0.18); color:var(--danger);}
+.li-badge.li-badge-unpaid{background:rgba(180,84,74,0.18); color:var(--danger-text);}
 :root.hc .li-badge.li-badge-unpaid{border:1.5px solid var(--danger); color:var(--cream);}
 /* detalle de proyección de cuota (fila virtual, no editable) */
 .cuota-proy-mes{font-size:13px; color:var(--gold-dim); margin:-12px 0 16px;}
@@ -1018,7 +1021,7 @@ a.nb-ghost{text-decoration:none;}
   background:rgba(180,84,74,0.10); border:1px solid rgba(180,84,74,0.35); border-radius:var(--radius-sm);
   padding:10px 12px; margin:12px 0 0;
 }
-.restore-schema-warning .icon{width:15px; height:15px; flex-shrink:0; margin-top:1px; color:var(--danger);}
+.restore-schema-warning .icon{width:15px; height:15px; flex-shrink:0; margin-top:1px; color:var(--danger-text);}
 :root.hc .restore-schema-warning{border-width:2px;}
 
 /* ---------- PREMIUM / CALCULADORA DE INTERESES ---------- */
@@ -1122,7 +1125,7 @@ a.nb-ghost{text-decoration:none;}
 .login-sep{display:flex; align-items:center; gap:10px; margin:14px 0 10px; color:var(--cream-dim); font-size:12.5px;}
 .login-sep::before, .login-sep::after{content:""; flex:1; height:1px; background:var(--border);}
 .login-correo .field{margin-bottom:10px;}
-.login-correo .login-error{color:var(--danger); margin:0 0 10px;}
+.login-correo .login-error{color:var(--danger-text); margin:0 0 10px;}
 .login-correo .login-aviso{margin:0 0 10px;}
 .login-correo .login-aviso:empty{display:none;}
 .field input.login-codigo{font-size:16px; letter-spacing:.35em; font-variant-numeric:tabular-nums;}
@@ -1193,7 +1196,7 @@ a.nb-ghost{text-decoration:none;}
 .cuenta-fila svg{width:16px; height:16px; color:var(--cream-dim);}
 .btn-link-peligro{
   display:block; width:100%; min-height:44px; margin:10px 0 0; padding:10px 4px; background:none; border:none;
-  color:var(--danger); font-size:14px; font-family:inherit; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
+  color:var(--danger-text); font-size:14px; font-family:inherit; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
 }
 .btn-link-peligro:disabled{opacity:.45; cursor:default; text-decoration:none;}
 /* El texto del botón lo fija actualizarBotonesEliminarCuenta(); con conexión, el «…» indica
@@ -1287,7 +1290,7 @@ a.nb-ghost{text-decoration:none;}
 .cfg-preview-stats span{display:inline-flex; align-items:center; gap:5px;}
 .cfg-preview-stats b{font-weight:600;}
 .cfg-preview-stats i{font-style:normal; font-size:11px;}
-.cfg-preview-stats .ing{color:var(--success);} .cfg-preview-stats .gas{color:var(--danger);} .cfg-preview-stats .met{color:var(--gold);}
+.cfg-preview-stats .ing{color:var(--success);} .cfg-preview-stats .gas{color:var(--danger-text);} .cfg-preview-stats .met{color:var(--gold);}
 .cfg-hija .palette-row{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px;}
 .cfg-hija .palette-opt{flex-direction:column; justify-content:center; gap:7px; min-height:76px; padding:10px 6px; text-align:center; border-radius:12px;}
 .cfg-hija .palette-opt.active{border:2px solid var(--gold); padding:9px 5px;}
@@ -1321,7 +1324,7 @@ a.nb-ghost{text-decoration:none;}
 .choque-val .sw, .cfg-fila-val .sw{width:12px; height:12px; border-radius:50%; flex-shrink:0; display:inline-block;}
 .choque-iguales{margin:0 0 12px; padding:10px 16px; border:1px solid var(--border); border-radius:16px; color:var(--cream-dim); font-size:13px; line-height:1.45;}
 .choque-aviso{display:flex; align-items:flex-start; gap:12px; margin:0 0 6px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:16px; color:var(--cream); font-size:14px; line-height:1.5;}
-.choque-aviso .icon{width:20px; height:20px; flex-shrink:0; color:var(--danger); margin-top:1px;}
+.choque-aviso .icon{width:20px; height:20px; flex-shrink:0; color:var(--danger-text); margin-top:1px;}
 #sheetChoque .btn-primary{margin-top:18px;}
 #histChoquesAviso .icon{width:18px; height:18px; flex-shrink:0; color:var(--gold);}
 :root.hc .choque-campo, :root.hc .choque-iguales, :root.hc .choque-aviso{border-width:2px;}
@@ -1623,7 +1626,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:0; cursor:pointer; m
 }
 .btn-primary:active{transform:scale(0.935); background:var(--burgundy-light);}
 .btn-danger{
-  width:100%; background:none; color:var(--danger); border:1px solid var(--danger); border-radius:var(--radius-sm);
+  width:100%; background:none; color:var(--danger-text); border:1px solid var(--danger); border-radius:var(--radius-sm);
   padding:13px; font-size:15px; font-weight:600; cursor:pointer; margin-top:10px;
 }
 /* T2b: mismo tratamiento que los botones [disabled] de la lista de cuentas (.3). */
@@ -1692,13 +1695,13 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:0; cursor:pointer; m
   border-bottom:1px solid var(--border); font-size:15px; color:var(--cream);
 }
 .config-item > span{flex:1; min-width:0; overflow-wrap:anywhere;}
-.config-item button{background:none; border:none; color:var(--danger); font-size:17px; cursor:pointer;}
+.config-item button{background:none; border:none; color:var(--danger-text); font-size:17px; cursor:pointer;}
 .cfg-item-actions{display:flex; align-items:center; gap:6px; flex-shrink:0;}
 /* Día 14 · patrón unificado de fila (avatar/nada + nombre + "✎" + "✕"): en categorías,
    el avatar (ícono sobre el color de la categoría) queda decorativo — cambiar ícono,
    color y tope mensual vive dentro del sheet que abre "✎" (ver openCatEditar). */
 .cfg-cat-main{display:flex; align-items:center; gap:10px; flex:1; min-width:0;}
-/* Nota de especificidad: ".config-item button{color:var(--danger)}" de arriba (elemento +
+/* Nota de especificidad: ".config-item button{color:var(--danger-text)}" de arriba (elemento +
    clase) le gana a una sola clase como ".cfg-cat-avatar{color:...}" — por eso estas reglas
    de color van prefijadas con ".config-item " (mismo patrón que ".config-item .cfg-rename-btn"
    más abajo), para no heredar el rojo de "eliminar" en botones que no eliminan nada. */
@@ -1741,12 +1744,22 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:0; cursor:pointer; m
   background:var(--surface-2); border:1px solid var(--gold-dim); border-radius:8px; color:var(--cream);
 }
 .cfg-rename-edit .cfg-rename-input:focus{outline:none; box-shadow:0 0 0 3px var(--focus-ring);}
+/* Día 24 · A5: anillo de foco visible en los campos — 2 px --gold, mismo patrón que .form-chip y
+   .cfg-switch. El borde --gold-dim + halo --focus-ring de :focus no llegaba a 3:1 contra el borde
+   en reposo. Va DESPUÉS de los :focus{outline:none} de arriba (misma especificidad: gana este).
+   En los campos con caja envolvente (buscador, monto grande, tope) el anillo va en la caja. */
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible,
+.add-inline input:focus-visible, .hist-kind-select:focus-visible, .hist-rango-field input:focus-visible,
+.cfg-rename-edit .cfg-rename-input:focus-visible,
+.hist-search-input:has(input:focus-visible), .cfg-cat-tope-in:has(input:focus-visible),
+.monto-hero:has(input:focus-visible){outline:2px solid var(--gold); outline-offset:2px;}
+.field .monto-hero input.input-monto:focus-visible{outline:none;}
 .config-item .cfg-rename-edit .cfg-rename-ok,
 .cat-editar-nombre .cfg-rename-edit .cfg-rename-ok{
   flex-shrink:0; padding:0 14px; font-size:13px; font-weight:600;
   background:var(--burgundy); border:1px solid var(--burgundy); color:var(--on-burgundy); border-radius:8px;
 }
-.config-item .cfg-rename-edit .cfg-rename-cancel{flex-shrink:0; color:var(--danger); padding:4px; font-size:15px;}
+.config-item .cfg-rename-edit .cfg-rename-cancel{flex-shrink:0; color:var(--danger-text); padding:4px; font-size:15px;}
 
 /* íconos/emoji de categoría en listas */
 .cat-emoji{display:inline-flex; align-items:center; justify-content:center; line-height:1; font-size:18px;}
@@ -1952,7 +1965,7 @@ button:active{ transform:scale(0.93); }
 :root.hc .field label, :root.hc .section-title, :root.hc .li-title,
 :root.hc .hist-search-count, :root.hc .hist-filter-label,
 :root.hc .aportar-disp{ color:var(--cream); }
-:root.hc .li-saldo.neg{ color:var(--danger); }
+:root.hc .li-saldo.neg{ color:var(--danger-text); }
 :root.hc .progress-track{ border:1px solid var(--border); }
 :root.hc .progress-fill{ background:var(--gold); }
 :root.hc .cat-tope.over .progress-fill{ background:var(--danger); }
@@ -2037,7 +2050,7 @@ button:active{ transform:scale(0.93); }
 .insight-cmp-row .ic-prev{font-size:11.5px; color:var(--cream-dim);}
 .insight-cmp-row .ic-delta{margin-left:auto; font-size:12px; font-weight:600; white-space:nowrap;}
 .insight-cmp-row .ic-delta.good{color:var(--success);}
-.insight-cmp-row .ic-delta.bad{color:var(--danger);}
+.insight-cmp-row .ic-delta.bad{color:var(--danger-text);}
 .insight-cmp-row .ic-delta.flat{color:var(--cream-dim);}
 .insight-motiv{
   font-size:12.5px; color:var(--success); line-height:1.5; margin:10px 0 0;
@@ -2049,7 +2062,7 @@ button:active{ transform:scale(0.93); }
   font-size:13px; padding:6px 0;
 }
 .insight-var-row + .insight-var-row{border-top:1px solid var(--border);}
-.insight-var-row.up{color:var(--danger);}
+.insight-var-row.up{color:var(--danger-text);}
 .insight-var-row.down{color:var(--success);}
 .insight-var-row > span:last-child{font-weight:600; white-space:nowrap;}
 /* e) proyección de fin de mes. Tanda R4 · pto 4.3: flex-wrap + white-space:nowrap en el
@@ -2060,7 +2073,7 @@ button:active{ transform:scale(0.93); }
   font-size:13.5px; color:var(--cream); margin-bottom:6px;
 }
 .insight-proy-main b{font-family:ui-serif,Georgia,serif; font-size:20px; color:var(--success); white-space:nowrap;}
-.insight-proy-main.neg b{color:var(--danger);}
+.insight-proy-main.neg b{color:var(--danger-text);}
 .insight-proy-detail{font-size:11.5px; color:var(--cream-dim); line-height:1.5; margin:0 0 10px;}
 :root.hc .insight-proy-detail{color:var(--cream);}
 .insight-alertas-title{
@@ -2101,7 +2114,7 @@ button:active{ transform:scale(0.93); }
 .cierre-mes-section{margin:18px 0 0;}
 .cierre-mes-section .section-title{margin-bottom:10px;}
 .cierre-mes-section.cm-pos .section-title{color:var(--success);}
-.cierre-mes-section.cm-neg .section-title{color:var(--danger);}
+.cierre-mes-section.cm-neg .section-title{color:var(--danger-text);}
 .cierre-item-neg{
   font-size:13px; color:var(--cream); line-height:1.5; margin:0 0 8px;
   padding:11px 13px; background:rgba(180,84,74,0.10); border:1px solid rgba(180,84,74,0.35);
@@ -2244,7 +2257,7 @@ button:active{ transform:scale(0.93); }
   .dai-ic{width:28px; height:28px; border-radius:8px; background:var(--surface-3); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .desk-add-item:hover .dai-ic, .desk-add-item:focus-visible .dai-ic{background:var(--surface-2);}
   .dai-ic .icon{width:16px; height:16px;}
-  [data-add="gasto"] .dai-ic{color:var(--danger);}
+  [data-add="gasto"] .dai-ic{color:var(--danger-text);}
   [data-add="ingreso"] .dai-ic{color:var(--success);}
   [data-add="cuota"] .dai-ic{color:var(--mv-cuota);}
   [data-add="meta"] .dai-ic{color:var(--mv-aporte);}
@@ -2675,10 +2688,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: elegir tipo -->
-<div class="sheet-overlay" id="sheetChoice">
+<div class="sheet-overlay" id="sheetChoice" role="dialog" aria-modal="true" aria-labelledby="sheetChoiceTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Qué quieres registrar?</h2>
+    <h2 id="sheetChoiceTit">¿Qué quieres registrar?</h2>
     <div class="choice-row">
       <div class="choice-card" id="choiceGasto"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg><span>Gasto</span></div>
       <div class="choice-card income" id="choiceIngreso"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/></svg><span>Ingreso</span></div>
@@ -2688,7 +2701,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: formulario gasto -->
-<div class="sheet-overlay" id="sheetGasto">
+<div class="sheet-overlay" id="sheetGasto" role="dialog" aria-modal="true" aria-labelledby="gastoTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="gastoTitle">Nuevo gasto</h2>
@@ -2716,12 +2729,12 @@ button:active{ transform:scale(0.93); }
       <select id="gCategoria" class="select-oculto" tabindex="-1" aria-hidden="true"></select>
     </div>
     <div class="field">
-      <label id="gMetodoLbl">Pagado con</label>
+      <label id="gMetodoLbl" for="gMetodo">Pagado con</label>
       <div class="pay-chips" id="gMetodoChips" role="group" aria-labelledby="gMetodoLbl"></div>
       <select id="gMetodo"></select>
     </div>
     <div class="cuota-fields" id="cuotaFields">
-      <div class="field"><label>Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
+      <div class="field"><label for="gNumCuotas">Número de cuotas</label><input type="number" id="gNumCuotas" placeholder="1 (pago único a crédito)" inputmode="numeric"></div>
       <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Las cuotas se cobran a partir del mes siguiente a esta fecha. Déjalo vacío o en 1 para un pago único a una sola cuota.</p>
       <label class="check-row" id="gCuotaCompartidaWrap" style="display:none; margin-bottom:6px;">
         <input type="checkbox" id="gCuotaCompartida">
@@ -2729,12 +2742,12 @@ button:active{ transform:scale(0.93); }
       </label>
     </div>
     <div class="field" id="gCuentaField" style="display:none;">
-      <label>Cuenta</label>
+      <label for="gCuenta">Cuenta</label>
       <select id="gCuenta"></select>
     </div>
     <div class="field">
-      <label>Tipo</label>
-      <div class="toggle-row">
+      <label id="gTipoLbl">Tipo</label>
+      <div class="toggle-row" role="group" aria-labelledby="gTipoLbl">
         <div class="toggle-opt" data-tipo="Fijo">Fijo</div>
         <div class="toggle-opt active" data-tipo="Casual">Casual</div>
       </div>
@@ -2759,7 +2772,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: formulario ingreso -->
-<div class="sheet-overlay" id="sheetIngreso">
+<div class="sheet-overlay" id="sheetIngreso" role="dialog" aria-modal="true" aria-labelledby="ingresoTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="ingresoTitle">Nuevo ingreso</h2>
@@ -2786,12 +2799,12 @@ button:active{ transform:scale(0.93); }
       <select id="iFuente" class="select-oculto" tabindex="-1" aria-hidden="true"></select>
     </div>
     <div class="field" id="iCuentaField" style="display:none;">
-      <label>Cuenta</label>
+      <label for="iCuenta">Cuenta</label>
       <select id="iCuenta"></select>
     </div>
     <div class="field">
-      <label>Tipo</label>
-      <div class="toggle-row">
+      <label id="iTipoLbl">Tipo</label>
+      <div class="toggle-row" role="group" aria-labelledby="iTipoLbl">
         <div class="toggle-opt" data-itipo="Fijo">Fijo</div>
         <div class="toggle-opt active" data-itipo="Casual">Casual</div>
       </div>
@@ -2816,18 +2829,18 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: formulario meta -->
-<div class="sheet-overlay" id="sheetMeta">
+<div class="sheet-overlay" id="sheetMeta" role="dialog" aria-modal="true" aria-labelledby="metaTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="metaTitle">Nueva meta</h2>
-    <div class="field"><label>Nombre</label><input type="text" id="mNombre" enterkeyhint="done" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
-    <div class="field" id="mFechaField"><label>Fecha límite</label><input type="date" id="mFecha"></div>
+    <div class="field"><label for="mNombre">Nombre</label><input type="text" id="mNombre" enterkeyhint="done" placeholder="Ej: Viaje, Notebook, Fondo de emergencia"></div>
+    <div class="field" id="mFechaField"><label for="mFecha">Fecha límite</label><input type="date" id="mFecha"></div>
     <label class="check-row">
       <input type="checkbox" id="mIndef">
       <span>Meta indefinida <small>(sin monto objetivo ni fecha límite)</small></span>
     </label>
     <div class="field" id="mMontoField">
-      <label>Monto objetivo</label>
+      <label for="mMonto">Monto objetivo</label>
       <input type="text" id="mMonto" class="input-lg" placeholder="0" inputmode="numeric" autocomplete="off">
     </div>
     <div class="field" id="mCuentaField" style="display:none;">
@@ -2844,14 +2857,14 @@ button:active{ transform:scale(0.93); }
         </label>
         <div id="mAutoFields" style="display:none;">
           <div class="field">
-            <label>Tipo de aporte</label>
-            <div class="toggle-row">
+            <label id="mAutoTipoLbl">Tipo de aporte</label>
+            <div class="toggle-row" role="group" aria-labelledby="mAutoTipoLbl">
               <div class="toggle-opt active" data-mautotipo="monto">Monto fijo</div>
               <div class="toggle-opt" data-mautotipo="porcentaje">% del Disponible</div>
             </div>
           </div>
-          <div class="field"><label id="mAutoValorLabel">Monto mensual</label><input type="text" id="mAutoValor" placeholder="0" inputmode="numeric" autocomplete="off"></div>
-          <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="mAutoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
+          <div class="field"><label id="mAutoValorLabel" for="mAutoValor">Monto mensual</label><input type="text" id="mAutoValor" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+          <div class="field"><label for="mAutoDia">Día del mes (1 a 28)</label><input type="number" id="mAutoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
         </div>
       </div>
     </details>
@@ -2863,10 +2876,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: confirmar eliminar meta con historial -->
-<div class="sheet-overlay" id="sheetConfirmGoal">
+<div class="sheet-overlay" id="sheetConfirmGoal" role="dialog" aria-modal="true" aria-labelledby="sheetConfirmGoalTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Eliminar esta meta</h2>
+    <h2 id="sheetConfirmGoalTit">Eliminar esta meta</h2>
     <p class="sheet-note" id="confirmGoalText"></p>
     <button class="btn-danger" id="btnConfirmDeleteGoal">Sí, eliminar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -2874,13 +2887,13 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: aportar a una meta (2 pasos: monto -> confirmar) -->
-<div class="sheet-overlay" id="sheetAportar">
+<div class="sheet-overlay" id="sheetAportar" role="dialog" aria-modal="true" aria-labelledby="aportarTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="aportarTitle">Aportar a la meta</h2>
 
     <div id="aportarPaso1">
-      <div class="field"><label>Monto a aportar</label><input type="text" id="apMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+      <div class="field"><label for="apMonto">Monto a aportar</label><input type="text" id="apMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
       <p style="font-size:11.5px; color:var(--cream-dim); margin:-6px 0 14px;">Se registra con fecha de hoy y se descuenta del disponible de este mes.</p>
       <button class="btn-primary" id="btnAportarRevisar">Continuar</button>
       <button class="btn-ghost" data-close>Cancelar</button>
@@ -2901,7 +2914,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: aporte automático mensual de una meta -->
-<div class="sheet-overlay" id="sheetAutoMeta">
+<div class="sheet-overlay" id="sheetAutoMeta" role="dialog" aria-modal="true" aria-labelledby="autoMetaTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="autoMetaTitle">Aporte automático</h2>
@@ -2909,14 +2922,14 @@ button:active{ transform:scale(0.93); }
       Cada mes se sumará un aporte (monto fijo o un % de tu Disponible) al total de la meta y se descontará del disponible de ese mes, el día que elijas. Puedes desactivarlo cuando quieras.
     </p>
     <div class="field">
-      <label>Tipo de aporte</label>
-      <div class="toggle-row">
+      <label id="autoTipoLbl">Tipo de aporte</label>
+      <div class="toggle-row" role="group" aria-labelledby="autoTipoLbl">
         <div class="toggle-opt active" data-autotipo="monto">Monto fijo</div>
         <div class="toggle-opt" data-autotipo="porcentaje">% del Disponible</div>
       </div>
     </div>
-    <div class="field"><label id="autoMontoLabel">Monto mensual</label><input type="text" id="autoMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
-    <div class="field"><label>Día del mes (1 a 28)</label><input type="number" id="autoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
+    <div class="field"><label id="autoMontoLabel" for="autoMonto">Monto mensual</label><input type="text" id="autoMonto" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+    <div class="field"><label for="autoDia">Día del mes (1 a 28)</label><input type="number" id="autoDia" placeholder="1" inputmode="numeric" min="1" max="28"></div>
     <button class="btn-primary" id="btnSaveAutoMeta">Activar aporte automático</button>
     <button class="btn-danger" id="btnDisableAutoMeta" style="display:none;">Desactivar</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -2924,13 +2937,13 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: calculadora de intereses (ilustrativa, Premium placeholder) -->
-<div class="sheet-overlay" id="sheetInteres">
+<div class="sheet-overlay" id="sheetInteres" role="dialog" aria-modal="true" aria-labelledby="interesTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="interesTitle">Calculadora de intereses <span class="premium-badge">PREMIUM</span></h2>
     <p class="int-disclaimer">Simulación, no mueve dinero real.</p>
-    <div class="field"><label>Tasa anual de referencia (%)</label><input type="text" id="intTasa" value="4" inputmode="decimal" autocomplete="off"></div>
-    <div class="field"><label>Meses a simular</label><input type="number" id="intMeses" placeholder="12" inputmode="numeric"></div>
+    <div class="field"><label for="intTasa">Tasa anual de referencia (%)</label><input type="text" id="intTasa" value="4" inputmode="decimal" autocomplete="off"></div>
+    <div class="field"><label for="intMeses">Meses a simular</label><input type="number" id="intMeses" placeholder="12" inputmode="numeric"></div>
     <div class="int-result" id="intResult"></div>
     <button class="btn-ghost" data-close>Cerrar</button>
   </div>
@@ -2940,7 +2953,7 @@ button:active{ transform:scale(0.93); }
      casos: gasto/ingreso simple, gasto/ingreso fijo, y compra a crédito con cuotas. El
      título y el texto se arman en JS según el caso; el botón rojo confirma, el botón
      neutro (foco por defecto) cancela — igual que Escape y el gesto de cierre. -->
-<div class="sheet-overlay" id="sheetConfirmDebt">
+<div class="sheet-overlay" id="sheetConfirmDebt" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="confirmDeleteTitle">Este gasto tiene cuotas asociadas</h2>
@@ -2953,7 +2966,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: migrar registros antes de eliminar un método/fuente en uso (Tanda W · 1A + migración) -->
-<div class="sheet-overlay" id="sheetCfgMigrar">
+<div class="sheet-overlay" id="sheetCfgMigrar" role="dialog" aria-modal="true" aria-labelledby="cfgMigrarTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="cfgMigrarTitle">Eliminar</h2>
@@ -2972,7 +2985,7 @@ button:active{ transform:scale(0.93); }
      con transferencias asociadas → elección explícita reapuntar/eliminar (Tanda C4 · ajuste) -->
 <!-- SHEET: editar una cuenta — renombrar y archivar/reactivar (día 14: unificación
      del patrón editar/eliminar de las 4 listas de Configuración) -->
-<div class="sheet-overlay" id="sheetCuentaEditar">
+<div class="sheet-overlay" id="sheetCuentaEditar" role="dialog" aria-modal="true" aria-labelledby="cuentaEditarTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="cuentaEditarTitle">Editar cuenta</h2>
@@ -2987,7 +3000,7 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
-<div class="sheet-overlay" id="sheetCuentaBorrar">
+<div class="sheet-overlay" id="sheetCuentaBorrar" role="dialog" aria-modal="true" aria-labelledby="ctaBorrarTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="ctaBorrarTitle">Eliminar cuenta</h2>
@@ -2997,12 +3010,12 @@ button:active{ transform:scale(0.93); }
       <select id="ctaBorrarDestino"></select>
     </div>
     <div class="field" id="ctaBorrarTransferField" hidden>
-      <label>¿Qué hacer con sus transferencias?</label>
-      <div class="toggle-row" id="ctaBorrarTransferModo">
+      <label id="ctaBorrarTransferLbl">¿Qué hacer con sus transferencias?</label>
+      <div class="toggle-row" role="group" aria-labelledby="ctaBorrarTransferLbl" id="ctaBorrarTransferModo">
         <div class="toggle-opt active" data-tdel="reapuntar">Reapuntar</div>
         <div class="toggle-opt" data-tdel="eliminar">Eliminar</div>
       </div>
-      <select id="ctaBorrarTransferDestino" style="margin-top:8px;"></select>
+      <select id="ctaBorrarTransferDestino" style="margin-top:8px;" aria-label="Cuenta a la que se reapuntan las transferencias"></select>
       <p class="sheet-note" id="ctaBorrarTransferNota" style="margin-top:6px;"></p>
     </div>
     <button class="btn-danger" id="ctaBorrarConfirm">Eliminar cuenta</button>
@@ -3011,26 +3024,26 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: transferir entre cuentas (Tanda C4) -->
-<div class="sheet-overlay" id="sheetTransferir">
+<div class="sheet-overlay" id="sheetTransferir" role="dialog" aria-modal="true" aria-labelledby="transferirTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="transferirTitle">Transferir entre cuentas</h2>
     <p class="sheet-note">Mueve dinero de una cuenta a otra. No cuenta como gasto ni como ingreso: sólo cambia el saldo de cada cuenta. En la vista “Total” no afecta nada.</p>
-    <div class="field"><label>Fecha</label><input type="date" id="tFecha"></div>
+    <div class="field"><label for="tFecha">Fecha</label><input type="date" id="tFecha"></div>
     <div class="field">
-      <label>Desde</label>
+      <label for="tOrigen">Desde</label>
       <select id="tOrigen"></select>
     </div>
     <div class="field">
-      <label>Hacia</label>
+      <label for="tDestino">Hacia</label>
       <select id="tDestino"></select>
     </div>
     <div class="field">
-      <label>Monto</label>
+      <label for="tMonto">Monto</label>
       <input type="text" id="tMonto" placeholder="0" inputmode="numeric" autocomplete="off">
       <div class="chip-row chip-carousel chips-monto" id="montoChipsT"></div>
     </div>
-    <div class="field"><label>Nombre (opcional)</label><input type="text" id="tNombre" placeholder="Ej: Pago de arriendo, Ahorro del mes" autocomplete="off"></div>
+    <div class="field"><label for="tNombre">Nombre (opcional)</label><input type="text" id="tNombre" placeholder="Ej: Pago de arriendo, Ahorro del mes" autocomplete="off"></div>
     <button class="btn-primary" id="btnSaveTransfer">Guardar transferencia</button>
     <button class="btn-danger" id="btnDeleteTransfer" style="display:none;">Eliminar transferencia</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -3039,9 +3052,9 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: migración L1 — deudas/metas de antes de esta versión, sin cuenta asignada,
      con ≥2 cuentas ya creadas. Elección en bloque, obligatoria. -->
-<div class="sheet-overlay" id="sheetMigrarCuotasMetas" data-nodismiss>
+<div class="sheet-overlay" id="sheetMigrarCuotasMetas" data-nodismiss role="dialog" aria-modal="true" aria-labelledby="sheetMigrarCuotasMetasTit">
   <div class="sheet">
-    <h2>Asignar cuotas y metas a una cuenta</h2>
+    <h2 id="sheetMigrarCuotasMetasTit">Asignar cuotas y metas a una cuenta</h2>
     <p class="sheet-note" id="migCMBody"></p>
     <p class="sheet-note">Podrás cambiar la cuenta de cada una después, una por una.</p>
     <button class="btn-primary" id="migCMPrincipal">Asignar todas a «Principal»</button>
@@ -3050,10 +3063,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: aviso al cambiar el método de un gasto que es compra a cuotas (Tanda W · ajuste 1) -->
-<div class="sheet-overlay" id="sheetGastoMetodoAviso">
+<div class="sheet-overlay" id="sheetGastoMetodoAviso" role="dialog" aria-modal="true" aria-labelledby="sheetGastoMetodoAvisoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Este gasto es una compra a cuotas</h2>
+    <h2 id="sheetGastoMetodoAvisoTit">Este gasto es una compra a cuotas</h2>
     <p class="sheet-note" id="gmaTexto"></p>
     <button class="btn-danger" id="gmaConfirm">Sí, cambiar el método</button>
     <button class="btn-ghost" data-close>Cancelar</button>
@@ -3061,10 +3074,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: aviso de posible gasto duplicado al crear (Tanda F). Liviano, NO bloqueante. -->
-<div class="sheet-overlay" id="sheetGastoDuplicado">
+<div class="sheet-overlay" id="sheetGastoDuplicado" role="dialog" aria-modal="true" aria-labelledby="sheetGastoDuplicadoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Ya registraste este gasto?</h2>
+    <h2 id="sheetGastoDuplicadoTit">¿Ya registraste este gasto?</h2>
     <p class="sheet-note" id="gdupTexto"></p>
     <button class="btn-primary" id="gdupConfirm">Guardar de todas formas</button>
     <button class="btn-ghost" data-close>Revisar</button>
@@ -3072,10 +3085,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: confirmar la fecha real de un fijo con rango de días (este mes) -->
-<div class="sheet-overlay" id="sheetConfirmarFechaFijo">
+<div class="sheet-overlay" id="sheetConfirmarFechaFijo" role="dialog" aria-modal="true" aria-labelledby="sheetConfirmarFechaFijoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Confirmar fecha</h2>
+    <h2 id="sheetConfirmarFechaFijoTit">Confirmar fecha</h2>
     <p class="sheet-note" id="cffTexto"></p>
     <div class="field" style="margin-bottom:0;">
       <label for="cffFecha">Fecha real de este mes</label>
@@ -3091,11 +3104,11 @@ button:active{ transform:scale(0.93); }
      INDEPENDIENTE apilada (.cfg-hija) con su contenido de siempre: mismos ids y handlers.
      «‹ Configuración» ([data-close]) vuelve a la principal con el foco en la fila de origen
      (dismissSheet devuelve el foco); Escape cierra solo la hoja de arriba. -->
-<div class="sheet-overlay" id="sheetConfig">
+<div class="sheet-overlay" id="sheetConfig" role="dialog" aria-modal="true" aria-labelledby="sheetConfigTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="hoja-cab">
-      <h2>Configuración</h2>
+      <h2 id="sheetConfigTit">Configuración</h2>
       <button type="button" class="hoja-cerrar" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <!-- Tarjeta de cuenta: abre #sheetCuenta (renderTarjetaCuentaConfig, script de Cuenta de usuario). -->
@@ -3107,24 +3120,24 @@ button:active{ transform:scale(0.93); }
 
     <h3 class="cfg-grupo-tit" id="cfgTitRegistros">Tus registros</h3>
     <div class="cfg-lista" role="group" aria-labelledby="cfgTitRegistros">
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaCategorias"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><span class="cfg-fila-lbl">Categorías</span><span class="cfg-fila-val" id="cfgValCategorias"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaMetodos"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="cfg-fila-lbl">Métodos de pago</span><span class="cfg-fila-val" id="cfgValMetodos"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaFuentes"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span><span class="cfg-fila-lbl">Fuentes de ingreso</span><span class="cfg-fila-val" id="cfgValFuentes"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaCuentas"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><span class="cfg-fila-lbl">Cuentas</span><span class="cfg-fila-val" id="cfgValCuentas"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaCategorias"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span><span class="cfg-fila-lbl">Categorías</span><span class="cfg-fila-val" id="cfgValCategorias"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaMetodos"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="cfg-fila-lbl">Métodos de pago</span><span class="cfg-fila-val" id="cfgValMetodos"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaFuentes"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span><span class="cfg-fila-lbl">Fuentes de ingreso</span><span class="cfg-fila-val" id="cfgValFuentes"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaCuentas"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></span><span class="cfg-fila-lbl">Cuentas</span><span class="cfg-fila-val" id="cfgValCuentas"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
     </div>
 
     <h3 class="cfg-grupo-tit" id="cfgTitPreferencias">Preferencias</h3>
     <div class="cfg-lista" role="group" aria-labelledby="cfgTitPreferencias">
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaApariencia"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.5-.7 1.5-1.5 0-.4-.1-.7-.4-1-.3-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-4.9-4.5-9-10-9z"/></svg></span><span class="cfg-fila-lbl">Apariencia</span><span class="cfg-fila-val" id="cfgValApariencia"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaNotif"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="cfg-fila-lbl">Notificaciones</span><span class="cfg-fila-val" id="cfgValNotif"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaInicio"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="cfg-fila-lbl">Inicio del registro</span><span class="cfg-fila-val" id="cfgValInicio"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaApariencia"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c.9 0 1.5-.7 1.5-1.5 0-.4-.1-.7-.4-1-.3-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-4.9-4.5-9-10-9z"/></svg></span><span class="cfg-fila-lbl">Apariencia</span><span class="cfg-fila-val" id="cfgValApariencia"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaNotif"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="cfg-fila-lbl">Notificaciones</span><span class="cfg-fila-val" id="cfgValNotif"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaInicio"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span class="cfg-fila-lbl">Inicio del registro</span><span class="cfg-fila-val" id="cfgValInicio"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
     </div>
 
     <h3 class="cfg-grupo-tit" id="cfgTitDatos">Tus datos</h3>
     <div class="cfg-lista" role="group" aria-labelledby="cfgTitDatos">
-      <button type="button" class="cfg-fila" data-hoja="cfgHojaRespaldo"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><span class="cfg-fila-lbl">Respaldo y exportar</span><span class="cfg-fila-val" id="cfgValRespaldo"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <button type="button" class="cfg-fila" data-hoja="cfgHojaRespaldo"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><span class="cfg-fila-lbl">Respaldo y exportar</span><span class="cfg-fila-val" id="cfgValRespaldo"></span><svg class="cfg-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
       <!-- Modo solo lectura: interruptor en la misma fila (mismo #cfgReadOnly y su listener). -->
-      <label class="cfg-fila cfg-fila-switch"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="cfg-fila-lbl">Modo solo lectura<small id="cfgReadOnlyNota">Bloquea cambios; puedes seguir consultando</small></span><input type="checkbox" class="cfg-switch" id="cfgReadOnly" role="switch" aria-describedby="cfgReadOnlyNota"></label>
+      <label class="cfg-fila cfg-fila-switch"><span class="cfg-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span class="cfg-fila-lbl">Modo solo lectura<small id="cfgReadOnlyNota">Bloquea cambios; puedes seguir consultando</small></span><input type="checkbox" class="cfg-switch" id="cfgReadOnly" role="switch" aria-describedby="cfgReadOnlyNota"></label>
     </div>
 
     <!-- Pie: Tutorial (relanza los 6 pasos sin borrar categorías ni fuentes) · legales · versión. -->
@@ -3140,52 +3153,52 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- Hojas hijas de Configuración (T23 · Fase 2). Contenido reubicado sin cambios de lógica. -->
-<div class="sheet-overlay cfg-hija" id="cfgHojaCategorias">
+<div class="sheet-overlay cfg-hija" id="cfgHojaCategorias" role="dialog" aria-modal="true" aria-labelledby="cfgHojaCategoriasTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Categorías</h2>
+    <h2 id="cfgHojaCategoriasTit">Categorías</h2>
     <div class="config-list" id="cfgCategorias"></div>
-    <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
+    <div class="add-inline"><input type="text" id="newCategoria" placeholder="Nueva categoría de gasto" aria-label="Nueva categoría de gasto"><button class="small-btn" data-addlist="categorias">Agregar</button></div>
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaMetodos">
+<div class="sheet-overlay cfg-hija" id="cfgHojaMetodos" role="dialog" aria-modal="true" aria-labelledby="cfgHojaMetodosTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Métodos de pago</h2>
+    <h2 id="cfgHojaMetodosTit">Métodos de pago</h2>
     <div class="config-list" id="cfgMetodos"></div>
-    <div class="add-inline"><input type="text" id="newMetodo" placeholder="Nuevo método"><button class="small-btn" data-addlist="metodos">Agregar</button></div>
+    <div class="add-inline"><input type="text" id="newMetodo" placeholder="Nuevo método" aria-label="Nuevo método de pago"><button class="small-btn" data-addlist="metodos">Agregar</button></div>
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaFuentes">
+<div class="sheet-overlay cfg-hija" id="cfgHojaFuentes" role="dialog" aria-modal="true" aria-labelledby="cfgHojaFuentesTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Fuentes de ingreso</h2>
+    <h2 id="cfgHojaFuentesTit">Fuentes de ingreso</h2>
     <div class="config-list" id="cfgFuentes"></div>
-    <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
+    <div class="add-inline"><input type="text" id="newFuente" placeholder="Nueva fuente" aria-label="Nueva fuente de ingreso"><button class="small-btn" data-addlist="fuentes">Agregar</button></div>
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaCuentas">
+<div class="sheet-overlay cfg-hija" id="cfgHojaCuentas" role="dialog" aria-modal="true" aria-labelledby="cfgHojaCuentasTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Cuentas</h2>
+    <h2 id="cfgHojaCuentasTit">Cuentas</h2>
     <p class="sheet-note" style="margin:0 0 14px;">Cada gasto o ingreso pertenece a una cuenta. El selector del encabezado (en Resumen e Historial) filtra por cuenta; “Total” suma todas. Archivar una cuenta la saca del selector y de los formularios sin borrar sus movimientos.</p>
     <div class="config-list" id="cfgCuentas"></div>
-    <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
+    <div class="add-inline"><input type="text" id="newCuenta" placeholder="Nueva cuenta" aria-label="Nueva cuenta"><button class="small-btn" id="btnAddCuenta">Agregar</button></div>
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaApariencia">
+<div class="sheet-overlay cfg-hija" id="cfgHojaApariencia" role="dialog" aria-modal="true" aria-labelledby="cfgHojaAparienciaTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Apariencia</h2>
+    <h2 id="cfgHojaAparienciaTit">Apariencia</h2>
     <!-- Vista previa: la tarjeta Disponible con la paleta activa (monto: renderValoresConfig). -->
     <div class="cfg-preview" aria-hidden="true">
       <p class="cfg-preview-lbl">Disponible</p>
@@ -3204,22 +3217,22 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaNotif">
+<div class="sheet-overlay cfg-hija" id="cfgHojaNotif" role="dialog" aria-modal="true" aria-labelledby="cfgHojaNotifTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Notificaciones</h2>
+    <h2 id="cfgHojaNotifTit">Notificaciones</h2>
     <p class="sheet-note" style="margin:0 0 14px;">Aviso local cuando una cuota está próxima a vencer, mientras la app está abierta o vuelve a primer plano. No es un aviso push con la app cerrada.</p>
     <p class="sheet-note" id="cfgNotifStatus" style="margin:0 0 10px; font-size:12.5px;"></p>
     <button class="btn-ghost" id="btnActivarNotif" style="margin-top:0;">Activar avisos de cuotas</button>
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaInicio">
+<div class="sheet-overlay cfg-hija" id="cfgHojaInicio" role="dialog" aria-modal="true" aria-labelledby="cfgHojaInicioTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Inicio del registro</h2>
+    <h2 id="cfgHojaInicioTit">Inicio del registro</h2>
     <p class="sheet-note" style="margin:0 0 14px;">Si empezaste a usar la app a mitad de camino, elige tu primer mes real. El “Saldo mes anterior” se pone en $0 en ese mes: los meses previos siguen visibles y navegables, pero dejan de arrastrar saldo hacia tu Disponible actual. Déjalo “Sin definir” para acumular desde el primer dato, como hasta ahora.</p>
     <div class="field" style="margin-bottom:0;">
       <label for="cfgInicioRegistro">Mes de inicio</label>
@@ -3228,11 +3241,11 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
-<div class="sheet-overlay cfg-hija" id="cfgHojaRespaldo">
+<div class="sheet-overlay cfg-hija" id="cfgHojaRespaldo" role="dialog" aria-modal="true" aria-labelledby="cfgHojaRespaldoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>Configuración</button>
-    <h2>Respaldo y exportar</h2>
+    <h2 id="cfgHojaRespaldoTit">Respaldo y exportar</h2>
     <p class="sheet-note" style="margin:0 0 14px;">Descarga un archivo con todos tus datos (gastos, ingresos, deudas/cuotas, metas y configuración). Sirve para no perder nada si cambias de link o de celular.</p>
     <!-- Estado: nube (solo con sesión; mismo estadoRespaldoCuenta que la hoja de cuenta) y archivo. -->
     <div class="cfg-estado-card" id="cfgRespNube" hidden>
@@ -3254,7 +3267,7 @@ button:active{ transform:scale(0.93); }
       <button class="btn-ghost" id="btnRespaldoPrevioMulti" style="margin-top:8px;">Descargar respaldo anterior a la sincronización</button>
       <button type="button" class="btn-discreto" id="btnRespaldoPrevioBorrar">Ya lo guardé, eliminar</button>
     </div>
-    <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+    <input type="file" id="restoreFileInput" accept="application/json" style="display:none;" aria-label="Archivo de respaldo">
   </div>
 </div>
 
@@ -3263,7 +3276,7 @@ button:active{ transform:scale(0.93); }
      (abrirCuenta). Los dos estados (sin/con sesión) los alterna renderCuentaUsuario(); el login
      con Google y por código, cerrar sesión y eliminar la cuenta conservan sus ids y handlers.
      «Cuenta de usuario» = autenticación; no confundir con «Cuentas» (las financieras). -->
-<div class="sheet-overlay" id="sheetCuenta">
+<div class="sheet-overlay" id="sheetCuenta" role="dialog" aria-modal="true" aria-labelledby="cuentaTitulo">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="hoja-cab">
@@ -3347,11 +3360,11 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: bienvenida de cuenta (T23 · Fase 1). Solo en la primera ejecución: al terminar o
      saltar el onboarding automático, sin sesión y si no se vio antes (flag local). -->
-<div class="sheet-overlay" id="sheetBienvenidaCuenta">
+<div class="sheet-overlay" id="sheetBienvenidaCuenta" role="dialog" aria-modal="true" aria-labelledby="sheetBienvenidaCuentaTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <img class="bienv-logo" src="icons/icon-192.png" alt="" width="64" height="64">
-    <h2 style="text-align:center;">Guarda tus datos en un lugar seguro</h2>
+    <h2 id="sheetBienvenidaCuentaTit" style="text-align:center;">Guarda tus datos en un lugar seguro</h2>
     <ul class="cuenta-benef">
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Respaldo automático de tus registros en la nube.</span></li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>Úsala en tu teléfono y en tu computador.</span></li>
@@ -3367,7 +3380,7 @@ button:active{ transform:scale(0.93); }
 <!-- SHEET: onboarding interactivo de primer uso. data-nodismiss: es un flujo de
      varios pasos con datos reales cargándose — no debe cerrarse por accidente con
      un swipe/backdrop/Escape (cada pantalla trae su propia salida explícita). -->
-<div class="sheet-overlay" id="sheetOnboarding" data-nodismiss>
+<div class="sheet-overlay" id="sheetOnboarding" data-nodismiss role="dialog" aria-modal="true" aria-labelledby="obTitulo">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div id="obProgressRow" style="display:none; align-items:center; justify-content:flex-end; gap:10px; margin:-6px 0 6px;">
@@ -3387,7 +3400,7 @@ button:active{ transform:scale(0.93); }
      noticias. Contenido ensamblado por abrirPantallaCierreMes()/datosCierreMes() (ver
      motor de insights) a partir de funciones ya existentes, sin recalcular ningún
      criterio nuevo. -->
-<div class="sheet-overlay" id="sheetCierreMes" data-nodismiss>
+<div class="sheet-overlay" id="sheetCierreMes" data-nodismiss role="dialog" aria-modal="true" aria-labelledby="cmTitulo">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="cmTitulo">Mes cerrado</h2>
@@ -3406,7 +3419,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: elegir ícono de una categoría -->
-<div class="sheet-overlay" id="sheetCatIcon">
+<div class="sheet-overlay" id="sheetCatIcon" role="dialog" aria-modal="true" aria-labelledby="catIconTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="catIconTitle">Ícono de la categoría</h2>
@@ -3419,7 +3432,7 @@ button:active{ transform:scale(0.93); }
     </div>
     <div id="catIconEmoji" style="display:none; margin-top:14px;">
       <div class="field">
-        <label>Escribe un emoji con el teclado</label>
+        <label for="catEmojiInput">Escribe un emoji con el teclado</label>
         <input type="text" id="catEmojiInput" maxlength="6" placeholder="🍔" inputmode="text" autocomplete="off">
       </div>
       <button class="btn-primary" id="btnSaveCatEmoji">Guardar emoji</button>
@@ -3430,7 +3443,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: elegir color de una categoría (día 14 · sub-tarea 4) -->
-<div class="sheet-overlay" id="sheetCatColor">
+<div class="sheet-overlay" id="sheetCatColor" role="dialog" aria-modal="true" aria-labelledby="catColorTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="catColorTitle">Color de la categoría</h2>
@@ -3443,7 +3456,7 @@ button:active{ transform:scale(0.93); }
 <!-- SHEET: editar una categoría — ícono / color / tope mensual, agrupados en un solo
      lugar (día 14: unificación del patrón editar/eliminar de las 4 listas). El botón
      de eliminar ya no vive acá — quedó en la fila principal, junto a este "✎". -->
-<div class="sheet-overlay" id="sheetCatEditar">
+<div class="sheet-overlay" id="sheetCatEditar" role="dialog" aria-modal="true" aria-labelledby="catEditarTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="catEditarTitle">Editar categoría</h2>
@@ -3468,10 +3481,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: confirmar restaurar respaldo -->
-<div class="sheet-overlay" id="sheetConfirmRestore">
+<div class="sheet-overlay" id="sheetConfirmRestore" role="dialog" aria-modal="true" aria-labelledby="sheetConfirmRestoreTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Restaurar este respaldo?</h2>
+    <h2 id="sheetConfirmRestoreTit">¿Restaurar este respaldo?</h2>
     <p class="sheet-note" style="margin-bottom:12px;">
       Esto reemplazará todos los datos actuales de la app (gastos, ingresos, cuotas y categorías) por los del archivo. Esta acción no se puede deshacer.
     </p>
@@ -3493,10 +3506,10 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: confirmar dueño de los datos locales antes de la subida inicial a la nube.
      Descartable (fondo/Escape/"Ahora no" = no sube nada; se vuelve a preguntar la próxima sesión). -->
-<div class="sheet-overlay" id="sheetConfirmarDueno">
+<div class="sheet-overlay" id="sheetConfirmarDueno" role="dialog" aria-modal="true" aria-labelledby="sheetConfirmarDuenoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Estos datos son tuyos?</h2>
+    <h2 id="sheetConfirmarDuenoTit">¿Estos datos son tuyos?</h2>
     <p class="sheet-note" style="margin-bottom:12px;">
       Los datos financieros guardados en este dispositivo se van a subir a la nube bajo la cuenta <b id="confirmarDuenoCorreo"></b>. Confirma solo si son tuyos: después, este dispositivo quedará asociado a esa cuenta.
     </p>
@@ -3508,13 +3521,13 @@ button:active{ transform:scale(0.93); }
 <!-- SHEET: T11 · 1b · dispositivo con datos propios que entra a una cuenta con varios
      dispositivos. «Sí»: respaldo previo + unión con la nube. «No»: no se sube nada, no se
      asocia el dispositivo y los datos locales quedan como están. -->
-<div class="sheet-overlay" id="sheetUnirMulti">
+<div class="sheet-overlay" id="sheetUnirMulti" role="dialog" aria-modal="true" aria-labelledby="sheetUnirMultiTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <!-- T11 · Fase 3: mismo estilo que «Tu cuenta» (ícono, tarjeta de filas, botones); la lógica no cambia. -->
     <div class="cuenta-hero">
-      <div class="cuenta-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="13" height="10" rx="2"/><path d="M5 18h7"/><rect x="17" y="8" width="5" height="12" rx="1.5"/></svg></div>
-      <h3>¿Estos datos son tuyos?</h3>
+      <div class="cuenta-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="13" height="10" rx="2"/><path d="M5 18h7"/><rect x="17" y="8" width="5" height="12" rx="1.5"/></svg></div>
+      <h3 id="sheetUnirMultiTit">¿Estos datos son tuyos?</h3>
       <p>Hay registros en este dispositivo y también en tu cuenta.</p>
     </div>
     <div class="cfg-lista" style="margin:0 0 12px;">
@@ -3531,11 +3544,11 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: T11 · Fase 3 · pantalla 14: «Cambios por revisar» (choques de la sincronización con
      varios dispositivos). Se apila sobre «Tu cuenta». La lista la arma renderListaChoques(). -->
-<div class="sheet-overlay cfg-hija" id="sheetChoques">
+<div class="sheet-overlay cfg-hija" id="sheetChoques" role="dialog" aria-modal="true" aria-labelledby="sheetChoquesTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <button type="button" class="cfg-volver" data-close><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg><span id="choquesVolverTxt">Tu cuenta</span></button>
-    <h2>Cambios por revisar</h2>
+    <h2 id="sheetChoquesTit">Cambios por revisar</h2>
     <p class="sheet-note" style="margin:0 0 14px;">Estos registros cambiaron aquí y en otro dispositivo antes de sincronizarse. Elige qué versión queda. Mientras no lo decidas, no se suben.</p>
     <div id="choquesLista"></div>
     <button type="button" class="btn-ghost" id="btnChoquesConservarTodos" style="margin-top:16px;">Conservar todos los de este dispositivo</button>
@@ -3547,7 +3560,7 @@ button:active{ transform:scale(0.93); }
 <!-- SHEET: T11 · Fase 3 · pantallas 15 (comparación), 16 (eliminado en otro dispositivo),
      17 (aportes sin su meta) y la 15 adaptada a un campo de Configuración. Una sola hoja que
      renderDetalleChoque() rellena según el motivo. «Decidir después» solo cierra. -->
-<div class="sheet-overlay cfg-hija" id="sheetChoque">
+<div class="sheet-overlay cfg-hija" id="sheetChoque" role="dialog" aria-modal="true" aria-labelledby="choqueTitulo">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="choque-cab">
@@ -3565,10 +3578,10 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: guarda contra borrado masivo en la nube (Etapa 2 · Tanda 4a). data-nodismiss:
      hay que elegir. Mientras está abierto, la escritura continua queda pausada. -->
-<div class="sheet-overlay" id="sheetSyncBorradoMasivo" data-nodismiss>
+<div class="sheet-overlay" id="sheetSyncBorradoMasivo" data-nodismiss role="dialog" aria-modal="true" aria-labelledby="sheetSyncBorradoMasivoTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Borrar registros de la nube?</h2>
+    <h2 id="sheetSyncBorradoMasivoTit">¿Borrar registros de la nube?</h2>
     <p class="sheet-note" style="margin-bottom:12px;">
       Se van a borrar <b id="syncBorradoN"></b> de la nube (<span id="syncBorradoDetalle"></span>). Si no esperabas esto —por ejemplo, porque restauraste un respaldo antiguo—, cancela: la nube queda como está y la sincronización se pausa hasta la próxima vez que abras la app.
     </p>
@@ -3579,10 +3592,10 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: dispositivo legado (Etapa 2 · Tanda 4a.1): ya registrado en la nube pero sin
      candado confirmado. Descartable: "Ahora no" = nada; se vuelve a ofrecer en la próxima carga. -->
-<div class="sheet-overlay" id="sheetLegadoEscritor">
+<div class="sheet-overlay" id="sheetLegadoEscritor" role="dialog" aria-modal="true" aria-labelledby="sheetLegadoEscritorTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿Mantener tu respaldo al día desde este dispositivo?</h2>
+    <h2 id="sheetLegadoEscritorTit">¿Mantener tu respaldo al día desde este dispositivo?</h2>
     <p class="sheet-note" style="margin-bottom:8px;">
       En este dispositivo: <b id="legadoConteoLocal"></b>.<br>
       En la nube: <b id="legadoConteoNube"></b>.
@@ -3597,10 +3610,10 @@ button:active{ transform:scale(0.93); }
 
 <!-- SHEET: eliminar la cuenta de usuario (T2b). Se abre sobre Configuración; «Descargar
      respaldo primero» abre la tarjeta de respaldo encima, sin cerrar este sheet. -->
-<div class="sheet-overlay" id="sheetEliminarCuenta">
+<div class="sheet-overlay" id="sheetEliminarCuenta" role="dialog" aria-modal="true" aria-labelledby="sheetEliminarCuentaTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Eliminar mi cuenta</h2>
+    <h2 id="sheetEliminarCuentaTit">Eliminar mi cuenta</h2>
     <p class="sheet-note" style="margin-top:0;"><strong style="color:var(--cream);">Qué se borra:</strong> tu cuenta de Telora y todos los datos respaldados en la nube. Es permanente y no se puede deshacer.</p>
     <p class="sheet-note"><strong style="color:var(--cream);">Qué no se borra:</strong> lo guardado en este dispositivo sigue aquí, salvo que marques la casilla de abajo.</p>
     <button class="btn-ghost" id="btnEliminarCuentaRespaldo" style="margin-top:0;">Descargar respaldo primero</button>
@@ -3611,7 +3624,7 @@ button:active{ transform:scale(0.93); }
       <label for="inpEliminarCuentaConfirma">Para confirmar, escribe ELIMINAR</label>
       <input type="text" id="inpEliminarCuentaConfirma" autocomplete="off" autocapitalize="characters" spellcheck="false">
     </div>
-    <p class="sheet-note" id="eliminarCuentaError" role="alert" style="color:var(--danger);" hidden></p>
+    <p class="sheet-note" id="eliminarCuentaError" role="alert" style="color:var(--danger-text);" hidden></p>
     <!-- S2 (Día 24): la función exige un inicio de sesión reciente (reauth_required). El botón
          abre el inicio de sesión con el que entró (Google o código); al volver se reabre esta hoja
          vacía y hay que confirmar de nuevo (retomarEliminacionTrasReauth). -->
@@ -3625,7 +3638,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: tarjeta previa antes de compartir/descargar el respaldo -->
-<div class="sheet-overlay" id="sheetBackupShare">
+<div class="sheet-overlay" id="sheetBackupShare" role="dialog" aria-modal="true" aria-labelledby="backupCardTitle">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="brand" style="justify-content:center; margin-bottom:16px;">
@@ -3668,17 +3681,17 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: exportar -->
-<div class="sheet-overlay" id="sheetExportar">
+<div class="sheet-overlay" id="sheetExportar" role="dialog" aria-modal="true" aria-labelledby="sheetExportarTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Exportar a Excel</h2>
+    <h2 id="sheetExportarTit">Exportar a Excel</h2>
     <p class="sheet-note" id="expCuentaNota" hidden></p>
     <label class="export-opt"><input type="radio" name="exportScope" value="mes" checked><span>Solo este mes (<span id="expMesLabel"></span>)</span></label>
     <label class="export-opt"><input type="radio" name="exportScope" value="todo"><span>Todo el historial</span></label>
     <label class="export-opt"><input type="radio" name="exportScope" value="rango"><span>Rango de fechas</span></label>
     <div class="field-row" id="rangoFields" style="display:none; margin-top:10px;">
-      <div class="field"><label>Desde</label><input type="date" id="expDesde"></div>
-      <div class="field"><label>Hasta</label><input type="date" id="expHasta"></div>
+      <div class="field"><label for="expDesde">Desde</label><input type="date" id="expDesde"></div>
+      <div class="field"><label for="expHasta">Hasta</label><input type="date" id="expHasta"></div>
     </div>
     <button class="btn-primary" id="btnShareExport" style="display:none;">Compartir Excel</button>
     <button class="btn-primary" id="btnDoExport">Generar Excel</button>
@@ -3687,10 +3700,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: resumen exportado como imagen -->
-<div class="sheet-overlay" id="sheetResumenImg">
+<div class="sheet-overlay" id="sheetResumenImg" role="dialog" aria-modal="true" aria-labelledby="sheetResumenImgTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Resumen como imagen</h2>
+    <h2 id="sheetResumenImgTit">Resumen como imagen</h2>
     <p class="sheet-note">
       Imagen del resumen de <span id="resumenImgMes"></span> lista para guardar o compartir.
     </p>
@@ -3706,10 +3719,10 @@ button:active{ transform:scale(0.93); }
      Mismo componente de sheet que el resto (handle + cierre por gesto / botón / fondo).
      Los CINCO términos SIEMPRE, incluidos los $0; orden fijo; total destacado tras
      una línea divisoria. Descuadre (si lo hubiera) en rojo, sin maquillar. -->
-<div class="sheet-overlay" id="sheetDondeDisponible">
+<div class="sheet-overlay" id="sheetDondeDisponible" role="dialog" aria-modal="true" aria-labelledby="sheetDondeDisponibleTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>¿De dónde sale?</h2>
+    <h2 id="sheetDondeDisponibleTit">¿De dónde sale?</h2>
     <p class="sheet-note" id="ddSubtitulo"></p>
     <div class="dd-tabla" id="ddTabla"></div>
     <p class="dd-descuadre" id="ddDescuadre" style="display:none;"></p>
@@ -3719,7 +3732,7 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: detalle de categoría -->
-<div class="sheet-overlay" id="sheetCategoriaDetalle">
+<div class="sheet-overlay" id="sheetCategoriaDetalle" role="dialog" aria-modal="true" aria-labelledby="catDetalleTitulo">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <h2 id="catDetalleTitulo">Categoría</h2>
@@ -3730,10 +3743,10 @@ button:active{ transform:scale(0.93); }
 </div>
 
 <!-- SHEET: proyección de cuota (fila virtual del Historial, no editable) -->
-<div class="sheet-overlay" id="sheetCuotaProyeccion">
+<div class="sheet-overlay" id="sheetCuotaProyeccion" role="dialog" aria-modal="true" aria-labelledby="sheetCuotaProyeccionTit">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h2>Proyección de cuota</h2>
+    <h2 id="sheetCuotaProyeccionTit">Proyección de cuota</h2>
     <p class="cuota-proy-mes" id="cuotaProyMes"></p>
     <div class="int-result">
       <p class="big" id="cuotaProyMonto">$0</p>
@@ -5786,9 +5799,24 @@ function sheetTopMost(){
 // T23: `devolverFoco` solo en los cierres que hace el usuario (Escape, fondo, [data-close],
 // gesto): el foco vuelve al control que abrió la hoja (p. ej. la fila de Configuración), si
 // sigue visible. closeSheet() programático no mueve el foco: el llamador decide adónde va.
+// Día 24 · A2: con una hoja abierta, todo lo demás de <body> queda `inert` (sin foco, sin
+// clics, fuera del árbol de accesibilidad): así Tab no se escapa al fondo. Las hojas cuelgan
+// directo de <body>, hermanas de #app y del menú lateral, por eso se marca a los HERMANOS de
+// la hoja superior y nunca a un ancestro suyo. Con hojas apiladas, las de abajo también quedan
+// inert: solo la superior es interactiva. Quedan fuera los avisos (#toastHost: «Deshacer») y
+// los bloqueantes (.blocker-overlay), que se muestran por encima de cualquier hoja.
+function syncFondoInert(){
+  const top = sheetTopMost();
+  [...document.body.children].forEach(n=>{
+    if(n.tagName === 'SCRIPT' || n.id === 'toastHost' || n.classList.contains('blocker-overlay')) return;
+    const debe = !!top && n !== top;
+    if(n.inert !== debe) n.inert = debe;
+  });
+}
 function dismissSheet(el, devolverFoco){
   if(!el) return;
   el.classList.remove('open'); el.style.zIndex = '';
+  syncFondoInert();   // antes de devolver el foco: el origen tiene que haber dejado de ser inert
   if(el.hasAttribute('data-desactualizada')){   // T11 · 0b: al reabrirla toma el estado nuevo
     el.removeAttribute('data-desactualizada');
     el.querySelectorAll('.aviso-otra-pestana').forEach(n => n.remove());
@@ -5808,6 +5836,7 @@ function openSheet(id, focusId){
   // Si ya había otro sheet abierto, este se apila un escalón por encima del más alto.
   // Si es el primero, se limpia cualquier z-index heredado (vuelve a la base 50 del CSS).
   el.style.zIndex = abiertos.length ? (Math.max(50, ...abiertos.map(sheetZ)) + 1) : '';
+  syncFondoInert();
   if(window.__syncTogglePressed) window.__syncTogglePressed();   // aria-pressed de los toggles del sheet
   if(focusId){
     // Foco síncrono: el sheet ya pasó a display:flex en la línea de arriba (misma
@@ -6167,6 +6196,9 @@ function syncMetodoChips(){
   // El rótulo apunta al select solo si se ve; con chips basta el aria-labelledby del grupo.
   const lbl = document.getElementById('gMetodoLbl');
   if(lbl){ if(usarChips) lbl.removeAttribute('for'); else lbl.setAttribute('for', 'gMetodo'); }
+  // Día 24 · A1: con chips el select oculto sale del lector y del Tab, igual que gCategoria/iFuente.
+  if(usarChips){ sel.setAttribute('aria-hidden', 'true'); sel.tabIndex = -1; }
+  else { sel.removeAttribute('aria-hidden'); sel.removeAttribute('tabindex'); }
   box.innerHTML = usarChips ? lista.map(m=>
     `<button type="button" class="form-chip pay-chip${m === sel.value ? ' active' : ''}" data-val="${escHtml(m)}" aria-pressed="${m === sel.value ? 'true' : 'false'}"${isReadOnly() ? ' disabled' : ''}>${escHtml(m)}</button>`
   ).join('') : '';
@@ -13395,7 +13427,7 @@ function generarResumenImagen(){
     bg: cv('--bg'), surface: cv('--surface-2'), border: cv('--border'),
     text: cv('--cream'), dim: cv('--cream-dim'),
     gold: cv('--gold'), goldDim: cv('--gold-dim'),
-    pos: cv('--success'), neg: cv('--danger')
+    pos: cv('--success'), neg: cv('--danger-text')
   };
   const colCat = c => c.color || COL.dim;   // Pulido P1 · pto 1: color de la categoría; «Otros» en cream-dim
   const SANS = "'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif";
@@ -14036,48 +14068,48 @@ const PALETAS = {
   cafe: { nombre:"Café & Burdeos", vars:{
     '--bg':'#161011','--surface':'#221715','--surface-2':'#2B1E1B','--surface-3':'#352522','--border':'#3E2C27',
     '--burgundy':'#5C1F2E','--burgundy-light':'#7A2A3D','--burgundy-dim':'#4A1826',
-    '--gold':'#C9A66B','--gold-dim':'#8A6A55','--cream':'#F3E9DD','--cream-dim':'#B79A82',
-    '--danger':'#B4544A','--success':'#7D9B69' } },
+    '--gold':'#C9A66B','--gold-dim':'#A5836C','--cream':'#F3E9DD','--cream-dim':'#B79A82',
+    '--danger':'#B4544A','--danger-text':'#C2746C','--success':'#7D9B69' } },
   bosque: { nombre:"Bosque nocturno", vars:{
     '--bg':'#0E1512','--surface':'#16201B','--surface-2':'#1D2A23','--surface-3':'#26352C','--border':'#33463A',
     '--burgundy':'#2E5D45','--burgundy-light':'#3C7557','--burgundy-dim':'#264B38',
-    '--gold':'#C7B370','--gold-dim':'#8A8158','--cream':'#EDF1E8','--cream-dim':'#A9B7A5',
-    '--danger':'#C56B5C','--success':'#8FB56E' } },
+    '--gold':'#C7B370','--gold-dim':'#9A9062','--cream':'#EDF1E8','--cream-dim':'#A9B7A5',
+    '--danger':'#C56B5C','--danger-text':'#CB796C','--success':'#8FB56E' } },
   indigo: { nombre:"Índigo", vars:{
     '--bg':'#0F1119','--surface':'#171A26','--surface-2':'#1E2233','--surface-3':'#292E43','--border':'#363C54',
     '--burgundy':'#3B3A8C','--burgundy-light':'#514FB0','--burgundy-dim':'#2E2D70',
-    '--gold':'#B9A0E0','--gold-dim':'#7E739C','--cream':'#ECEBF5','--cream-dim':'#A9A6C2',
-    '--danger':'#C96A8A','--success':'#6FB59C' } },
+    '--gold':'#B9A0E0','--gold-dim':'#8F86A9','--cream':'#ECEBF5','--cream-dim':'#A9A6C2',
+    '--danger':'#C96A8A','--danger-text':'#CB6E8E','--success':'#6FB59C' } },
   arena: { nombre:"Arena cálida", vars:{
     '--bg':'#1A1410','--surface':'#251C15','--surface-2':'#31251B','--surface-3':'#3E3024','--border':'#4A3A2C',
     '--burgundy':'#8A4A2E','--burgundy-light':'#A85F3D','--burgundy-dim':'#6F3A22',
-    '--gold':'#D9B57C','--gold-dim':'#9A7E5A','--cream':'#F6ECDD','--cream-dim':'#C4AC91',
-    '--danger':'#C25A4A','--success':'#9AA867' } },
+    '--gold':'#D9B57C','--gold-dim':'#A68B67','--cream':'#F6ECDD','--cream-dim':'#C4AC91',
+    '--danger':'#C25A4A','--danger-text':'#CD786B','--success':'#9AA867' } },
   atardecer: { nombre:"Atardecer", vars:{
     '--bg':'#1B1216','--surface':'#271A20','--surface-2':'#33232B','--surface-3':'#402C36','--border':'#4D3642',
     '--burgundy':'#A34D6E','--burgundy-light':'#BD6285','--burgundy-dim':'#863F5A',
     '--gold':'#E8B4C8','--gold-dim':'#B78E9F','--cream':'#F7E9EE','--cream-dim':'#D3B3BF',
-    '--danger':'#D26A6A','--success':'#7FB08A' } },
+    '--danger':'#D26A6A','--danger-text':'#D57373','--success':'#7FB08A' } },
   lavanda: { nombre:"Lavanda", vars:{
     '--bg':'#15131C','--surface':'#1F1C2A','--surface-2':'#292536','--surface-3':'#352F45','--border':'#423B54',
     '--burgundy':'#6D5AA8','--burgundy-light':'#8571C2','--burgundy-dim':'#574787',
     '--gold':'#C9B8E8','--gold-dim':'#9C8FB8','--cream':'#ECE8F5','--cream-dim':'#B7AECB',
-    '--danger':'#CE6E8E','--success':'#74B39C' } },
+    '--danger':'#CE6E8E','--danger-text':'#D07392','--success':'#74B39C' } },
   acero: { nombre:"Acero", vars:{
     '--bg':'#0F131A','--surface':'#171C25','--surface-2':'#1F2530','--surface-3':'#2A313F','--border':'#38414F',
     '--burgundy':'#235486','--burgundy-light':'#2F6BA6','--burgundy-dim':'#1C4269',
     '--gold':'#8FB4D9','--gold-dim':'#7590A8','--cream':'#E8EEF4','--cream-dim':'#A4B2C0',
-    '--danger':'#CE6A5E','--success':'#6FA88A' } },
+    '--danger':'#CE6A5E','--danger-text':'#D17267','--success':'#6FA88A' } },
   petroleo: { nombre:"Verde petróleo", vars:{
     '--bg':'#0E1413','--surface':'#16201E','--surface-2':'#1D2A28','--surface-3':'#273734','--border':'#354744',
     '--burgundy':'#1F6A61','--burgundy-light':'#2B857B','--burgundy-dim':'#18524B',
-    '--gold':'#86BEB4','--gold-dim':'#729189','--cream':'#E7F0EE','--cream-dim':'#A2B5B1',
-    '--danger':'#CE6E5C','--success':'#86B36E' } },
+    '--gold':'#86BEB4','--gold-dim':'#78968E','--cream':'#E7F0EE','--cream-dim':'#A2B5B1',
+    '--danger':'#CE6E5C','--danger-text':'#D17766','--success':'#86B36E' } },
   medianoche: { nombre:"Medianoche (OLED)", vars:{
     '--bg':'#000000','--surface':'#0A0A0B','--surface-2':'#121213','--surface-3':'#1A1A1C','--border':'#262628',
     '--burgundy':'#33303D','--burgundy-light':'#423E4F','--burgundy-dim':'#26242E',
-    '--gold':'#9A93A8','--gold-dim':'#767181','--cream':'#D6D3DA','--cream-dim':'#8F8B98',
-    '--danger':'#B5645E','--success':'#6F9B78' } }
+    '--gold':'#9A93A8','--gold-dim':'#817C8C','--cream':'#D6D3DA','--cream-dim':'#8F8B98',
+    '--danger':'#B5645E','--danger-text':'#B76862','--success':'#6F9B78' } }
 };
 function aplicarPaleta(key){
   const p = PALETAS[key] || PALETAS.cafe;
@@ -14110,11 +14142,11 @@ function stackAltoContraste(){
   if(claro){
     set('--cream','#000000');  set('--cream-dim','#141414');
     set('--gold','#3A2600');   set('--gold-dim','#1C1C1C');
-    set('--border','#000000'); set('--success','#064E24'); set('--danger','#7A0F00');
+    set('--border','#000000'); set('--success','#064E24'); set('--danger','#7A0F00'); set('--danger-text','#7A0F00');
   } else {                                              // fondo oscuro -> texto casi blanco
     set('--cream','#FFFFFF');  set('--cream-dim','#F1F1F1');
     set('--gold','#FFDF9E');   set('--gold-dim','#E9E4D6');
-    set('--border','#FFFFFF'); set('--success','#9CEBB1'); set('--danger','#FFB3A5');
+    set('--border','#FFFFFF'); set('--success','#9CEBB1'); set('--danger','#FFB3A5'); set('--danger-text','#FFB3A5');
   }
 }
 function aplicarAltoContraste(on){
@@ -14831,6 +14863,8 @@ function onboardingRender(dir){
   // aunque el paso anterior ya la hubiera usado (el nodo #obBody no se recrea).
   body.classList.remove('ob-step-fwd', 'ob-step-back');
   body.innerHTML = (renderers[onboardingPaso] || renderObBienvenida)();
+  const obTit = body.querySelector('h2');   // Día 24 · A2: título de la hoja (aria-labelledby="obTitulo")
+  if(obTit) obTit.id = 'obTitulo';
   if(dir){
     void body.offsetWidth;
     body.classList.add(dir === 'back' ? 'ob-step-back' : 'ob-step-fwd');
@@ -14902,7 +14936,7 @@ function renderObPaso4(){
         <span>${g.nombre}</span>
       </label>
       <div class="field" style="margin:0; width:104px; flex-shrink:0;">
-        <input type="text" inputmode="numeric" data-ob-monto-idx="${i}" value="${formatMiles(String(montoMostrar))}">
+        <input type="text" inputmode="numeric" data-ob-monto-idx="${i}" aria-label="Monto de ${escAttr(g.nombre)}" value="${formatMiles(String(montoMostrar))}">
       </div>
     </div>
   `;}).join('');
@@ -15312,7 +15346,7 @@ function renderTarjetaCuentaConfig(est){
     av.textContent = fuente.style.backgroundImage ? '' : fuente.textContent;
   } else {
     av.style.backgroundImage = '';
-    av.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+    av.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
   }
   document.getElementById('cfgCuentaNombre').textContent = con
     ? (document.getElementById('cuentaPerfilNombre').textContent || document.getElementById('cuentaUsuarioEmail').textContent)
