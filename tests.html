@@ -4065,11 +4065,17 @@ async function runTests(){
       $('inpLoginCorreo').focus();
       win.closeSheet('sheetCuenta');
       const programatico = d.activeElement === av;
+      // Día 24 · red de seguridad: sin ninguna hoja abierta, ningún hermano de <body> queda inert.
+      const sinHojas = !d.querySelector('.sheet-overlay.open');
+      const inertesSinHojas = [...d.body.children].filter(n => n.inert).map(n => n.id || n.className);
       if(obAbiertoH) win.openSheet('sheetOnboarding');
       iframe.style.cssText = 'display:none'; win.syncDeskLayout();
       assert(abierta && trasEscape.cerrada && trasEscape.foco && trasCerrar && !programatico,
         'T23 (h): el avatar abre #sheetCuenta; Escape y «cerrar» devuelven el foco al avatar; closeSheet() programático no lo mueve',
         JSON.stringify({ abierta, trasEscape, trasCerrar, programatico }));
+      assert(sinHojas && inertesSinHojas.length === 0,
+        'Día 24 A2 (red de seguridad): tras cerrar la hoja de cuenta, sin ninguna hoja abierta, ningún hijo de body queda inert',
+        `hojas abiertas: ${sinHojas ? 'ninguna' : 'alguna'} · inert: ${inertesSinHojas.join(', ') || 'ninguno'}`);
     }catch(e){
       assert(false, 'T23: excepción durante las pruebas de cuenta', e && e.stack || String(e));
     }finally{
