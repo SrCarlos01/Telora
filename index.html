@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-Q47qWLxvtjyLMoPPWve2hgyE/O3ijzzdLps2YmfOTW0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -63,7 +64,8 @@
      le afecta. -->
 
 <!-- Supabase autohospedada (Etapa 2 · Tanda 1): @supabase/supabase-js 2.117.1, build
-     UMD (dist/umd/supabase.js del paquete npm, verificado contra su integrity sha512).
+     UMD (dist/umd/supabase.js del paquete npm, verificado contra su integrity sha512;
+     Tanda F le antepuso una línea /*! … */ con su aviso de licencia MIT, el resto va intacto).
      Mismo criterio que ExcelJS: archivo local, sin CDN. Expone el global `supabase`. Solo
      se usa para el login OPCIONAL con Google (bloque "Cuenta de usuario"); si no carga,
      la app funciona igual — ver el <script> de Cuenta de usuario al final del body. -->
@@ -1574,6 +1576,7 @@ input[type=date]::-webkit-calendar-picker-indicator{opacity:0; cursor:pointer; m
   font-variant-numeric:tabular-nums; letter-spacing:0.01em;
 }
 .chip-row.chips-monto .chip:active{background:var(--surface-3); border-color:var(--gold);}
+.chip-row.chips-monto .chip:focus-visible{outline:2px solid var(--gold); outline-offset:-2px;}   /* hacia adentro: el carrusel recorta por overflow */
 
 /* ---------- TOGGLE LISTA/GRÁFICO + GRÁFICOS SVG ---------- */
 .chart-toggle{
@@ -3772,6 +3775,8 @@ button:active{ transform:scale(0.93); }
   </div>
 </div>
 
+<!-- Íconos: trazos de Feather Icons (MIT, Copyright (c) 2013-2023 Cole Bemis). Ver
+     THIRD_PARTY_NOTICES.md. Este aviso va fuera del <script> para no cambiar su hash CSP. -->
 <script>
 /* ==================== ÍCONOS (SVG inline, sin dependencias externas) ==================== */
 const ICONS = {

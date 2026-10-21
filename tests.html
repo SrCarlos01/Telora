@@ -10,6 +10,7 @@
   .caso{ padding: 10px 12px; border-radius: 8px; margin: 8px 0; border: 1px solid #ddd; }
   .ok{ background:#e8f7ee; border-color:#a7dfc0; }
   .fail{ background:#fdeaea; border-color:#f0b8b8; }
+  .na{ background:#f1f1f1; border-color:#d6d6d6; }
   .label{ font-weight:600; }
   .detalle{ font-size: 13px; color:#444; margin-top:4px; white-space:pre-wrap; }
   #resumen{ font-size:16px; font-weight:700; margin-top:20px; padding:12px; border-radius:8px; }
@@ -33,21 +34,30 @@ const resultados = [];
 function assert(condition, label, detalle){
   resultados.push({ ok: !!condition, label, detalle: detalle || '' });
 }
+// Prueba que no aplica en este dispositivo (p. ej. teclado de escritorio en iOS): no cuenta
+// como pasada ni como fallida; se muestra aparte y se suma al resumen como «N/A».
+function noAplica(label, motivo, etiqueta = 'N/A en iOS'){
+  resultados.push({ ok: true, na: etiqueta, label, detalle: motivo || '' });
+}
+// Misma detección que el hotfix H1 de index.html (iPadOS se presenta como MacIntel táctil).
+const ES_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 function renderResultados(){
   const cont = document.getElementById('resultados');
   cont.innerHTML = '';
   resultados.forEach(r=>{
     const div = document.createElement('div');
-    div.className = 'caso ' + (r.ok ? 'ok' : 'fail');
-    div.innerHTML = `<div class="label">${r.ok ? '✅ PASÓ' : '❌ FALLÓ'} — ${r.label}</div>` +
+    div.className = 'caso ' + (r.na ? 'na' : r.ok ? 'ok' : 'fail');
+    div.innerHTML = `<div class="label">${r.na ? '➖ ' + r.na : r.ok ? '✅ PASÓ' : '❌ FALLÓ'} — ${r.label}</div>` +
       (r.detalle ? `<div class="detalle">${r.detalle}</div>` : '');
     cont.appendChild(div);
   });
   const resumen = document.getElementById('resumen');
-  const total = resultados.length;
-  const pasaron = resultados.filter(r=>r.ok).length;
-  resumen.textContent = `${pasaron}/${total} pruebas pasaron`;
+  const aplican = resultados.filter(r=>!r.na);
+  const total = aplican.length;
+  const pasaron = aplican.filter(r=>r.ok).length;
+  const na = resultados.length - total;
+  resumen.textContent = `${pasaron}/${total} pruebas pasaron` + (na ? ` · ${na} N/A` : '');
   resumen.className = pasaron === total ? 'ok' : 'fail';
 }
 
@@ -154,7 +164,59 @@ async function runTests(){
     if(win.__marcaCargaPruebas !== MARCA_CARGA) throw new Error('el iframe principal se recargó; esta prueba debe ir antes de los escenarios');
     return win;
   };
+
+  // ==================== Tanda F · CSP del <meta> ====================
+  // El harness inyecta con win.eval(), que la CSP de index.html bloquea (sin 'unsafe-eval'). Los
+  // iframes deben recibir index.html sin el <meta> CSP: eso lo hace tools/servidor_pruebas.py.
+  try{ win.eval('0'); }catch(e){
+    assert(false, 'Harness: el iframe recibió index.html CON su CSP y win.eval() quedó bloqueado',
+      'Servir con «py tools/servidor_pruebas.py 8743» (quita la CSP solo en iframes) y abrir tests.html ahí. · ' + e);
+    renderResultados();
+    return;
+  }
   instalarRelojPruebas(win);
+  // Hashes: cada <script> inline del index.html publicado (fetch: llega intacto, con su CSP) debe
+  // tener su 'sha256-…' en script-src. Si no, el navegador lo bloquea y la app queda en blanco.
+  try{
+    const etiqueta = 'CSP: cada <script> inline de index.html tiene su sha256 en script-src del <meta> (si falla: correr tools/csp_hashes.py)';
+    const html = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const meta = doc.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    const politica = meta ? meta.getAttribute('content') : '';
+    const scriptSrc = (politica.split(';').map(s => s.trim()).find(s => s.startsWith('script-src ')) || '').split(/\s+/);
+    const inline = [...doc.querySelectorAll('script:not([src])')];
+    const primerHijo = doc.head.firstElementChild, segundo = primerHijo && primerHijo.nextElementSibling;
+    if(!crypto.subtle){
+      noAplica(etiqueta, 'crypto.subtle solo existe en contexto seguro (https o localhost); se verifica en escritorio', 'N/A sin contexto seguro');
+    }else{
+      const faltan = [];
+      for(const s of inline){
+        const dig = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s.textContent));
+        const h = `'sha256-${btoa(String.fromCharCode(...new Uint8Array(dig)))}'`;
+        if(!scriptSrc.includes(h)) faltan.push(`${h} (${s.textContent.trim().slice(0, 40)}…)`);
+      }
+      assert(meta && inline.length >= 3 && faltan.length === 0, etiqueta,
+        `scripts inline: ${inline.length} · faltan: ${faltan.join(' · ') || 'ninguno'}`);
+    }
+    assert(meta && primerHijo.getAttribute('charset') && segundo === meta
+      && ["'unsafe-inline'", "'unsafe-eval'", "'strict-dynamic'"].every(k => !scriptSrc.includes(k))
+      && /object-src 'none'/.test(politica) && /frame-src 'none'/.test(politica) && /base-uri 'self'/.test(politica)
+      && /img-src 'self' data: blob: https:\/\/\*\.googleusercontent\.com;/.test(politica)
+      && /connect-src 'self' https:\/\/ekavuxaznjbvrzpxtslz\.supabase\.co wss:\/\/ekavuxaznjbvrzpxtslz\.supabase\.co/.test(politica),
+      'CSP: el <meta> va justo después del charset; script-src sin unsafe-inline/unsafe-eval; object/frame none, base-uri self, img-src con *.googleusercontent.com (avatar lh3–lh6), connect-src solo self + Supabase',
+      politica || 'sin <meta> CSP');
+  }catch(e){
+    assert(false, 'CSP: excepción al revisar el <meta>', e && e.stack || String(e));
+  }
+  // Tanda F · 7: anillo de foco dorado en los chips de monto (hacia adentro: el carrusel recorta).
+  {
+    const regla = [...win.document.styleSheets].flatMap(sh => { try{ return [...sh.cssRules]; }catch(_){ return []; } })
+      .find(r => r.selectorText === '.chip-row.chips-monto .chip:focus-visible');
+    // Con var() en el atajo, CSSOM deja vacías las propiedades largas: se lee el atajo `outline`.
+    assert(regla && regla.style.outline === '2px solid var(--gold)' && regla.style.outlineOffset === '-2px',
+      'Tanda F: chips de monto con anillo de foco dorado (:focus-visible, 2px, hacia adentro)', regla ? regla.cssText : 'sin regla');
+  }
+
   document.getElementById('relojPruebas').textContent =
     `Reloj de las pruebas: hoy = ${HOY_PRUEBAS.toLocaleDateString('es-CL')} (cambiar con ?hoy=AAAA-MM-DD).`;
 
@@ -3539,7 +3601,9 @@ async function runTests(){
       tecla('Escape');
       rF.trasEsc = { cerrado: menu.hidden, expanded: btn.getAttribute('aria-expanded'), focoEnBoton: d.activeElement === btn };
       if(obAbiertoF) win.openSheet('sheetOnboarding');
-      assert(rF.abierto && rF.expanded === 'true' && rF.opciones === 'gasto,ingreso,cuota,meta,transferencia' && rF.foco === 'gasto'
+      if(ES_IOS) noAplica('T20 E1 (f): «+ Agregar» abre el menú (5 opciones, foco en Gasto), las flechas lo recorren y Esc lo cierra devolviendo el foco',
+        'teclado de escritorio (flechas/Esc): no aplica en iOS · ' + JSON.stringify(rF));
+      else assert(rF.abierto && rF.expanded === 'true' && rF.opciones === 'gasto,ingreso,cuota,meta,transferencia' && rF.foco === 'gasto'
         && rF.trasAbajo === 'ingreso' && rF.trasArribaX2 === 'transferencia' && rF.trasEsc.cerrado && rF.trasEsc.expanded === 'false' && rF.trasEsc.focoEnBoton,
         'T20 E1 (f): «+ Agregar» abre el menú (5 opciones, foco en Gasto), las flechas lo recorren y Esc lo cierra devolviendo el foco', JSON.stringify(rF));
 
@@ -4825,7 +4889,9 @@ async function runTests(){
       // (3) Fuera de iOS el viewport no limita el zoom; el pellizco queda permitido.
       const vp = d.querySelector('meta[name="viewport"]').getAttribute('content');
       const ta = ['#app', '.screen', '.sheet'].map(s => win.getComputedStyle(d.querySelector(s)).touchAction);
-      assert(!raiz.classList.contains('es-ios') && !vp.includes('maximum-scale') && ta.every(t => t === 'pan-y pinch-zoom')
+      if(ES_IOS) noAplica('H1: fuera de iOS el viewport no lleva maximum-scale; #app/.screen/.sheet con touch-action «pan-y pinch-zoom»; enterkeyhint="done" en los nombres',
+        `en iOS el hotfix SÍ pone maximum-scale (es lo esperado) · viewport: ${vp}`);
+      else assert(!raiz.classList.contains('es-ios') && !vp.includes('maximum-scale') && ta.every(t => t === 'pan-y pinch-zoom')
         && ['gNombre', 'iNombre', 'mNombre'].every(id => $(id).getAttribute('enterkeyhint') === 'done'),
         'H1: fuera de iOS el viewport no lleva maximum-scale; #app/.screen/.sheet con touch-action «pan-y pinch-zoom»; enterkeyhint="done" en los nombres',
         `viewport: ${vp} · touch-action: ${ta.join(' / ')}`);
