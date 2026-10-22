@@ -27,3 +27,12 @@ docs/**/Dia*_Resumen.*
 *.xls
 *.pptx
 bases/
+
+# Capacitor (Android). node_modules/ se reinstala con npm ci; www/ lo arma
+# tools/armar_www.py desde la lista permitida. android/.gitignore excluye
+# local.properties (ruta del SDK de esta máquina), build/ y .gradle/.
+node_modules/
+www/
+# Llaves de firma: nunca en el repositorio (es público).
+*.jks
+*.keystore

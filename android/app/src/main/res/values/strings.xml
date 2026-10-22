@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Telora</string>
+    <string name="title_activity_main">Telora</string>
+    <string name="package_name">cl.telora.app</string>
+    <string name="custom_url_scheme">cl.telora.app</string>
+</resources>

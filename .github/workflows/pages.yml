@@ -3,6 +3,13 @@ name: Desplegar a GitHub Pages
 on:
   push:
     branches: [main]
+    # Un commit que solo toca el empaquetado Android no cambia el sitio: no se
+    # despliega (ni cambia el BUILD, que dispararía «Versión nueva disponible»).
+    paths-ignore:
+      - 'android/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
   workflow_dispatch:
 
 # Permisos mínimos que exige actions/deploy-pages.

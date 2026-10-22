@@ -1,0 +1,10 @@
+{
+  "name": "telora",
+  "private": true,
+  "description": "Empaquetado Android de Telora con Capacitor. La web se publica con pages.yml, no con npm.",
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  }
+}
