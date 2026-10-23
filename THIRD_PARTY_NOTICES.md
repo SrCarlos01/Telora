@@ -10,6 +10,8 @@ el aviso de copyright y el texto de la licencia, como exige la MIT.
 | [ExcelJS](https://github.com/exceljs/exceljs) | 4.4.0 | `exceljs.min.js` | MIT | Copyright (c) 2014-2019 Guyon Roche |
 | [@capacitor/android](https://github.com/ionic-team/capacitor) | 8.5.3 | App Android (`android/`): runtime nativo y puente JS empaquetados en el APK | MIT | Copyright (c) 2017-present Drifty Co. |
 | [@capacitor/core](https://github.com/ionic-team/capacitor) | 8.5.3 | App Android: dependencia de compilación (la web aún no la importa) | MIT | Copyright (c) 2017-present Drifty Co. |
+| [@capacitor/app](https://github.com/ionic-team/capacitor-plugins) | 8.1.2 | App Android: plugin nativo (retorno del login por `cl.telora.app://`) empaquetado en el APK | MIT | Copyright 2020-present Ionic |
+| [@capacitor/browser](https://github.com/ionic-team/capacitor-plugins) | 8.0.5 | App Android: plugin nativo (login con Google en el navegador del sistema) empaquetado en el APK | MIT | Copyright 2020-present Ionic |
 | [@capacitor/cli](https://github.com/ionic-team/capacitor) | 8.5.3 | Herramienta de desarrollo (`npx cap`); no se distribuye | MIT | Copyright (c) 2017-present Drifty Co. |
 
 `supabase.min.js` empaqueta también los subpaquetes del monorepo supabase-js (auth-js,

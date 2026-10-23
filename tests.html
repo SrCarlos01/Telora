@@ -3429,6 +3429,45 @@ async function runTests(){
     }
   }
 
+  // ==================== C2 — Login con Google en la app nativa: funciones puras ====================
+  {
+    const nat = {
+      iframe: win.esAppNativa(), sinCapacitor: win.esAppNativa({}),
+      capWeb: win.esAppNativa({ Capacitor: { isNativePlatform: () => false } }),
+      sinMetodo: win.esAppNativa({ Capacitor: {} }),
+      lanza: win.esAppNativa({ Capacitor: { isNativePlatform: () => { throw new Error('x'); } } }),
+      nativa: win.esAppNativa({ Capacitor: { isNativePlatform: () => true } })
+    };
+    assert(nat.iframe === false && nat.sinCapacitor === false && nat.capWeb === false && nat.sinMetodo === false && nat.lanza === false && nat.nativa === true,
+      'C2: esAppNativa — en la web (sin Capacitor, Capacitor web, sin método o con error) es false; con un Capacitor nativo simulado es true',
+      JSON.stringify(nat));
+
+    const web = win.opcionesClienteSupabase(false), nativa = win.opcionesClienteSupabase(true);
+    assert(web === null && JSON.stringify(nativa) === JSON.stringify({ auth: { flowType: 'pkce', detectSessionInUrl: false } }),
+      'C2: opcionesClienteSupabase — web sin opciones (createClient con los 2 argumentos de siempre); nativa con pkce y detectSessionInUrl false',
+      JSON.stringify({ web, nativa }));
+
+    const L = win.leerUrlRetornoAuth, B = 'cl.telora.app://auth/callback';
+    const ru = {
+      code: L(B + '?code=abc-123'),
+      error: L(B + '?error=access_denied&error_description=prueba%20de%20error'),
+      errorHash: L(B + '#error=server_error&error_description=fallo'),
+      soloError: L(B + '?error=access_denied'),
+      codeYError: L(B + '?code=x&error=access_denied'),
+      vacia: L(B), sinNada: L(B + '?state=1'),
+      ajena: L('https://telora.cl/?code=abc'), otroEsquema: L('otra.app://auth/callback?code=abc'),
+      pegada: L(B + 'X?code=abc'), otraRuta: L(B + '/otra?code=abc'), malformada: L('cl.telora.app:/auth/callback?code=abc'),
+      noTexto: L(null), numero: L(42)
+    };
+    assert(ru.code && ru.code.code === 'abc-123' && !ru.code.error
+      && ru.error && ru.error.error === 'prueba de error' && ru.errorHash && ru.errorHash.error === 'fallo'
+      && ru.soloError && ru.soloError.error === 'access_denied' && ru.codeYError && ru.codeYError.error === 'access_denied'
+      && ru.vacia === null && ru.sinNada === null && ru.ajena === null && ru.otroEsquema === null
+      && ru.pegada === null && ru.otraRuta === null && ru.malformada === null && ru.noTexto === null && ru.numero === null,
+      'C2: leerUrlRetornoAuth — ?code=, error en query o hash (gana sobre code), URL ajena, malformada o sin datos -> null',
+      JSON.stringify(ru));
+  }
+
   // ==================== T2b — Edge Function: lógica pura de index.ts ====================
   // Se lee el index.ts REAL (mismo origen, archivo local), se extrae el bloque // <puro> …
   // // </puro>, se quitan las anotaciones «nombre: tipo» de los parámetros y se evalúa aquí.

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-Q47qWLxvtjyLMoPPWve2hgyE/O3ijzzdLps2YmfOTW0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-cqrz6u4G9RJGKjgoXG/lmLqC/1F7NqpJVIdb2T0LDKY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -18704,9 +18704,46 @@ document.getElementById('btnConflictoDuenoOk').onclick = ()=>{
 let sesionConocida = null;        // { userId, token }
 let cierreSesionPropio = false;   // true mientras esta pestaña cierra la sesión a propósito
 
+/* ==================== C2 · LOGIN CON GOOGLE EN LA APP NATIVA (Capacitor) ====================
+   Solo en la app Android: PKCE, navegador del sistema (plugin Browser) y retorno por el
+   esquema propio cl.telora.app://auth/callback (plugin App: appUrlOpen o, en arranque en
+   frío, getLaunchUrl). exchangeCodeForSession() emite SIGNED_IN, así que la sesión entra por
+   el mismo onAuthStateChange de siempre. La web no cambia: sin opciones en createClient,
+   flujo implícito y redirectTo = origin + pathname. */
+const URL_RETORNO_NATIVO = 'cl.telora.app://auth/callback';
+const CLAVE_RETORNO_AUTH = 'telora_retorno_auth';   // sessionStorage: última URL de retorno ya procesada
+
+// true solo dentro de la app nativa; en la web window.Capacitor no existe. `w` permite probarla.
+function esAppNativa(w){
+  try{
+    const cap = (w || window).Capacitor;
+    return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  }catch(_){ return false; }
+}
+// null = createClient con los mismos dos argumentos de siempre (web).
+function opcionesClienteSupabase(esNativa){
+  return esNativa ? { auth: { flowType: 'pkce', detectSessionInUrl: false } } : null;
+}
+// URL de retorno -> { code } | { error }; null si no es nuestra, está malformada o no trae nada.
+// Supabase devuelve el error en la query o en el hash, según el punto en que falle.
+function leerUrlRetornoAuth(url){
+  if(typeof url !== 'string' || url.indexOf(URL_RETORNO_NATIVO) !== 0) return null;
+  const resto = url.slice(URL_RETORNO_NATIVO.length);
+  if(resto && !/^[?#]/.test(resto)) return null;   // …/callbackX, …/callback/otra
+  let p;
+  try{ p = new URLSearchParams(resto.slice(1).replace('#', '&')); }catch(_){ return null; }
+  const error = p.get('error_description') || p.get('error');
+  if(error) return { error };
+  const code = p.get('code');
+  return code ? { code } : null;
+}
+
 try{
   if(typeof supabase !== 'undefined' && supabase.createClient){
-    supa = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    const opcionesSupa = opcionesClienteSupabase(esAppNativa());
+    supa = opcionesSupa
+      ? supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, opcionesSupa)
+      : supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     supa.auth.onAuthStateChange((event, session)=>{
       renderCuentaUsuario(session);
       if(event === 'SIGNED_IN') limpiarUrlAuth();
@@ -18746,6 +18783,16 @@ async function iniciarLoginGoogle(){
     return;
   }
   try{
+    if(esAppNativa()){
+      // C2: la librería no navega; la URL de Google se abre en el navegador del sistema.
+      const { data, error } = await supa.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: URL_RETORNO_NATIVO, skipBrowserRedirect: true }
+      });
+      if(error) throw error;
+      await window.Capacitor.Plugins.Browser.open({ url: data.url });
+      return;
+    }
     const { error } = await supa.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin + window.location.pathname }
@@ -18757,6 +18804,38 @@ async function iniciarLoginGoogle(){
   }
 }
 document.getElementById('btnLoginGoogle').onclick = ()=> iniciarLoginGoogle();
+
+// C2: retorno de Google a la app nativa. Con ?code= canjea el código (PKCE) y la sesión
+// llega por onAuthStateChange (SIGNED_IN); con error, el mismo aviso que en la web.
+// getLaunchUrl devuelve la URL de arranque también tras recargar la página: la última
+// procesada queda en sessionStorage para no canjear dos veces el mismo código.
+async function procesarUrlRetornoAuth(url){
+  const r = leerUrlRetornoAuth(url);
+  if(!r || !supa) return;
+  try{
+    if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
+    sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);
+  }catch(_){}
+  try{
+    if(r.error) throw new Error(r.error);
+    const { error } = await supa.auth.exchangeCodeForSession(r.code);
+    if(error) throw error;
+  }catch(e){
+    console.warn('Cuenta de usuario: retorno de Google', e);
+    showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
+  }finally{
+    try{ await window.Capacitor.Plugins.Browser.close(); }catch(_){}
+  }
+}
+if(supa && esAppNativa()){
+  try{
+    const AppNativa = window.Capacitor.Plugins.App;
+    AppNativa.addListener('appUrlOpen', ev => procesarUrlRetornoAuth(ev && ev.url));
+    AppNativa.getLaunchUrl().then(r => procesarUrlRetornoAuth(r && r.url)).catch(()=>{});
+  }catch(e){
+    console.warn('Cuenta de usuario: retorno nativo no disponible', e);
+  }
+}
 
 /* ==================== ENTRAR CON CÓDIGO POR CORREO (Tanda L1) ====================
    signInWithOtp() SIN emailRedirectTo: Supabase manda un código de 6 dígitos (la plantilla

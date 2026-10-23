@@ -22,6 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- C2: retorno del login con Google (cl.telora.app://auth/callback). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cl.telora.app" android:host="auth" android:path="/callback" />
+            </intent-filter>
+
         </activity>
 
         <provider
