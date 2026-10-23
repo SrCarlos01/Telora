@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-cqrz6u4G9RJGKjgoXG/lmLqC/1F7NqpJVIdb2T0LDKY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-2z3QTIZ+e0oaIrGfUUbGgFYYBwi8c1qGw9wJzlC+x3g='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -15303,8 +15303,12 @@ document.getElementById('btnCuentaAvatar').onclick = ()=> abrirCuenta();
 // syncHabilitada(), conexión, y largo de la cola y de las fallidas de la cuenta. Si este
 // dispositivo no respalda, NUNCA se dice «al día». Las fallidas no tienen reintento
 // (moverAFallidasSync no reintenta), así que no hay botón «Reintentar».
-function estadoRespaldoCuenta({ habilitada, enLinea, cola, fallidas }){
-  if(!habilitada) return { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' };
+// C2b: `motivo` = por qué no está habilitada; «otro dispositivo mantiene tu respaldo» solo con
+// 'escritor-ajeno' (se supo que otro device es el escritor). Sin motivo conocido, el texto neutro.
+function estadoRespaldoCuenta({ habilitada, motivo, enLinea, cola, fallidas }){
+  if(!habilitada) return motivo === 'escritor-ajeno'
+    ? { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' }
+    : { tono: 'gris', texto: 'Este dispositivo todavía no está respaldando tus datos.' };
   if(!enLinea) return { tono: 'gris', texto: 'Sin conexión · se respaldará al volver' };
   if(fallidas > 0) return { tono: 'error', texto: fallidas === 1 ? '1 cambio sin respaldar' : fallidas + ' cambios sin respaldar' };
   if(cola > 0) return { tono: 'pendiente', texto: cola === 1 ? 'Guardando 1 cambio…' : 'Guardando ' + cola + ' cambios…' };
@@ -15315,17 +15319,18 @@ function estadoRespaldoCuenta({ habilitada, enLinea, cola, fallidas }){
 function renderEstadoCuenta(){
   const caja = document.getElementById('cuentaEstado');
   if(!caja) return;
-  let habilitada = false, cola = 0, fallidas = 0, choques = 0, multi = false;
+  let habilitada = false, motivo = null, cola = 0, fallidas = 0, choques = 0, multi = false;
   try{
     habilitada = syncHabilitada();
     if(habilitada){
       cola = syncAlmacen.leerCola(syncCtx.userId).length;
       fallidas = syncAlmacen.leerFallidas(syncCtx.userId).length;
     }
+    else if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
     multi = choquesUiActiva();   // T11 · Fase 3: la sesión corre con varios escritores (syncCtx.multi)
     choques = multi ? contarChoquesSync() : 0;
   }catch(_){ habilitada = false; multi = false; choques = 0; }
-  const est = estadoRespaldoCuenta({ habilitada, enLinea: navigator.onLine !== false, cola, fallidas });
+  const est = estadoRespaldoCuenta({ habilitada, motivo, enLinea: navigator.onLine !== false, cola, fallidas });
   caja.dataset.tono = est.tono;
   document.getElementById('cuentaEstadoTxt').textContent = est.texto;
   document.getElementById('cuentaFilaChoques').hidden = !(multi && choques > 0);
@@ -16297,6 +16302,7 @@ function registrarEventoRealtime(p){
   if(p.table === 'config_compartida' && p.eventType === 'UPDATE' && syncCtx
      && escritorDejaDeSerEste(p.new, syncCtx)){
     console.info('[Sync] el rol de escritor pasó a otro dispositivo (' + p.new.dispositivo_escritor + '): este sigue solo con sus datos locales.');
+    if(p.new.dispositivo_escritor != null) escritorAjenoPara = syncCtx.userId;   // C2b
     detenerEscrituraContinua();
   }
 }
@@ -17500,7 +17506,12 @@ async function confirmarEscritorSync(userId, deviceId){
   if(esc.error){ console.warn('[Sync] no se pudo leer el dispositivo escritor', esc.error); return false; }
   if(!esc.existe){ console.info('[Sync] la cuenta no tiene config_compartida en la nube: no hay rol de escritor que tomar.'); return false; }
   if(esc.escritor === deviceId) return true;
-  if(esc.escritor == null && await syncTransporte.reclamarEscritor(userId, deviceId) === 'gano') return true;
+  if(esc.escritor == null){
+    const rol = await syncTransporte.reclamarEscritor(userId, deviceId);
+    if(rol === 'gano') return true;
+    if(rol !== 'otro') return false;   // error de red: no se sabe si hay otro escritor
+  }
+  escritorAjenoPara = userId;   // C2b: «otro dispositivo mantiene tu respaldo» es cierto solo aquí
   console.info('[Sync] otro dispositivo mantiene el respaldo de esta cuenta: este sigue solo con sus datos locales.');
   return false;
 }
@@ -18393,6 +18404,7 @@ if(ESCRITURA_CONTINUA_ACTIVA){
 // goal_aportes -> config_compartida -> config_dispositivo (SIEMPRE al final, punto 4h).
 async function subirDatosIniciales(userId, deviceId){
   const toastEl = mostrarToastProgreso('Subiendo tus datos a la nube…');
+  const gen = sesionEvalGen;   // C2b: si la sesión cambia mientras sube, al terminar no se activa nada
   marcarSubidaPendiente(userId);
   try{
     // Solo se llega aquí si las 6 tablas financieras estaban vacías para este user_id, así
@@ -18439,6 +18451,7 @@ async function subirDatosIniciales(userId, deviceId){
 
     quitarMarcaSubidaPendiente();
     cerrarToastProgreso(toastEl, 'Tus datos ya están respaldados en la nube.', 'success');
+    if(gen !== sesionEvalGen) return;
     activarRealtime(userId);
     activarEscrituraContinua(userId, deviceId);   // la fila de config_dispositivo ya existe
   }catch(e){
@@ -18449,18 +18462,38 @@ async function subirDatosIniciales(userId, deviceId){
   }
 }
 
+// C2b: evaluaciones POR USUARIO y por sesión. Cada bandera guarda el userId ya evaluado
+// (subida inicial, unión con varios escritores, dispositivo legado): eventos repetidos de
+// onAuthStateChange con la misma cuenta no repiten la evaluación, pero otra cuenta (o la
+// misma tras cerrar sesión) sí se evalúa, sin recargar. reiniciarEvaluacionesSesion() las
+// borra al cerrar la sesión y sube sesionEvalGen: una evaluación que estaba en vuelo y la
+// cruza se descarta (no activa Realtime ni la escritura continua ni abre hojas).
+let sesionEvalGen = 0;
+const evaluadoPara = { subida: null, union: null, legado: null };
+let escritorAjenoPara = null;   // userId para el que se supo que otro dispositivo es el escritor
+function reiniciarEvaluacionesSesion(){
+  sesionEvalGen++;
+  evaluadoPara.subida = evaluadoPara.union = evaluadoPara.legado = null;
+  escritorAjenoPara = null;
+  subidaDuenoCtx = null; unionCtx = null;
+  try{ if(document.getElementById('sheetConfirmarDueno').classList.contains('open')) closeSheet('sheetConfirmarDueno'); }catch(_){}
+  try{ if(document.getElementById('sheetUnirMulti').classList.contains('open')) closeSheet('sheetUnirMulti'); }catch(_){}
+}
+
 // Punto de entrada: se llama con cada sesión activa confirmada (login recién hecho o
-// sesión ya existente al cargar). Un flag en memoria evita repetir la evaluación varias
-// veces en la misma carga de página (onAuthStateChange puede disparar más de un evento
-// con sesión); la fila de config_dispositivo es la que evita repetirla entre recargas.
-let __subidaInicialEvaluada = false;
+// sesión ya existente al cargar). evaluadoPara.subida evita repetir la evaluación para la
+// misma cuenta en esta sesión (onAuthStateChange puede disparar más de un evento con
+// sesión); la fila de config_dispositivo es la que evita repetirla entre recargas.
 async function intentarSubidaInicial(session){
-  if(__subidaInicialEvaluada) return;
   const userId = session && session.user && session.user.id;
   if(!supa || !userId) return;
+  if(evaluadoPara.subida === userId) return;
   const deviceId = getDeviceId();
   if(!deviceId) return;
-  __subidaInicialEvaluada = true;
+  if(evaluadoPara.subida !== null) reiniciarEvaluacionesSesion();   // otra cuenta sin SIGNED_OUT de por medio
+  evaluadoPara.subida = userId;   // síncrono, antes del primer await
+  const gen = sesionEvalGen;
+  const vigente = () => gen === sesionEvalGen;
   try{
     const { data: dispExistente, error: errDisp } = await supa
       .from('config_dispositivo')
@@ -18468,6 +18501,7 @@ async function intentarSubidaInicial(session){
       .eq('user_id', userId)
       .eq('device_id', deviceId)
       .maybeSingle();
+    if(!vigente()) return;
     if(errDisp){ console.warn('Subida inicial: no se pudo verificar config_dispositivo', errDisp); return; }
     // Con fila, la subida de este dispositivo terminó (config_dispositivo es lo último
     // que se inserta), aunque la marca haya quedado por cerrar la pestaña justo después.
@@ -18478,6 +18512,7 @@ async function intentarSubidaInicial(session){
       if(PULL_INICIAL_ACTIVO && leerPullPendiente() === userId){
         if(localEstaVacio()) await traerDatosIniciales(userId);
         else quitarMarcaPullPendiente();
+        if(!vigente()) return;
       }
       activarRealtime(userId);
       if(leerDuenoConfirmado() === userId) activarEscrituraContinua(userId, deviceId);   // Tanda 4a (+ escritor, 4a.1)
@@ -18493,7 +18528,7 @@ async function intentarSubidaInicial(session){
     // que quedó a medias. Se borra antes de contar, para no confundirlo con otro
     // dispositivo. Si la limpieza no se confirma, no se sigue (se reintenta en la próxima carga).
     if(leerSubidaPendiente() === userId){
-      if(!(await limpiarSubidaParcial(userId))) return;
+      if(!(await limpiarSubidaParcial(userId)) || !vigente()) return;
       quitarMarcaSubidaPendiente();
     }
 
@@ -18501,6 +18536,7 @@ async function intentarSubidaInicial(session){
     const conteos = await Promise.all(tablasConteo.map(t =>
       supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId)
     ));
+    if(!vigente()) return;
     for(const r of conteos){
       if(r.error){ console.warn('Subida inicial: no se pudo contar filas en la nube', r.error); return; }
     }
@@ -18512,7 +18548,9 @@ async function intentarSubidaInicial(session){
       if(PULL_INICIAL_ACTIVO && localEstaVacio()){
         marcarPullPendiente(userId);
         await registrarDispositivo(userId, deviceId);
+        if(!vigente()) return;
         await traerDatosIniciales(userId);
+        if(!vigente()) return;
         activarRealtime(userId);
         return;
       }
@@ -18521,6 +18559,7 @@ async function intentarSubidaInicial(session){
       if(entraSinDatosAMulti() && (leerDuenoConfirmado() === null || leerDuenoConfirmado() === userId)){
         marcarDuenoConfirmado(userId);
         await registrarDispositivo(userId, deviceId);
+        if(!vigente()) return;
         activarRealtime(userId);
         activarEscrituraContinua(userId, deviceId);
         return;
@@ -18529,12 +18568,14 @@ async function intentarSubidaInicial(session){
       // con la nube sin preguntar; sin candado se pregunta «¿Estos datos son tuyos?».
       if(multiActiva() && (leerDuenoConfirmado() === null || leerDuenoConfirmado() === userId)){
         await registrarDispositivo(userId, deviceId);
+        if(!vigente()) return;
         activarRealtime(userId);
         if(leerDuenoConfirmado() === userId) activarEscrituraContinua(userId, deviceId);
         else await ofrecerUnionMulti(userId, deviceId);
         return;
       }
       await registrarDispositivo(userId, deviceId);
+      if(!vigente()) return;
       showToast('Ya hay datos de tu cuenta en la nube. La sincronización entre dispositivos llega en una próxima actualización — por ahora, este dispositivo sigue funcionando con sus propios datos locales.', null, 6000);
       activarRealtime(userId);
       return;
@@ -18556,6 +18597,7 @@ async function intentarSubidaInicial(session){
         // La marca se escribe recién al mostrar el diálogo: si la carga se interrumpe
         // mientras espera (p. ej. durante el onboarding), la próxima vuelve a mostrarlo.
         abrirCuandoLibre(()=>{
+          if(!vigente()) return;   // se cerró sesión mientras esperaba
           marcarConflictoAdvertido(userId);
           document.getElementById('dlgConflictoDueno').classList.add('open');
         });
@@ -18573,7 +18615,7 @@ async function intentarSubidaInicial(session){
     }
     subidaDuenoCtx = { userId, deviceId };
     document.getElementById('confirmarDuenoCorreo').textContent = (session.user.email || 'con la que iniciaste sesión');
-    abrirCuandoLibre(()=> openSheet('sheetConfirmarDueno', 'btnConfirmarDueno'));
+    abrirCuandoLibre(()=>{ if(vigente() && subidaDuenoCtx) openSheet('sheetConfirmarDueno', 'btnConfirmarDueno'); });
   }catch(e){
     console.warn('Subida inicial: error inesperado', e);
   }
@@ -18600,14 +18642,15 @@ document.getElementById('btnConfirmarDueno').onclick = async ()=>{
    no se marca el candado y el dispositivo sigue solo con sus datos locales, intactos (no se borra
    nada); se vuelve a preguntar la próxima vez que se abra la app con esa sesión. */
 let unionCtx = null;            // { userId, deviceId } mientras la hoja está ofrecida
-let __unionEvaluado = false;
 async function ofrecerUnionMulti(userId, deviceId){
-  if(!ESCRITURA_CONTINUA_ACTIVA || __unionEvaluado || !supa || !multiActiva()) return;
-  __unionEvaluado = true;
+  if(!ESCRITURA_CONTINUA_ACTIVA || evaluadoPara.union === userId || !supa || !multiActiva()) return;
+  evaluadoPara.union = userId;   // C2b: por cuenta y por sesión (antes, una vez por carga)
+  const gen = sesionEvalGen;
   const tablas = ['expenses','incomes','debts','goals'];
   const res = await Promise.all(tablas.map(t =>
     supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null)
   ));
+  if(gen !== sesionEvalGen) return;   // la sesión cambió mientras contaba
   if(res.some(r => r.error)){ console.warn('[Sync] unión: no se pudo contar la nube', res.map(r => r.error)); return; }
   const nube = {};
   tablas.forEach((t, i) => { nube[t] = res[i].count || 0; });
@@ -18641,19 +18684,21 @@ document.getElementById('btnUnirMultiNo').addEventListener('click', ()=>{
 /* ---- Dispositivo LEGADO (Tanda 4a.1) ----
    Registrado en la nube (fila propia en config_dispositivo) antes de que existiera el
    candado, así que telora_dueno_confirmado es null y la escritura continua nunca se
-   activaría. Se ofrece una vez por carga tomar el rol de escritor; el caso C (candado de
-   otra cuenta) nunca llega aquí porque leerDuenoConfirmado() no es null. */
-let __legadoEvaluado = false;
+   activaría. Se ofrece una vez por cuenta y por sesión (C2b) tomar el rol de escritor; el caso C
+   (candado de otra cuenta) nunca llega aquí porque leerDuenoConfirmado() no es null. */
 async function ofrecerDispositivoLegado(userId, deviceId){
-  if(!ESCRITURA_CONTINUA_ACTIVA || __legadoEvaluado || !supa) return;
-  __legadoEvaluado = true;
+  if(!ESCRITURA_CONTINUA_ACTIVA || evaluadoPara.legado === userId || !supa) return;
+  evaluadoPara.legado = userId;
+  const gen = sesionEvalGen;
   const esc = await syncTransporte.leerEscritor(userId);
+  if(gen !== sesionEvalGen) return;   // la sesión cambió mientras leía
   if(esc.error){ console.warn('[Sync] dispositivo legado: no se pudo leer el escritor', esc.error); return; }
   const decision = decidirLegado({
     haySesion: true, tieneFila: true, dueno: leerDuenoConfirmado(),
     existeConfigNube: esc.existe, escritor: esc.escritor, deviceId
   });
   if(decision === 'escritor-ajeno'){
+    escritorAjenoPara = userId;
     console.info('[Sync] dispositivo legado: otro dispositivo mantiene el respaldo; este sigue solo con sus datos locales.');
     return;
   }
@@ -18663,6 +18708,7 @@ async function ofrecerDispositivoLegado(userId, deviceId){
   const res = await Promise.all(tablas.map(t =>
     supa.from(t).select('id', { count: 'exact', head: true }).eq('user_id', userId)
   ));
+  if(gen !== sesionEvalGen) return;
   if(res.some(r => r.error)){ console.warn('[Sync] dispositivo legado: no se pudo contar la nube', res.map(r => r.error)); return; }
   const nube = {};
   tablas.forEach((t, i) => { nube[t] = res[i].count || 0; });
@@ -18690,6 +18736,7 @@ document.getElementById('btnLegadoSi').onclick = async ()=>{
     showToast('Listo: este dispositivo mantendrá tu respaldo al día.', 'success');
     activarEscrituraContinua(ctx.userId, ctx.deviceId);   // resync inicial, con la guarda del 30%
   } else if(rol === 'otro'){
+    escritorAjenoPara = ctx.userId;
     showToast('Otro dispositivo ya mantiene tu respaldo', null, 5000);
   } else {
     showToast('No se pudo conectar con la nube. Se volverá a ofrecer la próxima vez que abras la app.', 'error', 5000);
@@ -18754,6 +18801,7 @@ try{
         setTimeout(()=> retomarEliminacionTrasReauth(session), 0);
       } else {
         desactivarRealtime(); detenerEscrituraContinua();   // sesión cerrada (acá, en otra pestaña o por expiración)
+        reiniciarEvaluacionesSesion();   // C2b: la próxima sesión (otra cuenta o la misma) se vuelve a evaluar
         // T2b: cierre que esta pestaña no pidió (otra pestaña, refresco rechazado): ¿se eliminó la cuenta?
         const previa = sesionConocida;
         sesionConocida = null;
@@ -18809,9 +18857,17 @@ document.getElementById('btnLoginGoogle').onclick = ()=> iniciarLoginGoogle();
 // llega por onAuthStateChange (SIGNED_IN); con error, el mismo aviso que en la web.
 // getLaunchUrl devuelve la URL de arranque también tras recargar la página: la última
 // procesada queda en sessionStorage para no canjear dos veces el mismo código.
+// C2b: solo se procesa con un login PKCE pendiente (el verificador que guarda
+// signInWithOAuth; el canje o «Borrar también los datos» lo quitan). Sin él, es una URL de
+// arranque vieja que getLaunchUrl repite en cada recarga del mismo proceso (p. ej. tras
+// eliminar la cuenta): se ignora en silencio, sin canje ni aviso.
+function hayFlujoPkcePendiente(ls, storageKey){
+  try{ return !!storageKey && ls.getItem(storageKey + '-code-verifier') !== null; }catch(_){ return false; }
+}
 async function procesarUrlRetornoAuth(url){
   const r = leerUrlRetornoAuth(url);
   if(!r || !supa) return;
+  if(!hayFlujoPkcePendiente(localStorage, supa.auth && supa.auth.storageKey)) return;
   try{
     if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
     sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);
@@ -19073,6 +19129,7 @@ async function cerrarSesionLocal(){
   if(!supa) return;
   desactivarRealtime();   // antes del signOut: el canal se cierra con el token todavía válido
   detenerEscrituraContinua();   // Tanda 4a: base y cola quedan guardadas bajo su user_id
+  reiniciarEvaluacionesSesion();   // C2b: sin recargar, la próxima sesión se evalúa de nuevo
   // scope 'local': cierra la sesión en este dispositivo aunque no haya red (el default
   // 'global' pide al servidor revocar todas las sesiones y puede fallar sin conexión).
   cierreSesionPropio = true;
@@ -19132,14 +19189,17 @@ function limpiarEstadoSyncCuenta(userId){
 }
 
 // Otro dispositivo/pestaña eliminó la cuenta: se detiene todo, se conservan los datos
-// locales, se cierra la sesión y se avisa UNA sola vez por carga (sin reintentos en bucle).
-let cuentaEliminadaAvisada = false;
+// locales, se cierra la sesión y se avisa UNA sola vez por cuenta (sin reintentos en bucle).
+// C2b: guarda el userId avisado (antes, un booleano por carga: otra cuenta eliminada después
+// en la misma carga ya no se detectaba).
+let cuentaEliminadaAvisada = null;
 async function manejarCuentaEliminadaEnServidor(userId){
-  if(cuentaEliminadaAvisada) return;
-  cuentaEliminadaAvisada = true;
+  if(cuentaEliminadaAvisada === userId) return;
+  cuentaEliminadaAvisada = userId;
   console.info('[Sync] la cuenta ya no existe en el servidor: se detiene la sincronización y se cierra la sesión.');
   desactivarRealtime();
   detenerEscrituraContinua();
+  reiniciarEvaluacionesSesion();
   limpiarEstadoSyncCuenta(userId);
   cierreSesionPropio = true;
   try{ if(supa) await supa.auth.signOut({ scope: 'local' }); }
@@ -19262,7 +19322,9 @@ function depsEliminarCuenta(){
     },
     limpiarEstadoCuenta: userId => limpiarEstadoSyncCuenta(userId),
     async cerrarSesion(){
-      cuentaEliminadaAvisada = true;   // esta pestaña ya sabe: no repetir el aviso de "eliminada en otro lado"
+      // Esta pestaña ya sabe: no repetir el aviso de "eliminada en otro lado" (para ESA cuenta).
+      cuentaEliminadaAvisada = sesionConocida ? sesionConocida.userId : cuentaEliminadaAvisada;
+      reiniciarEvaluacionesSesion();   // C2b: sin recargar, la próxima sesión se evalúa de nuevo
       cierreSesionPropio = true;
       try{ await supa.auth.signOut({ scope: 'local' }); }
       catch(e){ console.warn('Cuenta de usuario: signOut', e); }

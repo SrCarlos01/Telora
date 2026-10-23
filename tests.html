@@ -3466,6 +3466,52 @@ async function runTests(){
       && ru.pegada === null && ru.otraRuta === null && ru.malformada === null && ru.noTexto === null && ru.numero === null,
       'C2: leerUrlRetornoAuth — ?code=, error en query o hash (gana sobre code), URL ajena, malformada o sin datos -> null',
       JSON.stringify(ru));
+
+    // C2b: la URL de retorno/arranque solo se procesa con un login PKCE pendiente (verificador
+    // guardado). getLaunchUrl repite la URL de arranque en cada recarga del mismo proceso.
+    {
+      const memLs = o => ({ getItem: k => (k in o ? o[k] : null) });
+      const K = 'sb-x-auth-token';
+      const pend = {
+        con: win.hayFlujoPkcePendiente(memLs({ [K + '-code-verifier']: '"abc"' }), K),
+        sin: win.hayFlujoPkcePendiente(memLs({ [K]: '{}' }), K),
+        otraClave: win.hayFlujoPkcePendiente(memLs({ 'sb-y-auth-token-code-verifier': '"abc"' }), K),
+        sinStorageKey: win.hayFlujoPkcePendiente(memLs({ 'undefined-code-verifier': '"abc"' }), undefined),
+        lanza: win.hayFlujoPkcePendiente({ getItem(){ throw new Error('bloqueado'); } }, K)
+      };
+      const supaOrig = win.eval('supa'), toastOrig = win.showToast, pendOrig = win.hayFlujoPkcePendiente;
+      let marcaOrig = null; try{ marcaOrig = win.sessionStorage.getItem('telora_retorno_auth'); }catch(_){}
+      const reg = [];
+      let pendiente = false;
+      try{
+        win.__c2pSupa = { auth: { storageKey: K, exchangeCodeForSession: async c => { reg.push('canje:' + c); return { error: null }; } } };
+        win.eval('supa = window.__c2pSupa;');
+        win.showToast = (m, tipo) => reg.push('toast:' + tipo);
+        win.hayFlujoPkcePendiente = (ls, k) => { reg.push('pend:' + k); return pendiente; };
+        const correr = async url => { try{ win.sessionStorage.removeItem('telora_retorno_auth'); }catch(_){} await win.procesarUrlRetornoAuth(url); const r = reg.splice(0); return r; };
+        const B2 = 'cl.telora.app://auth/callback';
+        pendiente = false;
+        const sinFlujoError = await correr(B2 + '?error=access_denied&error_description=prueba');
+        const sinFlujoCode = await correr(B2 + '?code=viejo');
+        pendiente = true;
+        const conFlujoError = await correr(B2 + '?error=access_denied&error_description=cancelado');
+        const conFlujoCode = await correr(B2 + '?code=nuevo');
+        const ajena = await correr('https://telora.cl/?code=x');
+        assert(pend.con === true && pend.sin === false && pend.otraClave === false && pend.sinStorageKey === false && pend.lanza === false
+          && sinFlujoError.join() === 'pend:' + K && sinFlujoCode.join() === 'pend:' + K
+          && conFlujoError.join() === 'pend:' + K + ',toast:error' && conFlujoCode.join() === 'pend:' + K + ',canje:nuevo'
+          && ajena.length === 0,
+          'C2b: procesarUrlRetornoAuth — sin login PKCE pendiente (sin verificador) la URL de arranque vieja se ignora en silencio (ni canje ni aviso); con flujo pendiente, error → aviso y code → canje',
+          JSON.stringify({ pend, sinFlujoError, sinFlujoCode, conFlujoError, conFlujoCode, ajena }));
+      }catch(e){
+        assert(false, 'C2b: excepción en procesarUrlRetornoAuth', e && e.stack || String(e));
+      }finally{
+        win.showToast = toastOrig; win.hayFlujoPkcePendiente = pendOrig;
+        win.__c2pSupaOrig = supaOrig; win.eval('supa = window.__c2pSupaOrig;');
+        delete win.__c2pSupa; delete win.__c2pSupaOrig;
+        try{ if(marcaOrig === null) win.sessionStorage.removeItem('telora_retorno_auth'); else win.sessionStorage.setItem('telora_retorno_auth', marcaOrig); }catch(_){}
+      }
+    }
   }
 
   // ==================== T2b — Edge Function: lógica pura de index.ts ====================
@@ -3824,13 +3870,13 @@ async function runTests(){
         const sesion = { user: { id: 'u-l1', email: 'ana@ejemplo.cl' } };
 
         setState(win, fixtureBase());
-        win.eval('__subidaInicialEvaluada = false;');
+        win.eval('reiniciarEvaluacionesSesion();');
         await win.intentarSubidaInicial(sesion);
         const vacio = reg.splice(0);
 
         const conGasto = fixtureBase(); conGasto.expenses.push({ id:'e1', date:'2026-03-10', amount:5000, tipo:'Casual', category:'Comida' });
         setState(win, conGasto);
-        win.eval('__subidaInicialEvaluada = false;');
+        win.eval('reiniciarEvaluacionesSesion();');
         await win.intentarSubidaInicial(sesion);
         const conDatos = reg.splice(0);
         const correo = $('confirmarDuenoCorreo').textContent;
@@ -3841,7 +3887,7 @@ async function runTests(){
       }finally{
         Object.assign(win, orig);
         win.__l1SupaOrig = supaOrig;
-        win.eval('supa = window.__l1SupaOrig; __subidaInicialEvaluada = false; subidaDuenoCtx = null; state = ' + stOrig + ';');
+        win.eval('supa = window.__l1SupaOrig; reiniciarEvaluacionesSesion(); state = ' + stOrig + ';');
         delete win.__l1SupaStub; delete win.__l1SupaOrig;
       }
     }
@@ -4005,6 +4051,155 @@ async function runTests(){
       }catch(_){}
       iframe.style.cssText = 'display:none';
       try{ win.syncDeskLayout(); }catch(_){}
+    }
+  }
+
+  // ==================== C2b · la sync se evalúa con cada sesión (banderas por usuario) ====================
+  // Eventos reales de onAuthStateChange (auth._notifyAllSubscribers, sin broadcast) sobre un stub de
+  // supa: from() registra qué cuenta consulta config_dispositivo y nada sale a la red. Las
+  // activaciones (Realtime, escritura continua, subida, hojas) se reemplazan por registros.
+  {
+    const d = win.document;
+    const tick = ms => new Promise(r => setTimeout(r, ms));
+    const auth = win.eval('supa').auth;
+    const supaOrig = win.eval('supa');
+    const fns = ['activarRealtime','activarEscrituraContinua','subirDatosIniciales','leerDuenoConfirmado','marcarDuenoConfirmado',
+      'leerSubidaPendiente','leerConflictoAdvertido','marcarConflictoAdvertido','getDeviceId','abrirCuandoLibre','openSheet','renderCuentaUsuario'];
+    const orig = Object.fromEntries(fns.map(f => [f, win[f]]));
+    const stOrig = win.eval('JSON.stringify(state)');
+    const transporte = win.eval('syncTransporte'), leerEscritorOrig = transporte.leerEscritor;
+    const reg = [];
+    let dueno = null, filaDisp = () => ({ device_id: 'dev-c2b' }), conteo = 0, demora = {};
+    const ses = u => ({ access_token: 'tok-' + u, user: { id: u, email: u + '@ejemplo.cl' } });
+    const entrar = async (u, ev) => { await auth._notifyAllSubscribers(ev || 'SIGNED_IN', ses(u), false); await tick(20); };
+    const salir = async () => { win.eval('cierreSesionPropio = true;'); await auth._notifyAllSubscribers('SIGNED_OUT', null, false); win.eval('cierreSesionPropio = false;'); await tick(20); };
+    const evals = () => reg.filter(x => x.startsWith('eval:')).map(x => x.slice(5));
+    const activ = () => reg.filter(x => /^(rt|esc|subir|sheet|conflicto|insert):/.test(x));
+    try{
+      const cadena = t => { let uid = null; const c = {
+        select(){ return c; }, is(){ return c; }, delete(){ return c; },
+        eq(k, v){ if(k === 'user_id'){ uid = v; if(t === 'config_dispositivo') reg.push('eval:' + v); } return c; },
+        insert: async () => { reg.push('insert:' + t); return { error: null }; },
+        maybeSingle: async () => { if(demora[uid]) await demora[uid]; return { data: filaDisp(), error: null }; },
+        then(ok, ko){ return Promise.resolve({ count: conteo, error: null }).then(ok, ko); } }; return c; };
+      win.__c2bSupa = { from: t => cadena(t), auth };
+      win.eval('supa = window.__c2bSupa;');
+      win.activarRealtime = u => reg.push('rt:' + u);
+      win.activarEscrituraContinua = u => reg.push('esc:' + u);
+      win.subirDatosIniciales = async u => { reg.push('subir:' + u); };
+      win.leerDuenoConfirmado = () => dueno;
+      win.marcarDuenoConfirmado = u => { reg.push('dueno:' + u); };
+      win.leerSubidaPendiente = () => null;
+      win.leerConflictoAdvertido = () => null;
+      win.marcarConflictoAdvertido = u => reg.push('conflicto:' + u);
+      win.getDeviceId = () => 'dev-c2b';
+      win.abrirCuandoLibre = fn => fn();
+      win.openSheet = id => reg.push('sheet:' + id);
+      win.renderCuentaUsuario = () => {};
+      if(win.eval('sesionConocida')) await salir();
+      win.reiniciarEvaluacionesSesion();
+
+      // (i) A → SIGNED_OUT → B: se evalúa B y se activa para B (antes, B quedaba sin evaluar).
+      dueno = 'u-A'; await entrar('u-A');
+      await salir();
+      dueno = 'u-B'; await entrar('u-B');
+      const r1 = { evals: evals(), activ: activ() }; reg.length = 0;
+      assert(r1.evals.join() === 'u-A,u-B' && r1.activ.join() === 'rt:u-A,esc:u-A,rt:u-B,esc:u-B',
+        'C2b (i): SIGNED_IN A → SIGNED_OUT → SIGNED_IN B en la misma carga: B se evalúa y se activa (Realtime + escritura continua)', JSON.stringify(r1));
+
+      // (ii) Misma cuenta con eventos repetidos (SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION): una sola evaluación.
+      await salir(); reg.length = 0;
+      dueno = 'u-A';
+      await Promise.all([auth._notifyAllSubscribers('SIGNED_IN', ses('u-A'), false), auth._notifyAllSubscribers('INITIAL_SESSION', ses('u-A'), false)]);
+      await entrar('u-A', 'TOKEN_REFRESHED'); await entrar('u-A');
+      const r2 = { evals: evals(), activ: activ() }; reg.length = 0;
+      assert(r2.evals.join() === 'u-A' && r2.activ.join() === 'rt:u-A,esc:u-A',
+        'C2b (ii): la misma cuenta con eventos repetidos de onAuthStateChange (también simultáneos) se evalúa una sola vez', JSON.stringify(r2));
+
+      // (iii) A → SIGNED_OUT → A otra vez: se vuelve a evaluar A.
+      await salir();
+      await entrar('u-A');
+      const r3 = { evals: evals(), activ: activ() }; reg.length = 0;
+      assert(r3.evals.join() === 'u-A' && r3.activ.join() === 'rt:u-A,esc:u-A',
+        'C2b (iii): A → SIGNED_OUT → A otra vez: A se vuelve a evaluar sin recargar', JSON.stringify(r3));
+
+      // (iv) Evaluación obsoleta: la de A queda en vuelo, la sesión pasa a B; al terminar, A no activa nada.
+      await salir(); reg.length = 0;
+      let soltarA; demora['u-A'] = new Promise(r => { soltarA = r; });
+      dueno = 'u-A'; await entrar('u-A');
+      await salir();
+      dueno = 'u-B'; await entrar('u-B');
+      soltarA(); await tick(20); delete demora['u-A'];
+      const r4 = { evals: evals(), activ: activ() };
+      // …y la que cruza un cierre sin otra sesión tampoco.
+      reg.length = 0; await salir();
+      demora['u-A'] = new Promise(r => { soltarA = r; });
+      await entrar('u-A'); await salir(); soltarA(); await tick(20); delete demora['u-A'];
+      const r4b = { evals: evals(), activ: activ() }; reg.length = 0;
+      assert(r4.evals.join() === 'u-A,u-B' && r4.activ.join() === 'rt:u-B,esc:u-B' && r4b.evals.join() === 'u-A' && r4b.activ.length === 0,
+        'C2b (iv): una evaluación de A en vuelo cuando la sesión cambia (a B o a ninguna) no activa Realtime, la escritura continua ni abre hojas para A', JSON.stringify({ r4, r4b }));
+
+      // (vi) Fase 0.a: A tiene datos y el candado (no se borró al cerrar sesión); entra B.
+      // Nueva (nube vacía): caso C, nada sube ni se registra. Existente (con datos): se registra el
+      // dispositivo pero nunca se sube ni se activa la escritura ni se ofrece la unión.
+      await salir(); reg.length = 0;
+      const conGasto = fixtureBase(); conGasto.expenses.push({ id:'pa', date:'2026-03-10', amount:5000, tipo:'Casual', category:'Comida', nombre:'PRUEBA-A' });
+      setState(win, conGasto);
+      dueno = 'u-A'; filaDisp = () => null; conteo = 0;
+      await entrar('u-Bnueva');
+      const nueva = activ(); reg.length = 0;
+      const dlgAbierto = d.getElementById('dlgConflictoDueno').classList.contains('open');
+      d.getElementById('dlgConflictoDueno').classList.remove('open');
+      await salir(); reg.length = 0;
+      conteo = 3;
+      await entrar('u-Bexistente');
+      const existente = activ(); reg.length = 0;
+      const unionAbierta = d.getElementById('sheetUnirMulti').classList.contains('open');
+      assert(nueva.join() === 'conflicto:u-Bnueva' && dlgAbierto
+        && existente.join() === 'insert:config_dispositivo,rt:u-Bexistente' && !unionAbierta
+        && !win.syncHabilitada(),
+        'C2b (vi): con los datos de A en el dispositivo (candado de A), B nueva → caso C (aviso, nada sube ni se registra); B existente → solo se registra el dispositivo: nunca se suben los datos de A ni se activa la escritura para B',
+        JSON.stringify({ nueva, dlgAbierto, existente, unionAbierta }));
+      await salir(); filaDisp = () => ({ device_id: 'dev-c2b' }); conteo = 0;
+
+      // Unión y legado: también por cuenta y por sesión; escritor-ajeno da el motivo veraz.
+      reg.length = 0;
+      let lecturas = [];
+      transporte.leerEscritor = async u => { lecturas.push(u); return { existe: true, escritor: 'otro-dev', error: null }; };
+      dueno = null;
+      await win.ofrecerDispositivoLegado('u-A', 'dev-c2b'); await win.ofrecerDispositivoLegado('u-A', 'dev-c2b');
+      const ajenoA = win.eval('escritorAjenoPara');
+      win.reiniciarEvaluacionesSesion();
+      const ajenoTrasCierre = win.eval('escritorAjenoPara');
+      await win.ofrecerDispositivoLegado('u-A', 'dev-c2b'); await win.ofrecerDispositivoLegado('u-B', 'dev-c2b');
+      win.reiniciarEvaluacionesSesion();
+      assert(lecturas.join() === 'u-A,u-A,u-B' && ajenoA === 'u-A' && ajenoTrasCierre === null,
+        'C2b (c): ofrecerDispositivoLegado se evalúa una vez por cuenta y por sesión (se repite tras cerrar sesión y para otra cuenta); escritor-ajeno queda como motivo hasta cerrar la sesión',
+        JSON.stringify({ lecturas, ajenoA, ajenoTrasCierre }));
+    }catch(e){
+      assert(false, 'C2b: excepción', e && e.stack || String(e));
+    }finally{
+      Object.assign(win, orig);
+      transporte.leerEscritor = leerEscritorOrig;
+      try{ if(win.eval('sesionConocida')) await salir(); }catch(_){}
+      win.__c2bSupaOrig = supaOrig;
+      win.eval('supa = window.__c2bSupaOrig; reiniciarEvaluacionesSesion(); state = ' + stOrig + ';');
+      delete win.__c2bSupa; delete win.__c2bSupaOrig;
+      try{ d.getElementById('dlgConflictoDueno').classList.remove('open'); }catch(_){}
+    }
+
+    // (v) estadoRespaldoCuenta con cada motivo (función pura).
+    {
+      const e = o => win.estadoRespaldoCuenta(Object.assign({ habilitada: false, enLinea: true, cola: 0, fallidas: 0 }, o));
+      const OTRO = 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo';
+      const TODAVIA = 'Este dispositivo todavía no está respaldando tus datos.';
+      const r = { ajeno: e({ motivo: 'escritor-ajeno' }), sinMotivo: e({}), nulo: e({ motivo: null }), otro: e({ motivo: 'dueno-ajeno' }),
+        ajenoOffline: e({ motivo: 'escritor-ajeno', enLinea: false }), habilitadaConMotivo: e({ habilitada: true, motivo: 'escritor-ajeno' }) };
+      assert(r.ajeno.texto === OTRO && r.sinMotivo.texto === TODAVIA && r.nulo.texto === TODAVIA && r.otro.texto === TODAVIA
+        && r.ajenoOffline.texto === OTRO && [r.ajeno, r.sinMotivo, r.nulo, r.otro].every(x => x.tono === 'gris')
+        && r.habilitadaConMotivo.texto === 'Respaldo al día',
+        'C2b (v): estadoRespaldoCuenta dice «otro dispositivo mantiene tu respaldo» solo con motivo escritor-ajeno; sin motivo conocido, «todavía no está respaldando tus datos» (gris); con sync habilitada el motivo no cuenta',
+        JSON.stringify(r));
     }
   }
 
