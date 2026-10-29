@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo de la app: background_color de manifest.json. -->
+    <color name="telora_fondo">#1B1210</color>
+</resources>

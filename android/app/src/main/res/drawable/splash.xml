@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arranque anterior a Android 12 (fondo del tema de lanzamiento): el logo de Telora
+     (splash_logo, de tools/iconos_android.py) centrado sobre el fondo de la app. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/telora_fondo"/>
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash_logo"/>
+    </item>
+</layer-list>

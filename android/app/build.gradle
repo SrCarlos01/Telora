@@ -7,8 +7,11 @@ android {
         applicationId "cl.telora.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Versión a mano. versionCode queda en 1 hasta la primera subida a Play y después
+        // suma 1 en cada subida (Play rechaza un código repetido o menor). versionName es el
+        // que ve el usuario.
         versionCode 1
-        versionName "1.0"
+        versionName "0.9.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

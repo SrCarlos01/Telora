@@ -16,7 +16,12 @@
     </style>
 
 
+    <!-- C3b: tema de arranque. BridgeActivity no llama a installSplashScreen: en Android 12+
+         el sistema dibuja su SplashScreen con estos dos atributos (por defecto, el ícono genérico
+         de Android sobre ?android:colorBackground); antes de 12 se ve @drawable/splash. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/telora_fondo</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
     </style>
 </resources>
