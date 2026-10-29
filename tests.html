@@ -3569,6 +3569,28 @@ async function runTests(){
         assert(cerrada === L3 && conRetorno === '',
           'C3a: alCerrarNavegadorLogin — la Custom Tab cerrada sin volver limpia los verificadores; con un retorno de Google en curso no toca nada (ese retorno limpia al terminar)',
           JSON.stringify({ cerrada, conRetorno }));
+
+        // C3b: sin verificador, la URL en vivo (appUrlOpen) avisa una vez por URL y no canjea;
+        // la de getLaunchUrl sigue en silencio. Con verificador, en vivo canjea como siempre.
+        const vivo = async (url, enVivo, limpiarMarca) => {
+          if(limpiarMarca){ try{ win.sessionStorage.removeItem('telora_retorno_auth'); }catch(_){} }
+          await win.procesarUrlRetornoAuth(url, enVivo);
+          return reg.splice(0).join();
+        };
+        pendiente = false;
+        const vivoError = await vivo(B3 + '?error=access_denied', true, true);
+        const vivoRepetida = await vivo(B3 + '?error=access_denied', true, false);
+        const vivoCode = await vivo(B3 + '?code=perdido', true, false);
+        const arranque = await vivo(B3 + '?code=arranque', false, true);
+        const vivoAjena = await vivo('https://telora.cl/?code=x', true, true);
+        pendiente = true; errorCanje = null;
+        const vivoConFlujo = await vivo(B3 + '?code=bueno2', true, true);
+        pendiente = false;
+        const vivoTrasCanje = await vivo(B3 + '?code=bueno2', true, false);
+        assert(vivoError === 'toast' && vivoRepetida === '' && vivoCode === 'toast' && arranque === '' && vivoAjena === ''
+          && vivoConFlujo === 'canje,' + L3 && vivoTrasCanje === '',
+          'C3b: procesarUrlRetornoAuth en vivo — sin verificador, una URL de retorno (code o error) avisa el error sin canjear, una sola vez por URL; la misma URL ya canjeada no avisa; getLaunchUrl sin verificador sigue en silencio; con verificador canjea igual que antes',
+          JSON.stringify({ vivoError, vivoRepetida, vivoCode, arranque, vivoAjena, vivoConFlujo, vivoTrasCanje }));
       }catch(e){
         assert(false, 'C3a: excepción en procesarUrlRetornoAuth', e && e.stack || String(e));
       }finally{
@@ -3606,10 +3628,21 @@ async function runTests(){
           getRegistrations: async () => { reg.push('getRegistrations'); return [{ unregister: async () => { reg.push('unregister'); return true; } }]; },
           addEventListener: e => reg.push('sw.on:' + e)
         };
+        // C3b: Cache Storage falso con una caja del SW y otra ajena.
+        const cachesFalso = {
+          keys: async () => { reg.push('caches.keys'); return ['misfinanzas-cap-x', 'otra-caja']; },
+          delete: async k => { reg.push('caches.delete:' + k); return true; }
+        };
         Object.defineProperty(win.navigator, 'serviceWorker', { configurable: true, get: () => swFalso });
+        // caches es propia de window (interfaz [Global]): se restaura su descriptor, no se borra.
+        const descCaches = Object.getOwnPropertyDescriptor(win, 'caches');
+        Object.defineProperty(win, 'caches', { configurable: true, get: () => cachesFalso });
         win.esAppNativa = () => nativaOrig(nativa ? { Capacitor: { isNativePlatform: () => true } } : {});
         try{ win.arrancarServiceWorker(); }
-        finally{ delete win.navigator.serviceWorker; win.esAppNativa = nativaOrig; }
+        finally{
+          delete win.navigator.serviceWorker; win.esAppNativa = nativaOrig;
+          if(descCaches) Object.defineProperty(win, 'caches', descCaches); else delete win.caches;
+        }
         return new Promise(r => setTimeout(r, 0)).then(() => reg);
       };
       try{
@@ -3617,12 +3650,30 @@ async function runTests(){
         const nativa = await correrArranque(true);
         assert(web[0] === 'register:./sw.js:{"updateViaCache":"none"}' && web.includes('reg.on:updatefound') && web.includes('sw.on:controllerchange')
           && !web.includes('getRegistrations') && !web.includes('unregister')
-          && nativa.join() === 'getRegistrations,unregister'
-          && win.navigator.serviceWorker === win.Navigator.prototype.__lookupGetter__('serviceWorker').call(win.navigator),
-          'C3a: arrancarServiceWorker — en la web registra ./sw.js (updateViaCache none) con updatefound y controllerchange, como antes; en la app nativa (esAppNativa simulada con w) solo desregistra lo que haya',
+          && !web.some(x => x.indexOf('caches.') === 0)
+          && nativa.filter(x => x.indexOf('caches.') !== 0).join() === 'getRegistrations,unregister'
+          && nativa.filter(x => x.indexOf('caches.') === 0).join() === 'caches.keys,caches.delete:misfinanzas-cap-x'
+          && win.navigator.serviceWorker === win.Navigator.prototype.__lookupGetter__('serviceWorker').call(win.navigator)
+          && win.caches !== undefined && typeof win.caches.keys === 'function' && win.caches.keys.toString().indexOf('caches.keys') < 0,
+          'C3a/C3b: arrancarServiceWorker — en la web registra ./sw.js (updateViaCache none) con updatefound y controllerchange, como antes, y no toca Cache Storage; en la app nativa (esAppNativa simulada con w) solo desregistra y borra las cajas misfinanzas- (no las ajenas)',
           JSON.stringify({ web, nativa }));
       }catch(e){
         assert(false, 'C3a: excepción en arrancarServiceWorker', e && e.stack || String(e));
+      }
+
+      // C3b: quitarCachesSw por sí sola.
+      try{
+        const borradas = [];
+        const csFalso = ks => ({ keys: async () => ks, delete: async k => { borradas.push(k); return true; } });
+        const nDosCajas = await win.quitarCachesSw(csFalso(['misfinanzas-a', 'misfinanzas-b', 'ajena-misfinanzas-c']));
+        const nNinguna = await win.quitarCachesSw(csFalso([]));
+        const nFallaC = await win.quitarCachesSw({ keys: async () => { throw new Error('bloqueado'); } });
+        const nSinApiC = await win.quitarCachesSw(undefined);
+        assert(nDosCajas === 2 && borradas.join() === 'misfinanzas-a,misfinanzas-b' && nNinguna === 0 && nFallaC === 0 && nSinApiC === 0,
+          'C3b: quitarCachesSw — borra solo las cajas con prefijo misfinanzas- y resuelve con cuántas (0 sin cajas, si falla o sin API)',
+          JSON.stringify({ nDosCajas, borradas, nNinguna, nFallaC, nSinApiC }));
+      }catch(e){
+        assert(false, 'C3b: excepción en quitarCachesSw', e && e.stack || String(e));
       }
     }
   }

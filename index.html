@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-7xKTW5tyyKlj+6ucA+3/qpHz51MFqkTNMOBHs9FOAZs=' 'sha256-nKKnnrjwmYkudSUIOlpg6z+jF75RdldgVm5eClrcQB8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-+/7U9YLKqhb0epa0hclLUZ3dTgIGJcuxs2p4GhdUOQ8=' 'sha256-m27Mn3yGRLYH1d3AtqejNkrvukwADi/xLk8hl1FrVmE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -14725,6 +14725,16 @@ function quitarServiceWorkers(sw){
       .catch(() => 0);
   }catch(_){ return Promise.resolve(0); }
 }
+// C3b: borra las cajas de Cache Storage del SW (prefijo misfinanzas-) que dejaron C1/C2 en la
+// app nativa; las de otro prefijo no se tocan. Resuelve con cuántas borró (0 si falla o sin API).
+function quitarCachesSw(cs){
+  try{
+    return cs.keys()
+      .then(ks => ks.filter(k => k.indexOf('misfinanzas-') === 0))
+      .then(ks => Promise.all(ks.map(k => cs.delete(k))).then(() => ks.length))
+      .catch(() => 0);
+  }catch(_){ return Promise.resolve(0); }
+}
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
@@ -14748,7 +14758,12 @@ if('serviceWorker' in navigator){
     // C3a: en la app nativa los archivos vienen en el APK y las versiones llegan por la tienda:
     // sin SW (ni su caché ni el aviso de versión nueva) y se quita el que hayan dejado C1/C2.
     // esAppNativa vive en el <script> de Cuenta de usuario; si ese no cargó, se sigue como web.
-    if(typeof esAppNativa === 'function' && esAppNativa()){ quitarServiceWorkers(navigator.serviceWorker); return; }
+    // C3b: también se borran las cajas de su caché, que el desregistro no quita.
+    if(typeof esAppNativa === 'function' && esAppNativa()){
+      quitarServiceWorkers(navigator.serviceWorker);
+      quitarCachesSw(window.caches);
+      return;
+    }
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(reg=>{
       reg.update().catch(()=>{});   // chequeo explícito al arrancar
@@ -18897,10 +18912,23 @@ function limpiarVerificadoresPkce(ls, storageKey){
   return borradas;
 }
 let retornoAuthEnCurso = false;   // C3a: entre que llega la URL de retorno y termina el canje
-async function procesarUrlRetornoAuth(url){
+// C3b: enVivo = la URL llegó por appUrlOpen (Google acaba de volver), no por getLaunchUrl. Sin
+// verificador, una URL en vivo es un login que se perdió (en Android < 14 browserFinished
+// también llega al minimizar la Custom Tab y la limpieza borra el verificador): aviso de
+// error, sin canje, una sola vez por URL. La de getLaunchUrl sigue en silencio (C2b).
+async function procesarUrlRetornoAuth(url, enVivo){
   const r = leerUrlRetornoAuth(url);
   if(!r || !supa) return;
-  if(!hayFlujoPkcePendiente(localStorage, supa.auth && supa.auth.storageKey)) return;
+  if(!hayFlujoPkcePendiente(localStorage, supa.auth && supa.auth.storageKey)){
+    if(!enVivo) return;
+    try{
+      if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
+      sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);
+    }catch(_){}
+    showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
+    try{ await window.Capacitor.Plugins.Browser.close(); }catch(_){}
+    return;
+  }
   try{
     if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
     sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);
@@ -18937,7 +18965,7 @@ if(supa && esAppNativa()){
     const claveSupa = supa.auth && supa.auth.storageKey;
     if(!hayFlujoPkcePendiente(localStorage, claveSupa)) limpiarVerificadoresPkce(localStorage, claveSupa);
     const AppNativa = window.Capacitor.Plugins.App;
-    AppNativa.addListener('appUrlOpen', ev => procesarUrlRetornoAuth(ev && ev.url));
+    AppNativa.addListener('appUrlOpen', ev => procesarUrlRetornoAuth(ev && ev.url, true));
     window.Capacitor.Plugins.Browser.addListener('browserFinished', () => alCerrarNavegadorLogin());
     AppNativa.getLaunchUrl().then(r => procesarUrlRetornoAuth(r && r.url)).catch(()=>{});
   }catch(e){
