@@ -18,6 +18,15 @@
   #resumen.fail{ background:#fdeaea; }
   #localStorageCheck{ margin-top:24px; font-size:13px; color:#666; }
 </style>
+<script>
+// Foto del localStorage del origen ANTES de que el iframe cargue index.html: al abrir, la app
+// escribe misfinanzas_metasCheckMk (mes real del último chequeo de metas, Tanda P3) si no está o
+// es de otro mes. Esa clave se restaura al terminar (restaurarMarcaMetas).
+try{
+  window.__lsSnapshotAntes = JSON.stringify(Object.keys(localStorage).sort());
+  window.__marcaMetasAntes = localStorage.getItem('misfinanzas_metasCheckMk');
+}catch(e){ window.__lsSnapshotAntes = null; }
+</script>
 </head>
 <body>
 <h1>Telora · Harness de pruebas del motor financiero (T4, diagnóstico)</h1>
@@ -5704,8 +5713,28 @@ async function runTests(){
       'Tanda C: elegirAviso da prioridad al aviso legal con y sin sesión; sin él, sigue el orden de siempre', JSON.stringify(al && (al.error || al.tabla)));
   }
 
+  {
+    const r = restaurarMarcaMetas();
+    assert(r.ok,
+      'Harness: el marcador misfinanzas_metasCheckMk que index.html escribe al abrir en el iframe queda en el origen como estaba antes de abrir el harness (ausente o con su valor)',
+      JSON.stringify(r));
+  }
+
   renderResultados();
   checkLocalStorage();
+}
+
+// La app (iframe) escribe misfinanzas_metasCheckMk al abrir, en el localStorage compartido con
+// esta página: se deja como estaba en la foto del <head> (quitarlo no dispara recargas: el
+// listener de borrado solo mira misfinanzas_data).
+function restaurarMarcaMetas(){
+  const k = 'misfinanzas_metasCheckMk', antes = window.__marcaMetasAntes;
+  if(antes === undefined) return { ok: false, motivo: 'sin foto del <head>' };
+  try{
+    const escrita = localStorage.getItem(k);
+    if(antes === null) localStorage.removeItem(k); else localStorage.setItem(k, antes);
+    return { ok: localStorage.getItem(k) === antes, antes, escrita };
+  }catch(e){ return { ok: false, motivo: e.message }; }
 }
 
 // Restaura el localStorage del origen después de una prueba que guardó desde el iframe principal.
@@ -6403,8 +6432,9 @@ async function pruebasAvisoLegal(){
     return out;
   }finally{
     f.remove();
-    Object.keys(localStorage).filter(k => !(k in lsAntes)).forEach(k => localStorage.removeItem(k));
-    Object.keys(lsAntes).forEach(k => { if(localStorage.getItem(k) !== lsAntes[k]) localStorage.setItem(k, lsAntes[k]); });
+    // Sin datos previos, restaurar quita misfinanzas_data: sin esto el iframe principal recargaba
+    // (listener de borrado local) DESPUÉS de las pruebas y volvía a escribir misfinanzas_metasCheckMk.
+    await restaurarLocalStorageSinRecargar(document.getElementById('appFrame').contentWindow, lsAntes);
   }
 }
 
@@ -6422,8 +6452,6 @@ function checkLocalStorage(){
     div.textContent = 'No se pudo verificar localStorage: ' + e.message;
   }
 }
-
-try{ window.__lsSnapshotAntes = JSON.stringify(Object.keys(localStorage).sort()); }catch(e){ window.__lsSnapshotAntes = null; }
 
 document.getElementById('appFrame').addEventListener('load', ()=>{
   // Pequeño margen: aunque el script del iframe corre de forma síncrona durante el parseo
