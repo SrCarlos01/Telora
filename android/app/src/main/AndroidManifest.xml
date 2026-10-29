@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- C3a: sin respaldos. allowBackup/fullBackupContent cubren API < 31; en API 31+
+         allowBackup=false no frena la transferencia entre dispositivos, por eso
+         data_extraction_rules excluye todo (el localStorage del WebView vive bajo root). -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
