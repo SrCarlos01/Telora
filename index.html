@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-nKKnnrjwmYkudSUIOlpg6z+jF75RdldgVm5eClrcQB8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-7xKTW5tyyKlj+6ucA+3/qpHz51MFqkTNMOBHs9FOAZs=' 'sha256-nKKnnrjwmYkudSUIOlpg6z+jF75RdldgVm5eClrcQB8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -14717,6 +14717,14 @@ function pedirBuild(){
   const c = navigator.serviceWorker && navigator.serviceWorker.controller;
   if(c) c.postMessage({ type:'GET_BUILD' });
 }
+// C3a: desregistra todos los SW de este origen; resuelve con cuántos había (0 si falla).
+function quitarServiceWorkers(sw){
+  try{
+    return sw.getRegistrations()
+      .then(regs => Promise.all(regs.map(r => r.unregister())).then(() => regs.length))
+      .catch(() => 0);
+  }catch(_){ return Promise.resolve(0); }
+}
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
@@ -14735,7 +14743,12 @@ if('serviceWorker' in navigator){
     reg.update().catch(()=>{});
   }
 
-  window.addEventListener('load', ()=>{
+  // C3a: con nombre para poder probarlo (tests.html) con un navigator.serviceWorker falso.
+  function arrancarServiceWorker(){
+    // C3a: en la app nativa los archivos vienen en el APK y las versiones llegan por la tienda:
+    // sin SW (ni su caché ni el aviso de versión nueva) y se quita el que hayan dejado C1/C2.
+    // esAppNativa vive en el <script> de Cuenta de usuario; si ese no cargó, se sigue como web.
+    if(typeof esAppNativa === 'function' && esAppNativa()){ quitarServiceWorkers(navigator.serviceWorker); return; }
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('./sw.js', { updateViaCache:'none' }).then(reg=>{
       reg.update().catch(()=>{});   // chequeo explícito al arrancar
@@ -14768,7 +14781,8 @@ if('serviceWorker' in navigator){
         navigator.serviceWorker.ready.then(chequearActualizacion).catch(()=>{});
       }
     });
-  });
+  }
+  window.addEventListener('load', arrancarServiceWorker);
 }
 
 /* ====================================================================================

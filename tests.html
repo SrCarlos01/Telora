@@ -3578,6 +3578,53 @@ async function runTests(){
         try{ if(marcaOrig === null) win.sessionStorage.removeItem('telora_retorno_auth'); else win.sessionStorage.setItem('telora_retorno_auth', marcaOrig); }catch(_){}
       }
     }
+
+    // C3a: en la app nativa no hay Service Worker (se desregistra el que haya); en la web, sí.
+    {
+      const regFalso = () => { const r = { quitado: false, unregister: async () => { r.quitado = true; return true; } }; return r; };
+      const dos = [regFalso(), regFalso()];
+      const nDos = await win.quitarServiceWorkers({ getRegistrations: async () => dos });
+      const nCero = await win.quitarServiceWorkers({ getRegistrations: async () => [] });
+      const nFalla = await win.quitarServiceWorkers({ getRegistrations: async () => { throw new Error('bloqueado'); } });
+      const nSinApi = await win.quitarServiceWorkers(undefined);
+      const capNativo = { Capacitor: { isNativePlatform: () => true } };
+      assert(nDos === 2 && dos.every(r => r.quitado) && nCero === 0 && nFalla === 0 && nSinApi === 0
+        && win.esAppNativa(capNativo) === true && win.esAppNativa() === false,
+        'C3a: quitarServiceWorkers — desregistra todos los SW y resuelve con cuántos había (0 sin registros, si falla o sin API); esAppNativa con un Capacitor nativo simulado (w) es true y en esta página es false',
+        JSON.stringify({ nDos, nCero, nFalla, nSinApi }));
+
+      // Arranque del SW con un navigator.serviceWorker falso (servidor_pruebas.py responde 404
+      // a /sw.js, así que aquí no hay registro real): web -> register igual que antes; app
+      // nativa (esAppNativa simulada con w) -> solo desregistra, sin register ni listeners.
+      const nativaOrig = win.esAppNativa;
+      const correrArranque = nativa => {
+        const reg = [];
+        const regSw = { waiting: null, update: async () => { reg.push('update'); }, addEventListener: e => reg.push('reg.on:' + e) };
+        const swFalso = {
+          controller: null, ready: new Promise(() => {}),
+          register: (u, o) => { reg.push('register:' + u + ':' + JSON.stringify(o)); return Promise.resolve(regSw); },
+          getRegistrations: async () => { reg.push('getRegistrations'); return [{ unregister: async () => { reg.push('unregister'); return true; } }]; },
+          addEventListener: e => reg.push('sw.on:' + e)
+        };
+        Object.defineProperty(win.navigator, 'serviceWorker', { configurable: true, get: () => swFalso });
+        win.esAppNativa = () => nativaOrig(nativa ? { Capacitor: { isNativePlatform: () => true } } : {});
+        try{ win.arrancarServiceWorker(); }
+        finally{ delete win.navigator.serviceWorker; win.esAppNativa = nativaOrig; }
+        return new Promise(r => setTimeout(r, 0)).then(() => reg);
+      };
+      try{
+        const web = await correrArranque(false);
+        const nativa = await correrArranque(true);
+        assert(web[0] === 'register:./sw.js:{"updateViaCache":"none"}' && web.includes('reg.on:updatefound') && web.includes('sw.on:controllerchange')
+          && !web.includes('getRegistrations') && !web.includes('unregister')
+          && nativa.join() === 'getRegistrations,unregister'
+          && win.navigator.serviceWorker === win.Navigator.prototype.__lookupGetter__('serviceWorker').call(win.navigator),
+          'C3a: arrancarServiceWorker — en la web registra ./sw.js (updateViaCache none) con updatefound y controllerchange, como antes; en la app nativa (esAppNativa simulada con w) solo desregistra lo que haya',
+          JSON.stringify({ web, nativa }));
+      }catch(e){
+        assert(false, 'C3a: excepción en arrancarServiceWorker', e && e.stack || String(e));
+      }
+    }
   }
 
   // ==================== T2b — Edge Function: lógica pura de index.ts ====================

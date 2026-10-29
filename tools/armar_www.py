@@ -11,9 +11,11 @@ las líneas cp del paso «Armar _site con la lista permitida» de pages.yml), as
 script compara ambas antes de copiar y se detiene si difieren (control de deriva): si
 se agrega un archivo al sitio, hay que sumarlo en los dos lados.
 
-En www/sw.js se reemplaza __BUILD__ por «cap-<hash corto de HEAD>», igual que hace
-el deploy con _site/sw.js: así la caché del Service Worker del WebView cambia con cada
-versión empaquetada en vez de quedar fija en '__BUILD__'. Los archivos fuente no se tocan.
+En www/sw.js se reemplaza __BUILD__ por «cap-<hash corto de HEAD>» (o «…-dirty» si el
+árbol tiene cambios sin commitear), igual que hace el deploy con _site/sw.js, para que sw.js
+no quede con '__BUILD__'. Desde C3a la app nativa no registra el Service Worker (los archivos
+vienen en el APK); www/sw.js se copia igual porque la lista es la misma de la web. Los
+archivos fuente no se tocan.
 
 www/ es derivado (está en .gitignore) y se rehace entero en cada corrida.
 tools/ no se publica: el deploy (.github/workflows/pages.yml) copia una lista permitida.
@@ -105,9 +107,13 @@ def controlar_deriva(ruta):
 
 
 def build():
+    """«cap-<hash>», o «cap-<hash>-dirty» si el árbol tiene cambios sin commitear: así el
+    BUILD de un APK armado con cambios locales no se confunde con el de ese commit."""
     corto = subprocess.run(['git', 'rev-parse', '--short=7', 'HEAD'], cwd=RAIZ,
                            capture_output=True, text=True, check=True).stdout.strip()
-    return 'cap-' + corto
+    sucio = subprocess.run(['git', 'status', '--porcelain'], cwd=RAIZ,
+                           capture_output=True, text=True, check=True).stdout.strip()
+    return 'cap-' + corto + ('-dirty' if sucio else '')
 
 
 def main():
