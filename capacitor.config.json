@@ -1,5 +1,6 @@
 {
   "appId": "cl.telora.app",
   "appName": "Telora",
-  "webDir": "www"
+  "webDir": "www",
+  "loggingBehavior": "debug"
 }

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-2z3QTIZ+e0oaIrGfUUbGgFYYBwi8c1qGw9wJzlC+x3g='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-W4rwr9v/mtlyb6Hg98V+NE/C+Mn+vnuNn7HB+N3vIdE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -16296,7 +16296,8 @@ function registrarEventoRealtime(p){
   const fila = (p.eventType === 'DELETE') ? p.old : p.new;
   realtimeEventos.push({ recibido: Date.now(), tabla: p.table, tipo: p.eventType, fila, old: p.old });
   if(realtimeEventos.length > 200) realtimeEventos.shift();
-  console.info('[Realtime] ' + p.eventType + ' ' + p.table, (fila && (fila.id || fila.device_id || fila.user_id)) || '', p);
+  // C3a: solo tipo, tabla e id; ni la fila ni el user_id llegan a la consola (logcat en la app).
+  console.info('[Realtime] ' + p.eventType + ' ' + p.table, (fila && (fila.id || fila.device_id)) || '');
   // Tanda 4a.1: si otro dispositivo pasó a ser el escritor, este deja de escribir al tiro.
   // S1 · T7: en modo varios escritores, solo si la cuenta deja de estar en 'multi:v2'.
   if(p.table === 'config_compartida' && p.eventType === 'UPDATE' && syncCtx
