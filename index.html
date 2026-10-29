@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-+/7U9YLKqhb0epa0hclLUZ3dTgIGJcuxs2p4GhdUOQ8=' 'sha256-TJD7kbnNYpbe7z/2KNmdh0bj6F01zcQm9xJWgSwuBQs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-+/7U9YLKqhb0epa0hclLUZ3dTgIGJcuxs2p4GhdUOQ8=' 'sha256-aioyyj69qHVP9wyWZF6NJ71BNMjBbm2w4hHvmbW6HRk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -18917,14 +18917,21 @@ let retornoAuthEnCurso = false;   // C3a: entre que llega la URL de retorno y te
 // también llega al minimizar la Custom Tab y la limpieza borra el verificador): aviso de
 // error, sin canje, una sola vez por URL. La de getLaunchUrl sigue en silencio (C2b).
 // En un arranque en frío por el intent de retorno, el plugin App retiene appUrlOpen hasta que
-// se registra el listener: esa URL llega en vivo además de por getLaunchUrl y, sin verificador,
-// avisa (es un login perdido). Una recarga en el mismo proceso no lo vuelve a entregar: ahí
+// se registra el listener: esa URL llega en vivo además de por getLaunchUrl y, sin verificador
+// ni sesión, avisa (es un login perdido). Una recarga en el mismo proceso no lo vuelve a entregar: ahí
 // solo queda getLaunchUrl, en silencio (medido en API 37).
 async function procesarUrlRetornoAuth(url, enVivo){
   const r = leerUrlRetornoAuth(url);
   if(!r || !supa) return;
   if(!hayFlujoPkcePendiente(localStorage, supa.auth && supa.auth.storageKey)){
     if(!enVivo) return;
+    // C3b-4: con sesión abierta no es un login perdido. Al abrir desde Recientes tras la muerte
+    // del proceso, Android vuelve a entregar el intent raíz (el callback del login anterior) y
+    // el appUrlOpen retenido llega en vivo con sessionStorage vacío: silencio, sin canje.
+    try{
+      const { data } = await supa.auth.getSession();
+      if(data && data.session) return;
+    }catch(_){}
     try{
       if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
       sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);

@@ -3550,7 +3550,9 @@ async function runTests(){
       const reg = [];
       let pendiente = true, errorCanje = null;
       try{
-        win.__c3aSupa = { auth: { storageKey: K, exchangeCodeForSession: async c => { reg.push('canje'); return { error: errorCanje }; } } };
+        let conSesion = false;   // C3b-4: getSession del doble
+        win.__c3aSupa = { auth: { storageKey: K, exchangeCodeForSession: async c => { reg.push('canje'); return { error: errorCanje }; },
+          getSession: async () => ({ data: { session: conSesion ? { user: { id: 'u' } } : null }, error: null }) } };
         win.eval('supa = window.__c3aSupa;');
         win.showToast = () => reg.push('toast');
         win.hayFlujoPkcePendiente = () => pendiente;
@@ -3600,6 +3602,18 @@ async function runTests(){
           && vivoConFlujo === 'canje,' + L3 && vivoTrasCanje === '',
           'C3b: procesarUrlRetornoAuth en vivo — sin verificador, una URL de retorno (code o error) avisa el error sin canjear, una sola vez por URL; la misma URL ya canjeada no avisa; getLaunchUrl sin verificador sigue en silencio; con verificador canjea igual que antes',
           JSON.stringify({ vivoError, vivoRepetida, vivoCode, arranque, vivoAjena, vivoConFlujo, vivoTrasCanje }));
+
+        // C3b-4: sin verificador y en vivo, con sesión abierta (intent raíz que Android vuelve a
+        // entregar al abrir desde Recientes tras la muerte del proceso) -> silencio y sin marca.
+        let marcaConSesion = 'sin leer';
+        conSesion = true;
+        const vivoConSesion = await vivo(B3 + '?code=raiz-recientes', true, true);
+        try{ marcaConSesion = win.sessionStorage.getItem('telora_retorno_auth'); }catch(_){}
+        conSesion = false;
+        const vivoSinSesion = await vivo(B3 + '?code=raiz-recientes', true, true);
+        assert(vivoConSesion === '' && marcaConSesion === null && vivoSinSesion === 'toast',
+          'C3b-4: procesarUrlRetornoAuth en vivo sin verificador — con sesión abierta, silencio (ni aviso ni canje); sin sesión, el aviso de error de siempre',
+          JSON.stringify({ vivoConSesion, marcaConSesion, vivoSinSesion }));
       }catch(e){
         assert(false, 'C3a: excepción en procesarUrlRetornoAuth', e && e.stack || String(e));
       }finally{
