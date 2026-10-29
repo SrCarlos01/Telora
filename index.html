@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-W4rwr9v/mtlyb6Hg98V+NE/C+Mn+vnuNn7HB+N3vIdE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-4iwHYddOGUt2ARHBF6snbsCFI+RQB24EzL5p7VFLul4=' 'sha256-nKKnnrjwmYkudSUIOlpg6z+jF75RdldgVm5eClrcQB8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -18865,6 +18865,24 @@ document.getElementById('btnLoginGoogle').onclick = ()=> iniciarLoginGoogle();
 function hayFlujoPkcePendiente(ls, storageKey){
   try{ return !!storageKey && ls.getItem(storageKey + '-code-verifier') !== null; }catch(_){ return false; }
 }
+// C3a: supabase-js (2.117) guarda el verificador en tres familias de claves: <k>-code-verifier
+// (la que lee el canje sin flowId), <k>-flows-code-verifier (lista de flujos) y
+// <k>-flow-<id>-code-verifier. En la app el flowId no viene en la URL de retorno, así que el
+// canje solo borra la primera y las otras quedaban sin dueño. Devuelve las claves borradas.
+function limpiarVerificadoresPkce(ls, storageKey){
+  const borradas = [];
+  if(!storageKey) return borradas;
+  try{
+    for(let i = 0; i < ls.length; i++){
+      const k = ls.key(i);
+      if(k === storageKey + '-code-verifier' || k === storageKey + '-flows-code-verifier'
+         || (typeof k === 'string' && k.indexOf(storageKey + '-flow-') === 0 && /-code-verifier$/.test(k))) borradas.push(k);
+    }
+    borradas.forEach(k => ls.removeItem(k));
+  }catch(_){}
+  return borradas;
+}
+let retornoAuthEnCurso = false;   // C3a: entre que llega la URL de retorno y termina el canje
 async function procesarUrlRetornoAuth(url){
   const r = leerUrlRetornoAuth(url);
   if(!r || !supa) return;
@@ -18873,6 +18891,7 @@ async function procesarUrlRetornoAuth(url){
     if(sessionStorage.getItem(CLAVE_RETORNO_AUTH) === url) return;
     sessionStorage.setItem(CLAVE_RETORNO_AUTH, url);
   }catch(_){}
+  retornoAuthEnCurso = true;
   try{
     if(r.error) throw new Error(r.error);
     const { error } = await supa.auth.exchangeCodeForSession(r.code);
@@ -18881,13 +18900,31 @@ async function procesarUrlRetornoAuth(url){
     console.warn('Cuenta de usuario: retorno de Google', e);
     showToast('No se pudo iniciar sesión con Google. Intenta de nuevo.', 'error', 5000);
   }finally{
+    // C3a: canje correcto, canje fallido o error de Google: el flujo terminó, no queda verificador.
+    limpiarVerificadoresPkce(localStorage, supa.auth && supa.auth.storageKey);
+    retornoAuthEnCurso = false;
     try{ await window.Capacitor.Plugins.Browser.close(); }catch(_){}
   }
 }
+// C3a: la Custom Tab se cerró sin volver (atrás o la X): el login quedó cancelado y su
+// verificador no tiene dueño. browserFinished no llega cuando Google sí vuelve (el retorno a
+// MainActivity, singleTask, quita la Custom Tab sin entregar su resultado; medido en API 37),
+// y si llegara con un retorno ya en curso, ese retorno limpia al terminar.
+function alCerrarNavegadorLogin(){
+  if(retornoAuthEnCurso || !supa) return;
+  limpiarVerificadoresPkce(localStorage, supa.auth && supa.auth.storageKey);
+}
 if(supa && esAppNativa()){
   try{
+    // C3a: sin login pendiente (sin <k>-code-verifier), las claves de flujo que queden son de un
+    // canje anterior a C3a y no tienen dueño. Con uno pendiente no se toca nada: puede ser el
+    // retorno en frío que getLaunchUrl entrega más abajo (o la app se cerró con la Custom Tab
+    // abierta; eso lo limpia el final del próximo login).
+    const claveSupa = supa.auth && supa.auth.storageKey;
+    if(!hayFlujoPkcePendiente(localStorage, claveSupa)) limpiarVerificadoresPkce(localStorage, claveSupa);
     const AppNativa = window.Capacitor.Plugins.App;
     AppNativa.addListener('appUrlOpen', ev => procesarUrlRetornoAuth(ev && ev.url));
+    window.Capacitor.Plugins.Browser.addListener('browserFinished', () => alCerrarNavegadorLogin());
     AppNativa.getLaunchUrl().then(r => procesarUrlRetornoAuth(r && r.url)).catch(()=>{});
   }catch(e){
     console.warn('Cuenta de usuario: retorno nativo no disponible', e);

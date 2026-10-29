@@ -3512,6 +3512,72 @@ async function runTests(){
         try{ if(marcaOrig === null) win.sessionStorage.removeItem('telora_retorno_auth'); else win.sessionStorage.setItem('telora_retorno_auth', marcaOrig); }catch(_){}
       }
     }
+
+    // C3a: después de cualquier final del retorno no queda ningún verificador PKCE (las tres
+    // familias de claves de supabase-js); lo demás del almacenamiento no se toca.
+    {
+      const lsCompleto = o => { const m = new Map(Object.entries(o)); return {
+        get length(){ return m.size; }, key: i => [...m.keys()][i] ?? null,
+        getItem: k => m.has(k) ? m.get(k) : null, removeItem: k => m.delete(k), _m: m }; };
+      const K = 'sb-x-auth-token';
+      const ls = lsCompleto({
+        [K + '-code-verifier']: '"v"', [K + '-flows-code-verifier']: '["a","b"]',
+        [K + '-flow-a-code-verifier']: '"v"', [K + '-flow-b-code-verifier']: '"v"',
+        [K]: '{}', [K + '-user']: '{}', [K + '-flow-a']: 'x', 'sb-y-auth-token-code-verifier': '"v"', telora_estado: '{}'
+      });
+      const borradas = win.limpiarVerificadoresPkce(ls, K).sort();
+      const quedan = [...ls._m.keys()].sort();
+      const sinClave = win.limpiarVerificadoresPkce(lsCompleto({ 'undefined-code-verifier': '"v"' }), undefined);
+      let lanza = 'sin excepción';
+      try{ win.limpiarVerificadoresPkce({ get length(){ throw new Error('bloqueado'); } }, K); }catch(e){ lanza = 'lanzó'; }
+      assert(JSON.stringify(borradas) === JSON.stringify([K + '-code-verifier', K + '-flow-a-code-verifier', K + '-flow-b-code-verifier', K + '-flows-code-verifier'])
+        && JSON.stringify(quedan) === JSON.stringify([K, K + '-flow-a', K + '-user', 'sb-y-auth-token-code-verifier', 'telora_estado'])
+        && sinClave.length === 0 && lanza === 'sin excepción',
+        'C3a: limpiarVerificadoresPkce — borra «k»-code-verifier, «k»-flows-code-verifier y «k»-flow-«id»-code-verifier; deja la sesión, otras cuentas y los datos de Telora; sin storageKey o con almacenamiento bloqueado no hace nada',
+        JSON.stringify({ borradas, quedan, sinClave, lanza }));
+
+      const supaOrig = win.eval('supa'), toastOrig = win.showToast, pendOrig = win.hayFlujoPkcePendiente, limpOrig = win.limpiarVerificadoresPkce;
+      let marcaOrig = null; try{ marcaOrig = win.sessionStorage.getItem('telora_retorno_auth'); }catch(_){}
+      const reg = [];
+      let pendiente = true, errorCanje = null;
+      try{
+        win.__c3aSupa = { auth: { storageKey: K, exchangeCodeForSession: async c => { reg.push('canje'); return { error: errorCanje }; } } };
+        win.eval('supa = window.__c3aSupa;');
+        win.showToast = () => reg.push('toast');
+        win.hayFlujoPkcePendiente = () => pendiente;
+        win.limpiarVerificadoresPkce = (l, k) => { reg.push('limpia:' + (l === win.localStorage) + ':' + k); return []; };
+        const correr = async url => { try{ win.sessionStorage.removeItem('telora_retorno_auth'); }catch(_){} await win.procesarUrlRetornoAuth(url); return reg.splice(0).join(); };
+        const B3 = 'cl.telora.app://auth/callback';
+        const ok = await correr(B3 + '?code=bueno');
+        errorCanje = { message: 'invalid' };
+        const falla = await correr(B3 + '?code=malo');
+        const cancelado = await correr(B3 + '?error=access_denied');
+        pendiente = false;
+        const sinFlujo = await correr(B3 + '?code=viejo');
+        const L3 = 'limpia:true:' + K;
+        assert(ok === 'canje,' + L3 && falla === 'canje,toast,' + L3 && cancelado === 'toast,' + L3 && sinFlujo === '',
+          'C3a: procesarUrlRetornoAuth — tras canje correcto, canje fallido o error de Google (cancelación) limpia los verificadores de localStorage; sin login pendiente no hace nada (el arranque limpia las huérfanas)',
+          JSON.stringify({ ok, falla, cancelado, sinFlujo }));
+
+        // Custom Tab cerrada sin volver (browserFinished): limpia, salvo con un retorno en curso.
+        win.alCerrarNavegadorLogin();
+        const cerrada = reg.splice(0).join();
+        win.eval('retornoAuthEnCurso = true;');
+        win.alCerrarNavegadorLogin();
+        const conRetorno = reg.splice(0).join();
+        win.eval('retornoAuthEnCurso = false;');
+        assert(cerrada === L3 && conRetorno === '',
+          'C3a: alCerrarNavegadorLogin — la Custom Tab cerrada sin volver limpia los verificadores; con un retorno de Google en curso no toca nada (ese retorno limpia al terminar)',
+          JSON.stringify({ cerrada, conRetorno }));
+      }catch(e){
+        assert(false, 'C3a: excepción en procesarUrlRetornoAuth', e && e.stack || String(e));
+      }finally{
+        win.showToast = toastOrig; win.hayFlujoPkcePendiente = pendOrig; win.limpiarVerificadoresPkce = limpOrig;
+        win.__c3aSupaOrig = supaOrig; win.eval('supa = window.__c3aSupaOrig;');
+        delete win.__c3aSupa; delete win.__c3aSupaOrig;
+        try{ if(marcaOrig === null) win.sessionStorage.removeItem('telora_retorno_auth'); else win.sessionStorage.setItem('telora_retorno_auth', marcaOrig); }catch(_){}
+      }
+    }
   }
 
   // ==================== T2b — Edge Function: lógica pura de index.ts ====================
