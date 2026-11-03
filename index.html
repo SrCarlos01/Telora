@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-GH0miJhDIbge5FlGWg6uaksCRwf0T92xfbWAFgJCafU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-zf6P5WHidSWtnnM7QunZ1oEP355ct4+fWtFPALp1dhk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -15335,13 +15335,29 @@ document.getElementById('btnCuentaAvatar').onclick = ()=> abrirCuenta();
 // (moverAFallidasSync no reintenta), así que no hay botón «Reintentar».
 // C2b: `motivo` = por qué no está habilitada; «otro dispositivo mantiene tu respaldo» solo con
 // 'escritor-ajeno' (se supo que otro device es el escritor). Sin motivo conocido, el texto neutro.
-function estadoRespaldoCuenta({ habilitada, motivo, enLinea, cola, fallidas }){
-  if(!habilitada) return motivo === 'escritor-ajeno'
-    ? { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' }
-    : { tono: 'gris', texto: 'Este dispositivo todavía no está respaldando tus datos.' };
+// D27: `evaluando` = intentarSubidaInicial en curso para esta cuenta; `inicialPendiente` = varios
+// escritores sin revs todavía (falta la sincronización inicial) y sin bloqueo; `bloqueada` =
+// ctx.inicialBloqueada; `pausa` = 'pendiente' (borrado masivo por confirmar) | 'cancelada' (se
+// dijo que no: en pausa hasta la próxima carga) | null; `retenidas` = ops de la cola que no salen
+// por estar en choque (siguen ahí hasta revisarlas). `cola` es el largo total de la cola.
+function estadoRespaldoCuenta({ habilitada, motivo, enLinea, cola, fallidas, evaluando, inicialPendiente, bloqueada, pausa, retenidas }){
+  const COMPROBANDO = { tono: 'gris', texto: 'Comprobando tu respaldo…' };
+  if(!habilitada){
+    if(evaluando) return COMPROBANDO;
+    return motivo === 'escritor-ajeno'
+      ? { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' }
+      : { tono: 'gris', texto: 'Este dispositivo todavía no está respaldando tus datos.' };
+  }
+  if(bloqueada) return { tono: 'error', texto: 'No se pudo preparar el respaldo en este dispositivo. Se reintentará al volver a abrir la app.' };
+  if(pausa === 'pendiente') return { tono: 'pendiente', texto: 'Respaldo en pausa: hay un borrado por confirmar.' };
+  if(pausa === 'cancelada') return { tono: 'pendiente', texto: 'Respaldo en pausa hasta que vuelvas a abrir la app.' };
   if(!enLinea) return { tono: 'gris', texto: 'Sin conexión · se respaldará al volver' };
+  if(inicialPendiente) return COMPROBANDO;
   if(fallidas > 0) return { tono: 'error', texto: fallidas === 1 ? '1 cambio sin respaldar' : fallidas + ' cambios sin respaldar' };
-  if(cola > 0) return { tono: 'pendiente', texto: cola === 1 ? 'Guardando 1 cambio…' : 'Guardando ' + cola + ' cambios…' };
+  const ret = retenidas > 0 ? retenidas : 0;
+  if(ret > 0) return { tono: 'pendiente', texto: ret === 1 ? '1 cambio en espera de tu revisión' : ret + ' cambios en espera de tu revisión' };
+  const enviables = cola - ret;
+  if(enviables > 0) return { tono: 'pendiente', texto: enviables === 1 ? 'Guardando 1 cambio…' : 'Guardando ' + enviables + ' cambios…' };
   return { tono: 'ok', texto: 'Respaldo al día' };
 }
 // Pinta la tarjeta de estado y la fila «Cambios por revisar». Solo lee: no dispara ni cambia
@@ -15350,17 +15366,29 @@ function renderEstadoCuenta(){
   const caja = document.getElementById('cuentaEstado');
   if(!caja) return;
   let habilitada = false, motivo = null, cola = 0, fallidas = 0, choques = 0, multi = false;
+  let evaluando = false, inicialPendiente = false, bloqueada = false, pausa = null, retenidas = 0;
   try{
     habilitada = syncHabilitada();
     if(habilitada){
-      cola = syncAlmacen.leerCola(syncCtx.userId).length;
-      fallidas = syncAlmacen.leerFallidas(syncCtx.userId).length;
+      const u = syncCtx.userId;
+      const ops = syncAlmacen.leerCola(u);
+      cola = ops.length;
+      fallidas = syncAlmacen.leerFallidas(u).length;
+      bloqueada = syncCtx.inicialBloqueada === true;
+      inicialPendiente = syncCtx.multi === true && !bloqueada && !syncAlmacen.leerRevs(u);
+      pausa = syncPausada ? (syncBorradoPendiente ? 'pendiente' : 'cancelada') : null;
+      // Mismo filtro que el vaciado: lo que opsNoPausadas excluye no sale hasta resolver el choque.
+      if(syncCtx.multi === true) retenidas = cola - opsNoPausadas(ops, leerChoquesVigentes(u)).length;
     }
-    else if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
+    else {
+      if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
+      evaluando = respaldoEvaluandoPara !== null;   // por usuario; reiniciarEvaluacionesSesion la anula
+    }
     multi = choquesUiActiva();   // T11 · Fase 3: la sesión corre con varios escritores (syncCtx.multi)
     choques = multi ? contarChoquesSync() : 0;
-  }catch(_){ habilitada = false; multi = false; choques = 0; }
-  const est = estadoRespaldoCuenta({ habilitada, motivo, enLinea: navigator.onLine !== false, cola, fallidas });
+  }catch(_){ habilitada = false; multi = false; choques = 0; evaluando = inicialPendiente = bloqueada = false; pausa = null; retenidas = 0; }
+  const est = estadoRespaldoCuenta({ habilitada, motivo, enLinea: navigator.onLine !== false, cola, fallidas,
+    evaluando, inicialPendiente, bloqueada, pausa, retenidas });
   // Solo si cambió: #cuentaEstado es role="status" y reescribir lo mismo lo vuelve a anunciar
   // (también con el intervalo de 2 s y con los avisos del motor).
   if(caja.dataset.tono !== est.tono) caja.dataset.tono = est.tono;
@@ -18535,10 +18563,12 @@ async function subirDatosIniciales(userId, deviceId){
 let sesionEvalGen = 0;
 const evaluadoPara = { subida: null, union: null, legado: null };
 let escritorAjenoPara = null;   // userId para el que se supo que otro dispositivo es el escritor
+let respaldoEvaluandoPara = null;   // D27: userId mientras intentarSubidaInicial lo evalúa («Comprobando tu respaldo…»)
 function reiniciarEvaluacionesSesion(){
   sesionEvalGen++;
   evaluadoPara.subida = evaluadoPara.union = evaluadoPara.legado = null;
   escritorAjenoPara = null;
+  respaldoEvaluandoPara = null;
   programarRepintadoRespaldo();
   subidaDuenoCtx = null; unionCtx = null;
   try{ if(document.getElementById('sheetConfirmarDueno').classList.contains('open')) closeSheet('sheetConfirmarDueno'); }catch(_){}
@@ -18559,6 +18589,8 @@ async function intentarSubidaInicial(session){
   evaluadoPara.subida = userId;   // síncrono, antes del primer await
   const gen = sesionEvalGen;
   const vigente = () => gen === sesionEvalGen;
+  respaldoEvaluandoPara = userId;
+  programarRepintadoRespaldo();
   try{
     const { data: dispExistente, error: errDisp } = await supa
       .from('config_dispositivo')
@@ -18683,6 +18715,10 @@ async function intentarSubidaInicial(session){
     abrirCuandoLibre(()=>{ if(vigente() && subidaDuenoCtx) openSheet('sheetConfirmarDueno', 'btnConfirmarDueno'); });
   }catch(e){
     console.warn('Subida inicial: error inesperado', e);
+  }finally{
+    // También en las ramas que abren hojas de decisión. Si la sesión cambió, reiniciarEvaluacionesSesion
+    // ya la anuló y otra evaluación puede estar en curso: no se toca.
+    if(vigente()){ respaldoEvaluandoPara = null; programarRepintadoRespaldo(); }
   }
 }
 
