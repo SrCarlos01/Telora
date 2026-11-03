@@ -4648,7 +4648,7 @@ async function runTests(){
       leerCola: alm.leerCola, leerFallidas: alm.leerFallidas, leerRevs: alm.leerRevs, leerChoques: alm.leerChoques,
       leerDuenoConfirmado: win.leerDuenoConfirmado, confirmarEscritorSync: win.confirmarEscritorSync,
       procesarCambiosSync: win.procesarCambiosSync, adelantarReintentosSync: win.adelantarReintentosSync,
-      renderEstadoCuenta: win.renderEstadoCuenta, sesion: win.eval('sesionUiEstado')
+      renderEstadoCuenta: win.renderEstadoCuenta, sesion: win.eval('sesionUiEstado'), sesionConocida: win.eval('sesionConocida')
     };
     let cola = [];
     const TODAVIA = 'Este dispositivo todavía no está respaldando tus datos.';
@@ -4716,6 +4716,37 @@ async function runTests(){
       assert(muts.length === 0,
         'D27 (e): repintar con el mismo estado (directo, con el aviso y con renderConfig) no muta #cuentaEstadoTxt, data-tono, #cfgRespNubeTxt ni #cfgCuentaEstado',
         JSON.stringify(muts.map(m => ({ tipo: m.type, en: (m.target.id || (m.target.parentNode && m.target.parentNode.id) || ''), attr: m.attributeName }))));
+
+      // D27-4 (f)–(h): sin parpadeo entre la evaluación y la confirmación del escritor. La
+      // confirmación queda en espera hasta resolverla a mano; respaldoEvaluandoPara en null.
+      win.detenerEscrituraContinua();
+      win.eval('respaldoEvaluandoPara = null; escritorAjenoPara = null; sesionConocida = { userId: ' + JSON.stringify(U) + ', token: "t" };');
+      await tick(10);
+      let soltar = null;
+      win.confirmarEscritorSync = () => new Promise(r => { soltar = r; });
+      const activacion = win.activarEscrituraContinua(U, D);
+      win.renderEstadoCuenta();
+      const f = { activando: win.eval('syncActivando'), ctx: win.eval('syncCtx'), hoja: $('cuentaEstadoTxt').textContent, cfg: $('cfgCuentaEstado').textContent };
+      assert(f.activando === true && f.ctx === null && f.hoja === 'Comprobando tu respaldo…' && f.cfg === 'Comprobando tu respaldo…',
+        'D27-4 (f): con syncActivando = true y syncCtx null (confirmando el escritor) → «Comprobando tu respaldo…»',
+        JSON.stringify(f));
+
+      soltar(false);
+      await activacion;
+      await tick(10);
+      const g = { activando: win.eval('syncActivando'), ctx: win.eval('syncCtx'), hoja: $('cuentaEstadoTxt').textContent, cfg: $('cfgCuentaEstado').textContent };
+      assert(g.activando === false && g.ctx === null && g.hoja === TODAVIA && g.cfg === TODAVIA,
+        'D27-4 (g): al pasar syncActivando a false sin syncCtx (salida temprana), el repintado del finally deja «todavía no está respaldando»',
+        JSON.stringify(g));
+
+      win.confirmarEscritorSync = async () => { win.eval('escritorAjenoPara = ' + JSON.stringify(U) + ';'); return false; };
+      await win.activarEscrituraContinua(U, D);
+      await tick(10);
+      const h = { ctx: win.eval('syncCtx'), hoja: $('cuentaEstadoTxt').textContent, cfg: $('cfgCuentaEstado').textContent };
+      const AJENO = 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo';
+      assert(h.ctx === null && h.hoja === AJENO && h.cfg === AJENO,
+        'D27-4 (h): con escritor ajeno tras la confirmación → «otro dispositivo mantiene tu respaldo», sin abrir la hoja',
+        JSON.stringify(h));
     }catch(err){
       assert(false, 'D27: excepción durante las pruebas del indicador de respaldo', err && err.stack || String(err));
     }finally{
@@ -4724,7 +4755,7 @@ async function runTests(){
       win.procesarCambiosSync = orig.procesarCambiosSync; win.adelantarReintentosSync = orig.adelantarReintentosSync;
       win.renderEstadoCuenta = orig.renderEstadoCuenta;
       try{
-        win.eval('syncCtx = null; syncPausada = false; syncBorradoPendiente = null; escritorAjenoPara = null; respaldoEvaluandoPara = null; sesionUiEstado = ' + JSON.stringify(orig.sesion) + ';');
+        win.eval('syncCtx = null; syncPausada = false; syncBorradoPendiente = null; escritorAjenoPara = null; respaldoEvaluandoPara = null; syncActivando = false; sesionConocida = ' + JSON.stringify(orig.sesionConocida) + '; sesionUiEstado = ' + JSON.stringify(orig.sesion) + ';');
         await tick(10);
         win.renderEstadoCuenta();
       }catch(_){}

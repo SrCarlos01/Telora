@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-zf6P5WHidSWtnnM7QunZ1oEP355ct4+fWtFPALp1dhk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-jDx7FApJl/DckXKGXfGRICNTZIAsv3VKUPUiFYkLvDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -15382,7 +15382,8 @@ function renderEstadoCuenta(){
     }
     else {
       if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
-      evaluando = respaldoEvaluandoPara !== null;   // por usuario; reiniciarEvaluacionesSesion la anula
+      // Por usuario (reiniciarEvaluacionesSesion la anula) o confirmando el escritor (syncActivando).
+      evaluando = (!!sesionConocida && respaldoEvaluandoPara === sesionConocida.userId) || syncActivando === true;
     }
     multi = choquesUiActiva();   // T11 · Fase 3: la sesión corre con varios escritores (syncCtx.multi)
     choques = multi ? contarChoquesSync() : 0;
@@ -17644,7 +17645,7 @@ async function activarEscrituraContinua(userId, deviceId){
   const multi = multiActiva();
   let esEscritor = false;
   try{ esEscritor = await confirmarEscritorSync(userId, deviceId); }
-  finally{ syncActivando = false; }
+  finally{ syncActivando = false; programarRepintadoRespaldo(); }
   if(!esEscritor || gen !== syncGeneracion) return;   // otro escritor, error, o sesión cerrada mientras tanto
   syncCtx = multi ? { userId, deviceId, esEscritor: false, multi: true } : { userId, deviceId, esEscritor: true };
   syncPausada = false;
