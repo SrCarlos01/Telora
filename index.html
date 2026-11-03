@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-sIFweWTkegfuwNdleK3YAGZn5CGH/jzt4dQGECaddKU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-sIFweWTkegfuwNdleK3YAGZn5CGH/jzt4dQGECaddKU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -2453,7 +2453,7 @@ button:active{ transform:scale(0.93); }
   <div class="notice-bar" id="backupReminder" hidden>
     <div class="notice-bar-txt">
       <strong>Respalda tus datos</strong>
-      <span>Pasó más de una semana desde el último respaldo.</span>
+      <span id="brTexto">Pasó más de una semana desde el último respaldo.</span>
     </div>
     <div class="notice-bar-actions">
       <button type="button" class="nb-primary" id="brDownload">Descargar</button>
@@ -14299,6 +14299,7 @@ function renderAccountSelector(){
 const UI_FLAG_INVITACION = 'telora_ui_invitacion_cuenta';
 const UI_FLAG_BIENVENIDA = 'telora_ui_bienvenida_cuenta';
 const UI_FLAG_AVISO_LEGAL = 'telora_ui_aviso_legal_1_3';   // Política 1.3 + Términos 1.1
+const UI_RESPALDO_DESDE = 'telora_ui_respaldo_desde';      // D27 · T3: ms desde que se cuentan los 7 días sin ningún respaldo
 const uiLocal = {
   ls: null,
   _mem: new Set(),
@@ -14310,6 +14311,16 @@ const uiLocal = {
   marcar(clave){
     this._mem.add(clave);
     try{ this._ls().setItem(clave, '1'); }catch(_){}
+  },
+  // Valores (no solo «visto»): mismo almacén, con `_memVal` si localStorage falla.
+  _memVal: new Map(),
+  leer(clave){
+    if(this._memVal.has(clave)) return this._memVal.get(clave);
+    try{ return this._ls().getItem(clave); }catch(_){ return null; }
+  },
+  guardar(clave, valor){
+    this._memVal.set(clave, String(valor));
+    try{ this._ls().setItem(clave, String(valor)); }catch(_){}
   }
 };
 // Estado de sesión que ve la interfaz: null = aún no se sabe (Supabase no respondió), true/false.
@@ -14615,30 +14626,50 @@ function textoAvisoInstalar({ ios = false, ancho = 0, tactil = true } = {}){
   if(ancho >= 1024 || !tactil) return 'En Chrome o Edge: usa el ícono de instalar en la barra de direcciones.';
   return 'En Chrome: menú ⋮ y luego “Agregar a pantalla de inicio”. Instalarla protege tus datos.';
 }
-(function initDataShieldBanners(){
-  // pto 4 · recordatorio de respaldo semanal
+// D27 · T3: recordatorio de respaldo (función pura). Con respaldo previo, más de 7 días desde
+// él. Sin ninguno, los 7 días se cuentan desde `desde` (marca LOCAL del dispositivo, ms): si no
+// existe, se pide crearla y no se muestra. «Ahora no» pospone 2 días en los dos casos.
+const TEXTO_RESPALDO_VENCIDO = 'Pasó más de una semana desde el último respaldo.';
+const TEXTO_RESPALDO_NUNCA = 'Aún no tienes una copia de respaldo descargada.';
+function evaluarRecordatorioRespaldo({ ultimoRespaldo, snooze, hayDatos, desde, ahora }){
+  if(!hayDatos) return { mostrar: false, texto: null, crearDesde: false };
+  const venceSnooze = (ahora - (snooze || 0)) > 2 * DIA_MS;   // "ahora no" pospone 2 días
+  if(ultimoRespaldo > 0)
+    return { mostrar: (ahora - ultimoRespaldo) > 7 * DIA_MS && venceSnooze, texto: TEXTO_RESPALDO_VENCIDO, crearDesde: false };
+  if(!(desde > 0)) return { mostrar: false, texto: null, crearDesde: true };
+  return { mostrar: (ahora - desde) > 7 * DIA_MS && venceSnooze, texto: TEXTO_RESPALDO_NUNCA, crearDesde: false };
+}
+// pto 4 · recordatorio de respaldo semanal. Deja la candidata en avisosPendientes (la muestra o no
+// arbitrarAvisos). La marca va en uiLocal, nunca en state.config (que se sincroniza).
+function prepararRecordatorioRespaldo(){
   const rem = document.getElementById('backupReminder');
-  if(rem){
-    const last   = (state.config && state.config.ultimoRespaldo) || 0;
-    const snooze = (state.config && state.config.respaldoSnooze) || 0;
-    const hayDatos = state.expenses.length || state.incomes.length || state.debts.length || (state.goals||[]).length;
-    const venceLast   = (Date.now() - last)   > 7 * DIA_MS;   // más de 7 días sin respaldar
-    const venceSnooze = (Date.now() - snooze) > 2 * DIA_MS;   // "ahora no" pospone 2 días
-    if(hayDatos && venceLast && venceSnooze){
-      avisosPendientes.respaldo = true;   // T23: la muestra (o no) arbitrarAvisos()
-      document.getElementById('brDownload').onclick = ()=>{
-        triggerBackupDownload(buildBackupFile());
-        showToast('Respaldo descargado.', 'success');
-      };
-      document.getElementById('brSnooze').onclick = ()=>{
-        if(!state.config) state.config = {};
-        state.config.respaldoSnooze = Date.now();
-        saveStateQuiet();
-        avisosPendientes.respaldo = false;
-        arbitrarAvisos();
-      };
-    }
-  }
+  if(!rem) return;
+  const ahora = Date.now();
+  const r = evaluarRecordatorioRespaldo({
+    ultimoRespaldo: (state.config && state.config.ultimoRespaldo) || 0,
+    snooze: (state.config && state.config.respaldoSnooze) || 0,
+    hayDatos: !!(state.expenses.length || state.incomes.length || state.debts.length || (state.goals||[]).length),
+    desde: parseInt(uiLocal.leer(UI_RESPALDO_DESDE) || '0', 10) || 0,
+    ahora
+  });
+  if(r.crearDesde) uiLocal.guardar(UI_RESPALDO_DESDE, ahora);
+  avisosPendientes.respaldo = r.mostrar;   // T23: la muestra (o no) arbitrarAvisos()
+  if(!r.mostrar) return;
+  document.getElementById('brTexto').textContent = r.texto;
+  document.getElementById('brDownload').onclick = ()=>{
+    triggerBackupDownload(buildBackupFile());
+    showToast('Respaldo descargado.', 'success');
+  };
+  document.getElementById('brSnooze').onclick = ()=>{
+    if(!state.config) state.config = {};
+    state.config.respaldoSnooze = Date.now();
+    saveStateQuiet();
+    avisosPendientes.respaldo = false;
+    arbitrarAvisos();
+  };
+}
+(function initDataShieldBanners(){
+  prepararRecordatorioRespaldo();
 
   // pto 3 · invitación a instalar (solo si la app corre en el navegador)
   const ib = document.getElementById('installBanner');

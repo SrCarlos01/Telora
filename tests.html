@@ -4838,6 +4838,69 @@ async function runTests(){
     }
   }
 
+  // ==================== D27 · T3: recordatorio de respaldo sin ningún respaldo previo ====================
+  // DOM real (#backupReminder, #brTexto) con prepararRecordatorioRespaldo() + arbitrarAvisos(). La marca
+  // «desde» va a un almacén en memoria (uiLocal.ls); el aviso legal se marca visto y hay sesión, para que
+  // el árbitro solo decida sobre el respaldo. Reloj: el del iframe (instalarRelojPruebas, sigue a ?hoy=).
+  {
+    const d = win.document, $ = id => d.getElementById(id);
+    const memLs = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), _m: m }; };
+    const stOrig = win.eval('JSON.stringify(state)');
+    const sesionOrig = win.eval('sesionUiEstado');
+    const pendOrig = win.eval('JSON.stringify(avisosPendientes)');
+    const DIA = 86400000;
+    const VENCIDO = 'Pasó más de una semana desde el último respaldo.';
+    const NUNCA = 'Aún no tienes una copia de respaldo descargada.';
+    try{
+      const caso = ({ datos = true, ultimo = 0, snooze = 0, desdeDias = null }) => {
+        const ahora = win.Date.now();
+        win.eval('uiLocal.ls = (' + memLs.toString() + ')(); uiLocal._mem.clear(); uiLocal._memVal.clear(); uiLocal._mem.add(UI_FLAG_AVISO_LEGAL); avisosPendientes.respaldo = false; avisosPendientes.instalar = false; sesionUiEstado = true;');
+        if(desdeDias !== null) win.eval('uiLocal.ls.setItem(UI_RESPALDO_DESDE, ' + JSON.stringify(String(ahora - desdeDias * DIA)) + ');');
+        const st = fixtureBase();
+        if(datos) st.expenses.push({ id: 'e-t3', date: isoRel(0, 2), amount: 1000, category: 'Comida', method: 'Efectivo', cuentaId: 'acc1' });
+        if(ultimo) st.config.ultimoRespaldo = ahora - ultimo * DIA; else delete st.config.ultimoRespaldo;
+        if(snooze) st.config.respaldoSnooze = ahora - snooze * DIA; else delete st.config.respaldoSnooze;
+        setState(win, st);
+        win.prepararRecordatorioRespaldo();
+        win.arbitrarAvisos();
+        const marca = win.eval('uiLocal.ls.getItem(UI_RESPALDO_DESDE)');
+        return { hidden: $('backupReminder').hidden, texto: $('brTexto').textContent, titulo: $('backupReminder').querySelector('strong').textContent,
+          marca: marca === null ? null : Math.round((ahora - Number(marca)) / DIA * 100) / 100,
+          enConfig: Object.keys(win.eval('state.config')).filter(k => /desde/i.test(k)) };
+      };
+      const r = {
+        a: caso({}), b: caso({ desdeDias: 8 }), c: caso({ desdeDias: 6 }), d: caso({ ultimo: 8 }), e: caso({ ultimo: 2 }),
+        fNunca: caso({ desdeDias: 8, snooze: 1 }), fVencido: caso({ ultimo: 8, snooze: 1 }),
+        g: caso({ datos: false }), gConMarcaVieja: caso({ datos: false, desdeDias: 30 })
+      };
+      assert(r.a.hidden === true && r.a.marca !== null && r.a.marca >= 0 && r.a.marca < 0.01 && r.a.enConfig.length === 0,
+        'D27 T3 (a): con datos y sin ningún respaldo, sin marca local → aviso oculto y se crea la marca con la fecha actual (fuera de state.config)', JSON.stringify(r.a));
+      assert(r.b.hidden === false && r.b.texto === NUNCA && r.b.titulo === 'Respalda tus datos',
+        'D27 T3 (b): marca de hace 8 días → visible con «Aún no tienes una copia de respaldo descargada.» y el título de siempre', JSON.stringify(r.b));
+      assert(r.c.hidden === true && r.c.marca === 6,
+        'D27 T3 (c): marca de hace 6 días → oculto (la marca no se reescribe)', JSON.stringify(r.c));
+      assert(r.d.hidden === false && r.d.texto === VENCIDO && r.d.marca === null,
+        'D27 T3 (d): último respaldo hace 8 días → visible con «Pasó más de una semana desde el último respaldo.» (sin marca local)', JSON.stringify(r.d));
+      assert(r.e.hidden === true && r.e.marca === null,
+        'D27 T3 (e): último respaldo hace 2 días → oculto', JSON.stringify(r.e));
+      assert(r.fNunca.hidden === true && r.fVencido.hidden === true,
+        'D27 T3 (f): «Ahora no» de hace 1 día → oculto tanto sin respaldo previo (marca de 8 días) como con respaldo vencido', JSON.stringify({ fNunca: r.fNunca, fVencido: r.fVencido }));
+      assert(r.g.hidden === true && r.g.marca === null && r.gConMarcaVieja.hidden === true,
+        'D27 T3 (g): sin datos → oculto y sin crear la marca (con marca vieja, también oculto)', JSON.stringify({ g: r.g, gConMarcaVieja: r.gConMarcaVieja }));
+      const pura = win.evaluarRecordatorioRespaldo({ ultimoRespaldo: 0, snooze: 0, hayDatos: true, desde: 0, ahora: 1e12 });
+      assert(pura.mostrar === false && pura.crearDesde === true,
+        'D27 T3: evaluarRecordatorioRespaldo pide crear la marca (sin mostrar) cuando nunca hubo respaldo y no hay marca', JSON.stringify(pura));
+    }catch(e){
+      assert(false, 'D27 T3: excepción', e && e.stack || String(e));
+    }finally{
+      try{
+        win.eval('state = ' + stOrig + '; uiLocal.ls = null; uiLocal._mem.clear(); uiLocal._memVal.clear(); Object.assign(avisosPendientes, ' + pendOrig + '); sesionUiEstado = ' + JSON.stringify(sesionOrig) + ';');
+        $('brTexto').textContent = VENCIDO;
+        resetCaches(win); win.arbitrarAvisos();
+      }catch(_){}
+    }
+  }
+
   // ==================== T23 · Fase 2: Configuración (variante A) ====================
   {
     const d = win.document, $ = id => d.getElementById(id);
