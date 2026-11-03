@@ -4638,6 +4638,14 @@ async function runTests(){
     assert(distintos.length === 0 && combinaciones === 108,
       'D27 (3): sin señales nuevas, estadoRespaldoCuenta devuelve exactamente lo mismo que antes en las 108 combinaciones de los casos existentes',
       JSON.stringify({ combinaciones, distintos: distintos.slice(0, 3) }));
+    // (4) T2: motivo 'otra-cuenta' (candado de otra cuenta). evaluando le gana; con sync habilitada no cuenta.
+    const OTRA_CUENTA = 'Este dispositivo no está respaldando: sus datos son de otra cuenta';
+    const oc = { sola: e({ habilitada: false, motivo: 'otra-cuenta' }), offline: e({ habilitada: false, motivo: 'otra-cuenta', enLinea: false }),
+      evaluandoGana: e({ habilitada: false, evaluando: true, motivo: 'otra-cuenta' }), habilitadaIgnora: e({ motivo: 'otra-cuenta' }) };
+    assert(oc.sola.texto === OTRA_CUENTA && oc.sola.tono === 'gris' && oc.offline.texto === OTRA_CUENTA
+      && oc.evaluandoGana.texto === COMPROBANDO && oc.habilitadaIgnora.texto === 'Respaldo al día',
+      'D27 T2 (4): motivo otra-cuenta → «sus datos son de otra cuenta» (gris); evaluando le gana; con sync habilitada el motivo no cuenta',
+      JSON.stringify(oc));
 
     // DOM. (a)–(e)
     const d = win.document, $ = id => d.getElementById(id);
@@ -4747,6 +4755,24 @@ async function runTests(){
       assert(h.ctx === null && h.hoja === AJENO && h.cfg === AJENO,
         'D27-4 (h): con escritor ajeno tras la confirmación → «otro dispositivo mantiene tu respaldo», sin abrir la hoja',
         JSON.stringify(h));
+
+      // T2 (i): renderEstadoCuenta elige el motivo: evaluando → otra-cuenta → escritor-ajeno → «todavía no».
+      const pintar = (dueno, ajeno, evaluando) => {
+        win.leerDuenoConfirmado = () => dueno;
+        win.eval('escritorAjenoPara = ' + JSON.stringify(ajeno) + '; respaldoEvaluandoPara = ' + JSON.stringify(evaluando) + ';');
+        win.renderEstadoCuenta();
+        return { hoja: $('cuentaEstadoTxt').textContent, cfg: $('cfgCuentaEstado').textContent, tono: $('cuentaEstado').dataset.tono };
+      };
+      const i = {
+        otraSobreAjeno: pintar('u-otra', U, null), otraSola: pintar('u-otra', null, null),
+        evaluandoSobreOtra: pintar('u-otra', U, U), duenoPropioAjeno: pintar(U, U, null),
+        sinCandado: pintar(null, null, null), duenoPropio: pintar(U, null, null)
+      };
+      assert(i.otraSobreAjeno.hoja === OTRA_CUENTA && i.otraSobreAjeno.cfg === OTRA_CUENTA && i.otraSobreAjeno.tono === 'gris'
+        && i.otraSola.hoja === OTRA_CUENTA && i.evaluandoSobreOtra.hoja === COMPROBANDO
+        && i.duenoPropioAjeno.hoja === AJENO && i.sinCandado.hoja === TODAVIA && i.duenoPropio.hoja === TODAVIA,
+        'D27 T2 (i): sin sync habilitada, candado de otra cuenta → «sus datos son de otra cuenta» (gana a escritor ajeno); evaluando le gana; candado propio o sin candado sigue igual',
+        JSON.stringify(i));
     }catch(err){
       assert(false, 'D27: excepción durante las pruebas del indicador de respaldo', err && err.stack || String(err));
     }finally{
@@ -4759,6 +4785,56 @@ async function runTests(){
         await tick(10);
         win.renderEstadoCuenta();
       }catch(_){}
+    }
+  }
+
+  // ==================== D27 · T1: aviso del caso C (nube con datos, candado de otra cuenta) ====================
+  // Rama completa de intentarSubidaInicial con supa simulado (sin fila en config_dispositivo, conteos > 0):
+  // registra el dispositivo, muestra el aviso 9 s y activa Realtime; no sube, no une ni escribe.
+  {
+    const fns = ['registrarDispositivo','activarRealtime','activarEscrituraContinua','subirDatosIniciales','ofrecerUnionMulti',
+      'marcarDuenoConfirmado','leerDuenoConfirmado','leerSubidaPendiente','getDeviceId','showToast'];
+    const orig = Object.fromEntries(fns.map(f => [f, win[f]]));
+    const supaOrig = win.eval('supa');
+    const stOrig = win.eval('JSON.stringify(state)');
+    const reg = [];
+    const TEXTO = 'Los datos de este dispositivo son de otra cuenta, así que no se suben a la tuya ni se mezclan con ella. Tu respaldo en la nube no cambia.';
+    try{
+      const cadena = () => { const c = { select(){ return c; }, eq(){ return c; },
+        maybeSingle: async () => ({ data: null, error: null }),
+        then(ok, ko){ return Promise.resolve({ count: 4, error: null }).then(ok, ko); } }; return c; };
+      win.__t1SupaStub = { from: () => cadena(), auth: supaOrig.auth };
+      win.eval('supa = window.__t1SupaStub;');
+      win.registrarDispositivo = async (u, dv) => { reg.push('registrar:' + u + ':' + dv); };
+      win.activarRealtime = u => reg.push('realtime:' + u);
+      win.activarEscrituraContinua = () => reg.push('escritura');
+      win.subirDatosIniciales = async () => { reg.push('subir'); };
+      win.ofrecerUnionMulti = async () => { reg.push('union'); };
+      win.marcarDuenoConfirmado = u => reg.push('dueno:' + u);
+      win.leerDuenoConfirmado = () => 'u-otra-t1';
+      win.leerSubidaPendiente = () => null;
+      win.getDeviceId = () => 'dev-t1';
+      win.showToast = (m, tipo, ms) => reg.push({ m, tipo, ms });
+      const conGasto = fixtureBase(); conGasto.expenses.push({ id:'e-t1', date:'2026-03-10', amount:5000, tipo:'Casual', category:'Comida' });
+      const correr = async st => {
+        setState(win, st);
+        win.eval('reiniciarEvaluacionesSesion();');
+        await win.intentarSubidaInicial({ user: { id: 'u-t1', email: 'ana@ejemplo.cl' } });
+        return reg.splice(0);
+      };
+      const conDatos = await correr(conGasto);
+      const sinDatos = await correr(fixtureBase());   // sin datos financieros: también llega (el candado es ajeno)
+      const forma = r => r.length === 3 && r[0] === 'registrar:u-t1:dev-t1' && r[1].m === TEXTO && r[1].tipo === null && r[1].ms === 9000 && r[2] === 'realtime:u-t1';
+      assert(win.eval('TEXTO_AVISO_DATOS_OTRA_CUENTA') === TEXTO && forma(conDatos) && forma(sinDatos),
+        'D27 T1: con datos en la nube y candado de otra cuenta, intentarSubidaInicial registra el dispositivo, muestra «Los datos de este dispositivo son de otra cuenta…» 9 s y activa Realtime (sin subir, unir ni escribir)',
+        JSON.stringify({ conDatos, sinDatos }));
+    }catch(e){
+      assert(false, 'D27 T1: excepción', e && e.stack || String(e));
+    }finally{
+      Object.assign(win, orig);
+      win.__t1SupaOrig = supaOrig;
+      win.eval('supa = window.__t1SupaOrig; reiniciarEvaluacionesSesion(); state = ' + stOrig + ';');
+      delete win.__t1SupaStub; delete win.__t1SupaOrig;
     }
   }
 

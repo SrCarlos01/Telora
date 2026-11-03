@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-jDx7FApJl/DckXKGXfGRICNTZIAsv3VKUPUiFYkLvDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-sIFweWTkegfuwNdleK3YAGZn5CGH/jzt4dQGECaddKU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -15344,6 +15344,7 @@ function estadoRespaldoCuenta({ habilitada, motivo, enLinea, cola, fallidas, eva
   const COMPROBANDO = { tono: 'gris', texto: 'Comprobando tu respaldo…' };
   if(!habilitada){
     if(evaluando) return COMPROBANDO;
+    if(motivo === 'otra-cuenta') return { tono: 'gris', texto: 'Este dispositivo no está respaldando: sus datos son de otra cuenta' };
     return motivo === 'escritor-ajeno'
       ? { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' }
       : { tono: 'gris', texto: 'Este dispositivo todavía no está respaldando tus datos.' };
@@ -15381,9 +15382,12 @@ function renderEstadoCuenta(){
       if(syncCtx.multi === true) retenidas = cola - opsNoPausadas(ops, leerChoquesVigentes(u)).length;
     }
     else {
-      if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
       // Por usuario (reiniciarEvaluacionesSesion la anula) o confirmando el escritor (syncActivando).
       evaluando = (!!sesionConocida && respaldoEvaluandoPara === sesionConocida.userId) || syncActivando === true;
+      // D27 · T2: el candado es de otra cuenta → este dispositivo no respalda (gana a escritor-ajeno).
+      const dueno = sesionConocida ? leerDuenoConfirmado() : null;
+      if(!evaluando && dueno && dueno !== sesionConocida.userId) motivo = 'otra-cuenta';
+      else if(escritorAjenoPara && sesionConocida && escritorAjenoPara === sesionConocida.userId) motivo = 'escritor-ajeno';
     }
     multi = choquesUiActiva();   // T11 · Fase 3: la sesión corre con varios escritores (syncCtx.multi)
     choques = multi ? contarChoquesSync() : 0;
@@ -16188,6 +16192,9 @@ function quitarMarcaSubidaPendiente(){ try{ localStorage.removeItem(CLAVE_SUBIDA
 const CLAVE_DUENO_CONFIRMADO = 'telora_dueno_confirmado';
 function leerDuenoConfirmado(){ try{ return localStorage.getItem(CLAVE_DUENO_CONFIRMADO); }catch(_){ return null; } }
 function marcarDuenoConfirmado(userId){ try{ localStorage.setItem(CLAVE_DUENO_CONFIRMADO, userId); }catch(_){} programarRepintadoRespaldo(); }
+// D27 · T1: aviso de intentarSubidaInicial cuando la nube ya tiene datos y el candado es de OTRA
+// cuenta (con varios escritores, es la única forma de llegar a esa rama). Constante para la prueba.
+const TEXTO_AVISO_DATOS_OTRA_CUENTA = 'Los datos de este dispositivo son de otra cuenta, así que no se suben a la tuya ni se mezclan con ella. Tu respaldo en la nube no cambia.';
 
 // Última cuenta a la que ya se le mostró el diálogo bloqueante de conflicto: si el mismo
 // conflicto vuelve a aparecer en otra carga, basta con un toast.
@@ -18674,7 +18681,7 @@ async function intentarSubidaInicial(session){
       }
       await registrarDispositivo(userId, deviceId);
       if(!vigente()) return;
-      showToast('Ya hay datos de tu cuenta en la nube. La sincronización entre dispositivos llega en una próxima actualización — por ahora, este dispositivo sigue funcionando con sus propios datos locales.', null, 6000);
+      showToast(TEXTO_AVISO_DATOS_OTRA_CUENTA, null, 9000);
       activarRealtime(userId);
       return;
     }
