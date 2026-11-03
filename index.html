@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-+/7U9YLKqhb0epa0hclLUZ3dTgIGJcuxs2p4GhdUOQ8=' 'sha256-aioyyj69qHVP9wyWZF6NJ71BNMjBbm2w4hHvmbW6HRk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-QfVtYrZ0vvRxsTwepcEmy1Oh8Z/szzGZpiluDVKDumw=' 'sha256-GH0miJhDIbge5FlGWg6uaksCRwf0T92xfbWAFgJCafU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -11000,7 +11000,8 @@ function renderValoresConfig(){
     // Apariencia · vista previa con el Disponible del Resumen.
     const disp = document.getElementById('rDisponible');
     document.getElementById('cfgPreviewMonto').textContent = (disp && disp.textContent) || '$0';
-    if(typeof renderTarjetaCuentaConfig === 'function') renderTarjetaCuentaConfig();
+    // Recalcula el estado del respaldo (no copia la última línea pintada, que pudo quedar vieja).
+    if(typeof renderEstadoCuenta === 'function') renderEstadoCuenta();
   }catch(_){}
 }
 /* ==================== ESTADO DEL ALMACENAMIENTO (Tanda Q · pto 2) ====================
@@ -15360,17 +15361,34 @@ function renderEstadoCuenta(){
     choques = multi ? contarChoquesSync() : 0;
   }catch(_){ habilitada = false; multi = false; choques = 0; }
   const est = estadoRespaldoCuenta({ habilitada, motivo, enLinea: navigator.onLine !== false, cola, fallidas });
-  caja.dataset.tono = est.tono;
-  document.getElementById('cuentaEstadoTxt').textContent = est.texto;
+  // Solo si cambió: #cuentaEstado es role="status" y reescribir lo mismo lo vuelve a anunciar
+  // (también con el intervalo de 2 s y con los avisos del motor).
+  if(caja.dataset.tono !== est.tono) caja.dataset.tono = est.tono;
+  ponerTextoSiCambia(document.getElementById('cuentaEstadoTxt'), est.texto);
   document.getElementById('cuentaFilaChoques').hidden = !(multi && choques > 0);
   document.getElementById('cuentaChoquesN').textContent = String(choques);
   // T23 · Fase 2: el mismo estado en Configuración (tarjeta de cuenta y «En la nube»).
   const nube = document.getElementById('cfgRespNube');
   if(nube){
     nube.hidden = sesionUiEstado !== true;
-    document.getElementById('cfgRespNubeTxt').textContent = est.texto;
+    ponerTextoSiCambia(document.getElementById('cfgRespNubeTxt'), est.texto);
   }
   renderTarjetaCuentaConfig(est);
+}
+function ponerTextoSiCambia(el, texto){ if(el && el.textContent !== texto) el.textContent = texto; }
+// Aviso del motor de sincronización al indicador: agenda UN renderEstadoCuenta() en la vuelta
+// siguiente del ciclo de eventos, aunque lleguen varios avisos seguidos. Solo pinta; el motor
+// nunca llama a renderEstadoCuenta directamente. try/catch: puede correr antes de que exista la `let`.
+let repintadoRespaldoPendiente = false;
+function programarRepintadoRespaldo(){
+  try{
+    if(repintadoRespaldoPendiente) return;
+    repintadoRespaldoPendiente = true;
+    setTimeout(()=>{
+      repintadoRespaldoPendiente = false;
+      try{ renderEstadoCuenta(); }catch(_){}
+    }, 0);
+  }catch(_){}
 }
 // Tarjeta de cuenta arriba de Configuración: avatar, nombre o «Sin cuenta» y una línea de
 // estado. Copia lo que ya pintó renderTopbarAvatar (foto/iniciales y nombre).
@@ -15390,9 +15408,10 @@ function renderTarjetaCuentaConfig(est){
   document.getElementById('cfgCuentaNombre').textContent = con
     ? (document.getElementById('cuentaPerfilNombre').textContent || document.getElementById('cuentaUsuarioEmail').textContent)
     : 'Sin cuenta';
-  document.getElementById('cfgCuentaEstado').textContent = con
+  // Sin `est` (img.onload del avatar): copia la línea que ya pintó renderEstadoCuenta.
+  ponerTextoSiCambia(document.getElementById('cfgCuentaEstado'), con
     ? ((est && est.texto) || document.getElementById('cuentaEstadoTxt').textContent)
-    : 'Tus datos viven solo en este dispositivo';
+    : 'Tus datos viven solo en este dispositivo');
 }
 /* ---- T11 · Fase 3: interfaz de choques (pantallas 14–18) ----
    Solo muestra y decide: la resolución sale de resolverChoques / decisionLocalPara /
@@ -16139,7 +16158,7 @@ function quitarMarcaSubidaPendiente(){ try{ localStorage.removeItem(CLAVE_SUBIDA
 // si existe y es de OTRA cuenta, nunca se sube nada a la cuenta activa.
 const CLAVE_DUENO_CONFIRMADO = 'telora_dueno_confirmado';
 function leerDuenoConfirmado(){ try{ return localStorage.getItem(CLAVE_DUENO_CONFIRMADO); }catch(_){ return null; } }
-function marcarDuenoConfirmado(userId){ try{ localStorage.setItem(CLAVE_DUENO_CONFIRMADO, userId); }catch(_){} }
+function marcarDuenoConfirmado(userId){ try{ localStorage.setItem(CLAVE_DUENO_CONFIRMADO, userId); }catch(_){} programarRepintadoRespaldo(); }
 
 // Última cuenta a la que ya se le mostró el diálogo bloqueante de conflicto: si el mismo
 // conflicto vuelve a aparecer en otra carga, basta con un toast.
@@ -16332,7 +16351,7 @@ function registrarEventoRealtime(p){
   if(p.table === 'config_compartida' && p.eventType === 'UPDATE' && syncCtx
      && escritorDejaDeSerEste(p.new, syncCtx)){
     console.info('[Sync] el rol de escritor pasó a otro dispositivo (' + p.new.dispositivo_escritor + '): este sigue solo con sus datos locales.');
-    if(p.new.dispositivo_escritor != null) escritorAjenoPara = syncCtx.userId;   // C2b
+    if(p.new.dispositivo_escritor != null){ escritorAjenoPara = syncCtx.userId; programarRepintadoRespaldo(); }   // C2b
     detenerEscrituraContinua();
   }
 }
@@ -17542,6 +17561,7 @@ async function confirmarEscritorSync(userId, deviceId){
     if(rol !== 'otro') return false;   // error de red: no se sabe si hay otro escritor
   }
   escritorAjenoPara = userId;   // C2b: «otro dispositivo mantiene tu respaldo» es cierto solo aquí
+  programarRepintadoRespaldo();
   console.info('[Sync] otro dispositivo mantiene el respaldo de esta cuenta: este sigue solo con sus datos locales.');
   return false;
 }
@@ -17604,6 +17624,7 @@ async function activarEscrituraContinua(userId, deviceId){
   console.info(multi ? '[Sync] escritura continua activa (varios escritores).' : '[Sync] escritura continua activa.');
   adelantarReintentosSync(userId);
   procesarCambiosSync();   // al abrir la app: lo que cambió desde la última base (o el resync) + vaciado
+  programarRepintadoRespaldo();
 }
 
 // Al cerrar sesión: se detiene todo. Base, cola y fallidas quedan guardadas bajo su user_id
@@ -17619,6 +17640,7 @@ function detenerEscrituraContinua(){
   try{ closeSheet('sheetSyncBorradoMasivo'); }catch(_){}
   try{ if(document.getElementById('sheetLegadoEscritor').classList.contains('open')) closeSheet('sheetLegadoEscritor'); }catch(_){}
   try{ unionCtx = null; if(document.getElementById('sheetUnirMulti').classList.contains('open')) closeSheet('sheetUnirMulti'); }catch(_){}
+  programarRepintadoRespaldo();
 }
 
 // Serializado: si llega otro disparo mientras corre, se repite una vez al terminar.
@@ -17683,6 +17705,7 @@ function encolarYFijarBaseSync(ctx, ops, actual){
   const cola = coalescerOps(syncAlmacen.leerCola(ctx.userId), nuevas);
   if(!syncAlmacen.guardarCola(ctx.userId, cola)) return false;
   syncAlmacen.guardarBase(ctx.userId, actual);
+  programarRepintadoRespaldo();
   return true;
 }
 
@@ -17740,6 +17763,7 @@ async function sincronizacionInicialMulti(ctx, base){
     // base va sin config_dispositivo para que el próximo diff mande la fila de este dispositivo.
     syncAlmacen.guardarBase(ctx.userId, sinConfigDispositivo(actual));
     syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+    programarRepintadoRespaldo();
     if(actual.config_compartida && actual.config_compartida[ctx.userId]) syncAlmacen.guardarAncestroConfig(ctx.userId, actual.config_compartida[ctx.userId]);
     syncAlmacen.guardarCursor(ctx.userId, cursor);
     console.info('[Sync] varios escritores: lo local ya coincide con la nube; se adoptan las versiones.');
@@ -17767,6 +17791,7 @@ function guardarRespaldoPrevioAntesDeSync(ctx){
   try{ reg = { fecha: new Date().toISOString(), contenido: JSON.stringify(state) }; }catch(_){}
   if(!reg || !syncAlmacen.guardarRespaldoPrevio(ctx.userId, reg)){
     ctx.inicialBloqueada = true;
+    programarRepintadoRespaldo();
     console.warn('[Sync] varios escritores: no se pudo guardar el respaldo previo en este dispositivo (sin espacio u '
       + 'otro error de almacenamiento): NO se tocan los datos locales. Se vuelve a intentar la próxima vez que abras la app.');
     return false;
@@ -17802,6 +17827,7 @@ function reemplazarLocalConNube(ctx, nube, cursor){
   if(!saveStateQuiet()){ if(state === nuevo) state = previo; return false; }
   syncAlmacen.guardarBase(ctx.userId, baseDesdeNube(nube));
   syncAlmacen.guardarRevs(ctx.userId, revsDeNube(nube));
+  programarRepintadoRespaldo();
   const cfgNube = ((nube || {}).config_compartida || {})[ctx.userId];
   if(cfgNube && !cfgNube.borrada && cfgNube.json) syncAlmacen.guardarAncestroConfig(ctx.userId, cfgNube.json);
   syncAlmacen.guardarCursor(ctx.userId, cursor);
@@ -17907,6 +17933,7 @@ function aplicarAccionesSync(ctx, acciones, base, revs, cursor){
   const nb = actualizarBaseYRevs(base, revs, efectivas);
   syncAlmacen.guardarBase(ctx.userId, nb.base);
   syncAlmacen.guardarRevs(ctx.userId, nb.revs);
+  programarRepintadoRespaldo();
   const choques = efectivas.filter(a => a.accion === 'choque');
   if(choques.length) registrarChoquesSync(ctx.userId, choques.map(a => ({ tabla: a.tabla, clave: a.clave, motivo: a.motivo, servidor: a.fila, rev: a.rev, origen: 'puesta_al_dia',
                                                                           ...(a.padre ? { padre: a.padre } : {}) })));
@@ -17985,6 +18012,7 @@ function registrarChoquesSync(userId, nuevos, silencioso){
   const lista = combinarChoques(leerChoquesVigentes(userId),
     (nuevos || []).map(c => ({ ...c, servidor: reducirFilaChoque(c.tabla, c.servidor) })), new Date().toISOString());
   const guardado = syncAlmacen.guardarChoques(userId, lista);
+  programarRepintadoRespaldo();
   if(syncCtx && syncCtx.userId === userId){
     syncCtx.choquesEnMemoria = guardado ? null : lista;
     syncCtx.choquesDesborde = !guardado || lista.length > CHOQUES_TOPE_AVISO;
@@ -17998,6 +18026,7 @@ function registrarChoquesSync(userId, nuevos, silencioso){
 }
 function quitarChoqueSync(userId, tabla, clave){
   const ok = syncAlmacen.quitarChoque(userId, tabla, clave);
+  programarRepintadoRespaldo();
   const mem = choquesEnMemoriaDe(userId);
   if(mem){
     const resto = mem.filter(c => !(c.tabla === tabla && c.clave === clave));
@@ -18236,12 +18265,14 @@ function pausarPorBorradoMasivoSync(ctx, ops, actual, masivo){
   document.getElementById('syncBorradoDetalle').textContent = Object.keys(porTabla)
     .map(t => porTabla[t] + ' ' + (SYNC_NOMBRE_TABLA[t] || t)).join(', ');
   abrirCuandoLibre(()=> openSheet('sheetSyncBorradoMasivo', 'btnSyncBorrarNo'));
+  programarRepintadoRespaldo();
 }
 document.getElementById('btnSyncBorrarSi').onclick = ()=>{
   closeSheet('sheetSyncBorradoMasivo');
   const p = syncBorradoPendiente;
   syncBorradoPendiente = null;
   syncPausada = false;
+  programarRepintadoRespaldo();
   if(!p || p.ctx !== syncCtx || !syncHabilitada()) return;
   console.info('[Sync] borrado masivo confirmado por el usuario.');
   encolarYFijarBaseSync(p.ctx, p.ops, p.actual);
@@ -18252,6 +18283,7 @@ document.getElementById('btnSyncBorrarNo').onclick = ()=>{
   // Sigue en pausa (syncPausada) hasta la próxima carga: la base no avanzó, así que al
   // volver a abrir la app el mismo diff vuelve a preguntar.
   syncBorradoPendiente = null;
+  programarRepintadoRespaldo();
   console.info('[Sync] borrado masivo cancelado: sincronización en pausa hasta la próxima vez que se abra la app.');
 };
 
@@ -18304,6 +18336,7 @@ function actualizarColaSync(userId, lote, fn){
     else nueva.push(o);
   });
   syncAlmacen.guardarCola(userId, nueva);
+  programarRepintadoRespaldo();
 }
 function quitarDeColaSync(userId, lote){ actualizarColaSync(userId, lote, () => null); }
 // T11 · Fase 1: quita TODAS las ops de una clave, sin exigir la misma versión (v). Pura.
@@ -18325,6 +18358,7 @@ function moverAFallidasSync(userId, op, res){
   const fallidas = syncAlmacen.leerFallidas(userId);
   fallidas.push({ op, status: (res && res.status) || 0, error: detalle, fecha: new Date().toISOString() });
   syncAlmacen.guardarFallidas(userId, fallidas.slice(-100));   // tope: las 100 más recientes
+  programarRepintadoRespaldo();
 }
 // Al volver la conexión o al abrir la app no se espera el backoff: todo queda listo ya.
 function adelantarReintentosSync(userId){
@@ -18505,6 +18539,7 @@ function reiniciarEvaluacionesSesion(){
   sesionEvalGen++;
   evaluadoPara.subida = evaluadoPara.union = evaluadoPara.legado = null;
   escritorAjenoPara = null;
+  programarRepintadoRespaldo();
   subidaDuenoCtx = null; unionCtx = null;
   try{ if(document.getElementById('sheetConfirmarDueno').classList.contains('open')) closeSheet('sheetConfirmarDueno'); }catch(_){}
   try{ if(document.getElementById('sheetUnirMulti').classList.contains('open')) closeSheet('sheetUnirMulti'); }catch(_){}
@@ -18729,6 +18764,7 @@ async function ofrecerDispositivoLegado(userId, deviceId){
   });
   if(decision === 'escritor-ajeno'){
     escritorAjenoPara = userId;
+    programarRepintadoRespaldo();
     console.info('[Sync] dispositivo legado: otro dispositivo mantiene el respaldo; este sigue solo con sus datos locales.');
     return;
   }
@@ -18767,6 +18803,7 @@ document.getElementById('btnLegadoSi').onclick = async ()=>{
     activarEscrituraContinua(ctx.userId, ctx.deviceId);   // resync inicial, con la guarda del 30%
   } else if(rol === 'otro'){
     escritorAjenoPara = ctx.userId;
+    programarRepintadoRespaldo();
     showToast('Otro dispositivo ya mantiene tu respaldo', null, 5000);
   } else {
     showToast('No se pudo conectar con la nube. Se volverá a ofrecer la próxima vez que abras la app.', 'error', 5000);
