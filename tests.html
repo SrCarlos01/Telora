@@ -4575,6 +4575,162 @@ async function runTests(){
     }
   }
 
+  // ==================== D27: indicador de respaldo veraz ====================
+  // Puras sobre estadoRespaldoCuenta y DOM con la sync simulada: syncAlmacen y las funciones de red
+  // van con stubs (nada toca el localStorage real); todo se restaura en el finally.
+  {
+    const e = o => win.estadoRespaldoCuenta(Object.assign({ habilitada: true, enLinea: true, cola: 0, fallidas: 0 }, o));
+    const COMPROBANDO = 'Comprobando tu respaldo…';
+    const BLOQ = 'No se pudo preparar el respaldo en este dispositivo. Se reintentará al volver a abrir la app.';
+    const PAUSA_P = 'Respaldo en pausa: hay un borrado por confirmar.';
+    const PAUSA_C = 'Respaldo en pausa hasta que vuelvas a abrir la app.';
+    // (1) Cada estado nuevo, con su tono.
+    const nuevos = {
+      e1: e({ habilitada: false, evaluando: true }), e2: e({ inicialPendiente: true }), e3: e({ bloqueada: true }),
+      e4: e({ pausa: 'pendiente' }), e5: e({ pausa: 'cancelada' }), e6a: e({ cola: 1, retenidas: 1 }), e6b: e({ cola: 4, retenidas: 3 })
+    };
+    assert(nuevos.e1.texto === COMPROBANDO && nuevos.e1.tono === 'gris' && nuevos.e2.texto === COMPROBANDO && nuevos.e2.tono === 'gris'
+      && nuevos.e3.texto === BLOQ && nuevos.e3.tono === 'error'
+      && nuevos.e4.texto === PAUSA_P && nuevos.e4.tono === 'pendiente' && nuevos.e5.texto === PAUSA_C && nuevos.e5.tono === 'pendiente'
+      && nuevos.e6a.texto === '1 cambio en espera de tu revisión' && nuevos.e6a.tono === 'pendiente'
+      && nuevos.e6b.texto === '3 cambios en espera de tu revisión' && nuevos.e6b.tono === 'pendiente',
+      'D27 (1): estados nuevos: evaluando e inicial pendiente → «Comprobando tu respaldo…» (gris); bloqueada (error); pausa pendiente y cancelada (pendiente); 1 y N cambios en espera de tu revisión (pendiente)',
+      JSON.stringify(nuevos));
+    // (2) Pares de prioridad que cambian (gana el primero).
+    const pares = {
+      e3SobreOffline: e({ bloqueada: true, enLinea: false }), e4SobreFallidas: e({ pausa: 'pendiente', fallidas: 2 }),
+      e5SobreOffline: e({ pausa: 'cancelada', enLinea: false, cola: 2 }), e3SobrePausa: e({ bloqueada: true, pausa: 'pendiente' }),
+      e6SobreGuardando: e({ cola: 3, retenidas: 1 }), fallidasSobreE6: e({ cola: 3, retenidas: 1, fallidas: 1 }),
+      evaluandoSobreTodavia: e({ habilitada: false, evaluando: true }), evaluandoSobreAjeno: e({ habilitada: false, evaluando: true, motivo: 'escritor-ajeno' }),
+      evaluandoConHabilitada: e({ evaluando: true }), offlineSobreE2: e({ inicialPendiente: true, enLinea: false }),
+      e2SobreFallidas: e({ inicialPendiente: true, fallidas: 1 }), noHabilitadaIgnora: e({ habilitada: false, bloqueada: true, pausa: 'pendiente', retenidas: 2, cola: 2 })
+    };
+    assert(pares.e3SobreOffline.texto === BLOQ && pares.e4SobreFallidas.texto === PAUSA_P && pares.e5SobreOffline.texto === PAUSA_C
+      && pares.e3SobrePausa.texto === BLOQ && pares.e6SobreGuardando.texto === '1 cambio en espera de tu revisión'
+      && pares.fallidasSobreE6.texto === '1 cambio sin respaldar'
+      && pares.evaluandoSobreTodavia.texto === COMPROBANDO && pares.evaluandoSobreAjeno.texto === COMPROBANDO
+      && pares.evaluandoConHabilitada.texto === 'Respaldo al día'
+      && pares.offlineSobreE2.texto === 'Sin conexión · se respaldará al volver' && pares.e2SobreFallidas.texto === COMPROBANDO
+      && pares.noHabilitadaIgnora.texto === 'Este dispositivo todavía no está respaldando tus datos.',
+      'D27 (2): prioridad: bloqueada > pausa > sin conexión > inicial pendiente > fallidas > en espera > guardando; evaluando solo cuenta sin sync habilitada y gana a «todavía no» y a «otro dispositivo»',
+      JSON.stringify(pares));
+    // (3) Los casos que ya existían devuelven lo mismo que la versión anterior (copia literal de antes de D27).
+    const antes = ({ habilitada, motivo, enLinea, cola, fallidas }) => {
+      if(!habilitada) return motivo === 'escritor-ajeno'
+        ? { tono: 'gris', texto: 'Este dispositivo no está respaldando: otro dispositivo mantiene tu respaldo' }
+        : { tono: 'gris', texto: 'Este dispositivo todavía no está respaldando tus datos.' };
+      if(!enLinea) return { tono: 'gris', texto: 'Sin conexión · se respaldará al volver' };
+      if(fallidas > 0) return { tono: 'error', texto: fallidas === 1 ? '1 cambio sin respaldar' : fallidas + ' cambios sin respaldar' };
+      if(cola > 0) return { tono: 'pendiente', texto: cola === 1 ? 'Guardando 1 cambio…' : 'Guardando ' + cola + ' cambios…' };
+      return { tono: 'ok', texto: 'Respaldo al día' };
+    };
+    const distintos = [];
+    let combinaciones = 0;
+    for(const habilitada of [true, false]) for(const motivo of [null, 'escritor-ajeno', 'dueno-ajeno']) for(const enLinea of [true, false])
+      for(const cola of [0, 1, 3]) for(const fallidas of [0, 1, 2]){
+        const ent = { habilitada, motivo, enLinea, cola, fallidas };
+        // Con los insumos nuevos en su valor neutro (como los pasa renderEstadoCuenta sin señales).
+        const ahora = win.estadoRespaldoCuenta({ ...ent, evaluando: false, inicialPendiente: false, bloqueada: false, pausa: null, retenidas: 0 });
+        const sinNuevos = win.estadoRespaldoCuenta(ent);
+        combinaciones++;
+        if(JSON.stringify(ahora) !== JSON.stringify(antes(ent)) || JSON.stringify(sinNuevos) !== JSON.stringify(antes(ent))) distintos.push({ ent, ahora, sinNuevos });
+      }
+    assert(distintos.length === 0 && combinaciones === 108,
+      'D27 (3): sin señales nuevas, estadoRespaldoCuenta devuelve exactamente lo mismo que antes en las 108 combinaciones de los casos existentes',
+      JSON.stringify({ combinaciones, distintos: distintos.slice(0, 3) }));
+
+    // DOM. (a)–(e)
+    const d = win.document, $ = id => d.getElementById(id);
+    const tick = ms => new Promise(r => setTimeout(r, ms));
+    const alm = win.eval('syncAlmacen');
+    const U = 'u-d27', D = 'dev-d27';
+    const orig = {
+      leerCola: alm.leerCola, leerFallidas: alm.leerFallidas, leerRevs: alm.leerRevs, leerChoques: alm.leerChoques,
+      leerDuenoConfirmado: win.leerDuenoConfirmado, confirmarEscritorSync: win.confirmarEscritorSync,
+      procesarCambiosSync: win.procesarCambiosSync, adelantarReintentosSync: win.adelantarReintentosSync,
+      renderEstadoCuenta: win.renderEstadoCuenta, sesion: win.eval('sesionUiEstado')
+    };
+    let cola = [];
+    const TODAVIA = 'Este dispositivo todavía no está respaldando tus datos.';
+    try{
+      alm.leerCola = () => cola.slice(); alm.leerFallidas = () => []; alm.leerRevs = () => ({}); alm.leerChoques = () => [];
+      win.leerDuenoConfirmado = () => U;
+      win.confirmarEscritorSync = async () => true;
+      win.procesarCambiosSync = () => {}; win.adelantarReintentosSync = () => {};
+      win.eval('syncCtx = null; syncPausada = false; syncBorradoPendiente = null; escritorAjenoPara = null; respaldoEvaluandoPara = null; sesionUiEstado = true;');
+      win.closeSheet('sheetCuenta');
+      win.renderEstadoCuenta();
+      const antesDeActivar = $('cfgCuentaEstado').textContent;
+
+      // (a) Activar la escritura continua repinta solo (sin abrir la hoja Cuenta).
+      await win.activarEscrituraContinua(U, D);
+      await tick(10);
+      const a = { antes: antesDeActivar, despues: $('cfgCuentaEstado').textContent, hoja: $('sheetCuenta').classList.contains('open'),
+        habilitada: win.syncHabilitada() };
+      assert(a.antes === TODAVIA && a.despues === 'Respaldo al día' && !a.hoja && a.habilitada === true,
+        'D27 (a): tras activarEscrituraContinua, #cfgCuentaEstado pasa a «Respaldo al día» sin abrir la hoja Cuenta',
+        JSON.stringify(a));
+
+      // (b) renderConfig recalcula: con 1 op «Guardando 1 cambio…», con la cola vacía «Respaldo al día».
+      cola = [{ tabla: 'expenses', clave: 'x1', tipo: 'upsert', fila: { id: 'x1' }, v: 'v1', intentos: 0, proximo: 0 }];
+      win.renderConfig();
+      const conUna = $('cfgCuentaEstado').textContent;
+      cola = [];
+      win.renderConfig();
+      const b = { conUna, vacia: $('cfgCuentaEstado').textContent, nube: $('cfgRespNubeTxt').textContent };
+      assert(b.conUna === 'Guardando 1 cambio…' && b.vacia === 'Respaldo al día' && b.nube === 'Respaldo al día',
+        'D27 (b): renderConfig con la cola vacía, después de haber tenido 1 op, muestra «Respaldo al día» (no la línea vieja)',
+        JSON.stringify(b));
+
+      // (c) Detener la escritura continua vuelve a «todavía no».
+      win.detenerEscrituraContinua();
+      await tick(10);
+      const c = { cfg: $('cfgCuentaEstado').textContent, hoja: $('cuentaEstadoTxt').textContent, tono: $('cuentaEstado').dataset.tono };
+      assert(c.cfg === TODAVIA && c.hoja === TODAVIA && c.tono === 'gris',
+        'D27 (c): tras detenerEscrituraContinua, el estado vuelve a «todavía no está respaldando» (gris)',
+        JSON.stringify(c));
+
+      // (d) 10 avisos seguidos → un solo renderEstadoCuenta.
+      await tick(10);   // ningún repintado pendiente de antes
+      let n = 0;
+      win.renderEstadoCuenta = function(){ n++; return orig.renderEstadoCuenta.apply(this, arguments); };
+      for(let i = 0; i < 10; i++) win.programarRepintadoRespaldo();
+      const sincronico = n;
+      await tick(20);
+      win.renderEstadoCuenta = orig.renderEstadoCuenta;
+      assert(sincronico === 0 && n === 1,
+        'D27 (d): 10 llamadas seguidas a programarRepintadoRespaldo → 1 sola ejecución de renderEstadoCuenta, en la vuelta siguiente',
+        JSON.stringify({ sincronico, ejecuciones: n }));
+
+      // (e) Repintar con el mismo estado no muta las líneas de estado (role="status" no reanuncia).
+      win.renderEstadoCuenta();
+      const mo = new win.MutationObserver(() => {});
+      const opts = { childList: true, characterData: true, subtree: true, attributes: true };
+      ['cuentaEstado', 'cfgRespNubeTxt', 'cfgCuentaEstado'].forEach(id => mo.observe($(id), opts));
+      win.renderEstadoCuenta();
+      win.programarRepintadoRespaldo();
+      await tick(20);
+      win.renderConfig();
+      const muts = mo.takeRecords();
+      mo.disconnect();
+      assert(muts.length === 0,
+        'D27 (e): repintar con el mismo estado (directo, con el aviso y con renderConfig) no muta #cuentaEstadoTxt, data-tono, #cfgRespNubeTxt ni #cfgCuentaEstado',
+        JSON.stringify(muts.map(m => ({ tipo: m.type, en: (m.target.id || (m.target.parentNode && m.target.parentNode.id) || ''), attr: m.attributeName }))));
+    }catch(err){
+      assert(false, 'D27: excepción durante las pruebas del indicador de respaldo', err && err.stack || String(err));
+    }finally{
+      Object.assign(alm, { leerCola: orig.leerCola, leerFallidas: orig.leerFallidas, leerRevs: orig.leerRevs, leerChoques: orig.leerChoques });
+      win.leerDuenoConfirmado = orig.leerDuenoConfirmado; win.confirmarEscritorSync = orig.confirmarEscritorSync;
+      win.procesarCambiosSync = orig.procesarCambiosSync; win.adelantarReintentosSync = orig.adelantarReintentosSync;
+      win.renderEstadoCuenta = orig.renderEstadoCuenta;
+      try{
+        win.eval('syncCtx = null; syncPausada = false; syncBorradoPendiente = null; escritorAjenoPara = null; respaldoEvaluandoPara = null; sesionUiEstado = ' + JSON.stringify(orig.sesion) + ';');
+        await tick(10);
+        win.renderEstadoCuenta();
+      }catch(_){}
+    }
+  }
+
   // ==================== T23 · Fase 2: Configuración (variante A) ====================
   {
     const d = win.document, $ = id => d.getElementById(id);
