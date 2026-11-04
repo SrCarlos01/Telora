@@ -4275,6 +4275,126 @@ async function runTests(){
       'Bloque 2c (e): distanciaOsa() cuenta la transposición de letras vecinas como un solo error', JSON.stringify(dist));
   }
 
+  // ==================== Bloque 2c · confirmación de dominio en la interfaz ====================
+  // Sin red: signInWithOtp se reemplaza en el cliente real por un stub que registra el correo.
+  {
+    const d = win.document;
+    const tick = ms => new Promise(r => setTimeout(r, ms));
+    const $ = id => d.getElementById(id);
+    const auth = win.eval('supa').auth;
+    const origOtp = auth.signInWithOtp;
+    const envios = [];
+    const inpC = $('inpLoginCorreo');
+    const visible = id => !$(id).hidden && $(id).offsetParent !== null;
+    const preguntaVisible = () => visible('loginCorreoSugerencia');
+    const reiniciar = () => { envios.length = 0; win.eval('loginCorreo.bloqueoEnvioHastaMs = 0;'); win.reiniciarLoginCorreo(); };
+    const pedir = async correo => { inpC.value = correo; $('btnLoginEnviarCodigo').click(); await tick(10); };
+    const pulsar = async id => { $(id).click(); await tick(10); };
+    try{
+      auth.signInWithOtp = async a => { envios.push(JSON.parse(JSON.stringify(a))); return { data: { user: null, session: null }, error: null }; };
+      iframe.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:900px; border:0;';
+      void win.innerWidth; win.syncDeskLayout();
+      win.renderCuentaUsuario(null);
+      reiniciar();
+      $('btnCuentaAvatar').click();
+
+      // (f) Con un dominio mal escrito no se envía nada hasta pulsar un botón.
+      const inicial = preguntaVisible();
+      await pedir('chan.012001+b@gmial.com');
+      const preguntada = { envios: envios.length, visible: preguntaVisible(), paso1: visible('loginCorreoPaso1'),
+        texto: $('loginCorreoSugerenciaTxt').textContent, usar: $('btnLoginUsarSugerido').textContent, mantener: $('btnLoginMantenerEscrito').textContent,
+        foco: d.activeElement === $('btnLoginUsarSugerido'), error: $('loginCorreoError1').hidden };
+      await pedir('chan.012001+b@gmial.com');
+      const insistir = { envios: envios.length, visible: preguntaVisible() };
+      assert(!inicial && preguntada.envios === 0 && preguntada.visible && preguntada.paso1 && preguntada.error
+        && preguntada.texto === '¿Quisiste decir chan.012001+b@gmail.com?' && preguntada.usar === 'Usar @gmail.com' && preguntada.mantener === 'Mantener @gmial.com'
+        && preguntada.foco && insistir.envios === 0 && insistir.visible,
+        'Bloque 2c (f): con gmial.com no se llama a signInWithOtp, se pregunta bajo el campo con el foco en «Usar», y «Enviarme un código» no cuenta como elección',
+        JSON.stringify({ inicial, preguntada, insistir }));
+
+      // (g) Accesibilidad y medidas de la pregunta, con la pregunta a la vista.
+      const caja = $('loginCorreoSugerencia');
+      const ancho = sel => { const n = $(sel).getBoundingClientRect(); return { alto: n.height, derecha: n.right }; };
+      const limite = $('loginCorreoPaso1').getBoundingClientRect().right;
+      const a11y = { describe: $('btnLoginUsarSugerido').getAttribute('aria-describedby'),
+        vivas: [caja, ...caja.querySelectorAll('*')].filter(n => n.hasAttribute('aria-live') || n.hasAttribute('role')).length,
+        tipos: [$('btnLoginUsarSugerido').type, $('btnLoginMantenerEscrito').type], usar: ancho('btnLoginUsarSugerido'), mantener: ancho('btnLoginMantenerEscrito'), limite };
+      assert(a11y.describe === 'loginCorreoSugerenciaTxt' && a11y.vivas === 0 && a11y.tipos.join() === 'button,button'
+        && a11y.usar.alto >= 44 && a11y.mantener.alto >= 44 && a11y.usar.derecha <= limite + 0.5 && a11y.mantener.derecha <= limite + 0.5,
+        'Bloque 2c (g): el primer botón lee la pregunta por aria-describedby, sin regiones vivas que la dupliquen; botones de al menos 44 px y sin desborde a 375 px', JSON.stringify(a11y));
+
+      // (h) «Usar» envía el correo corregido.
+      await pulsar('btnLoginUsarSugerido');
+      const usar = { envios: envios.map(e => e.email), crear: envios[0] && envios[0].options && envios[0].options.shouldCreateUser, campo: inpC.value,
+        destino: $('loginCorreoDestino').textContent, paso2: visible('loginCorreoPaso2'), oculta: $('loginCorreoSugerencia').hidden };
+      assert(usar.envios.join() === 'chan.012001+b@gmail.com' && usar.crear === true && usar.campo === 'chan.012001+b@gmail.com'
+        && usar.destino === 'chan.012001+b@gmail.com' && usar.paso2 && usar.oculta,
+        'Bloque 2c (h): «Usar» reemplaza el campo y envía el correo corregido, una sola vez y conservando la parte local', JSON.stringify(usar));
+
+      // (i) «Mantener» envía lo escrito y no vuelve a preguntar por ese mismo valor.
+      reiniciar();
+      await pedir('ana@gmial.com');
+      await pulsar('btnLoginMantenerEscrito');
+      const mantener = { envios: envios.map(e => e.email), campo: inpC.value, destino: $('loginCorreoDestino').textContent, paso2: visible('loginCorreoPaso2') };
+      $('btnLoginCambiarCorreo').click();
+      await pedir('ana@gmial.com');
+      const mismoValor = { envios: envios.map(e => e.email), pregunta: preguntaVisible(), paso2: visible('loginCorreoPaso2') };
+      $('btnLoginCambiarCorreo').click();
+      await pedir('ana@gmai.com');
+      const otroValor = { envios: envios.length, pregunta: preguntaVisible(), usar: $('btnLoginUsarSugerido').textContent };
+      assert(mantener.envios.join() === 'ana@gmial.com' && mantener.campo === 'ana@gmial.com' && mantener.destino === 'ana@gmial.com' && mantener.paso2
+        && mismoValor.envios.join() === 'ana@gmial.com,ana@gmial.com' && !mismoValor.pregunta && mismoValor.paso2
+        && otroValor.envios === 2 && otroValor.pregunta && otroValor.usar === 'Usar @gmail.com',
+        'Bloque 2c (i): «Mantener» envía lo escrito; ese mismo valor no vuelve a preguntar y otro valor sí', JSON.stringify({ mantener, mismoValor, otroValor }));
+
+      // (j) Dominio correcto: directo. Reenvío: nunca pregunta, aunque el dominio parezca mal escrito.
+      reiniciar();
+      await pedir('ana@gmail.com');
+      const directo = { envios: envios.map(e => e.email), pregunta: preguntaVisible(), paso2: visible('loginCorreoPaso2') };
+      reiniciar();
+      await pedir('ana@gmial.com');
+      await pulsar('btnLoginMantenerEscrito');
+      win.eval("loginCorreo.correoMantenido = ''; loginCorreo.enviadoMs -= 61000;");   // sin la memoria de «Mantener»: lo que protege es esReenvio
+      win.pintarLoginCorreo();
+      await pulsar('btnLoginReenviar');
+      const reenvio = { envios: envios.map(e => e.email), pregunta: !$('loginCorreoSugerencia').hidden, paso2: visible('loginCorreoPaso2'), aviso: $('loginCorreoAviso').textContent };
+      assert(directo.envios.join() === 'ana@gmail.com' && !directo.pregunta && directo.paso2
+        && reenvio.envios.join() === 'ana@gmial.com,ana@gmial.com' && !reenvio.pregunta && reenvio.paso2 && reenvio.aviso === 'Te enviamos un código nuevo.',
+        'Bloque 2c (j): con gmail.com se envía directo y el reenvío no pregunta', JSON.stringify({ directo, reenvio }));
+
+      // (k) Editar oculta la pregunta; reiniciar olvida «Mantener»; sin conexión se ve el error de siempre.
+      reiniciar();
+      await pedir('ana@gmial.com');
+      inpC.value = 'ana@gmial.co'; inpC.dispatchEvent(new win.Event('input', { bubbles: true })); await tick(10);
+      const editar = { pregunta: !$('loginCorreoSugerencia').hidden, envios: envios.length };
+      await pedir('ana@gmial.com');
+      await pulsar('btnLoginMantenerEscrito');
+      reiniciar();
+      await pedir('ana@gmial.com');
+      const trasReiniciar = { pregunta: preguntaVisible(), envios: envios.length };
+      reiniciar();
+      Object.defineProperty(win.navigator, 'onLine', { configurable: true, get: () => false });
+      await pedir('ana@gmial.com');
+      const sinRed = { pregunta: !$('loginCorreoSugerencia').hidden, envios: envios.length, error: $('loginCorreoError1').textContent };
+      delete win.navigator.onLine;
+      assert(!editar.pregunta && editar.envios === 0 && trasReiniciar.pregunta && trasReiniciar.envios === 0
+        && !sinRed.pregunta && sinRed.envios === 0 && /Sin conexión/.test(sinRed.error),
+        'Bloque 2c (k): editar el campo oculta la pregunta; reiniciar el formulario olvida «Mantener»; sin conexión no se pregunta y se ve el error de siempre', JSON.stringify({ editar, trasReiniciar, sinRed }));
+    }catch(e){
+      assert(false, 'Bloque 2c: excepción durante las pruebas de la interfaz', e && e.stack || String(e));
+    }finally{
+      try{ delete win.navigator.onLine; }catch(_){}
+      auth.signInWithOtp = origOtp;
+      try{
+        win.eval('loginCorreo.bloqueoEnvioHastaMs = 0;');
+        win.reiniciarLoginCorreo();
+        [...d.querySelectorAll('.sheet-overlay.open')].map(o => o.id).filter(id => id !== 'sheetOnboarding').forEach(id => win.closeSheet(id));
+      }catch(_){}
+      iframe.style.cssText = 'display:none';
+      try{ win.syncDeskLayout(); }catch(_){}
+    }
+  }
+
   // ==================== C2b · la sync se evalúa con cada sesión (banderas por usuario) ====================
   // Eventos reales de onAuthStateChange (auth._notifyAllSubscribers, sin broadcast) sobre un stub de
   // supa: from() registra qué cuenta consulta config_dispositivo y nada sale a la red. Las
