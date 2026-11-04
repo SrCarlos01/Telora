@@ -4241,6 +4241,40 @@ async function runTests(){
     }
   }
 
+  // ==================== Bloque 2c · sugerirCorreo(): dominio mal escrito antes de enviar el código ====================
+  {
+    const s = c => win.sugerirCorreo(c);
+    const dominioDe = c => { const r = s(c); return r && r.dominioSugerido; };
+
+    const conSugerencia = [['gmial.com', 'gmail.com'], ['gmai.com', 'gmail.com'], ['gmail.con', 'gmail.com'], ['gmail.cl', 'gmail.com'],
+      ['hotmial.com', 'hotmail.com'], ['hotmail.cm', 'hotmail.com'], ['outlok.com', 'outlook.com'], ['iclud.com', 'icloud.com'],
+      ['yahoo.om', 'yahoo.com'], ['live.con', 'live.com']];
+    const malas = conSugerencia.filter(([escrito, esperado]) => dominioDe('ana@' + escrito) !== esperado);
+    assert(malas.length === 0, 'Bloque 2c (a): sugerirCorreo() corrige los errores de tipeo de proveedores conocidos (distancia y reglas directas)', JSON.stringify(malas));
+
+    const sinSugerencia = ['gmail.com', 'GMAIL.COM', 'mail.com', 'gmx.com', 'me.com', 'msn.com', 'googlemail.com', 'uoh.cl', 'pregrado.uoh.cl',
+      'live.cl', 'outlook.cl', 'hotmail.es', 'yahoo.es', 'icloud.com', 'ejemplo.cl'];
+    const sobran = sinSugerencia.filter(dom => s('ana@' + dom) !== null);
+    assert(sobran.length === 0, 'Bloque 2c (b): sin sugerencia para los dominios legítimos ni para los que no se parecen a un proveedor', JSON.stringify(sobran));
+
+    const local = s('chan.012001+b@gmial.com');
+    const mayus = s('Ana.Perez@GMIAL.COM');
+    assert(JSON.stringify(local) === JSON.stringify({ sugerido: 'chan.012001+b@gmail.com', dominioEscrito: 'gmial.com', dominioSugerido: 'gmail.com' })
+      && JSON.stringify(mayus) === JSON.stringify({ sugerido: 'Ana.Perez@gmail.com', dominioEscrito: 'GMIAL.COM', dominioSugerido: 'gmail.com' }),
+      'Bloque 2c (c): la parte local se conserva tal cual (puntos, «+», mayúsculas) y las mayúsculas del dominio no impiden la sugerencia', JSON.stringify({ local, mayus }));
+
+    // hotmal.cl está a 1 de hotmail.cl; outlook.de, a 2 de outlook.es y de outlook.cl: empate.
+    const noCorreo = ['anagmial.com', '', null, undefined, '@gmial.com', 'ana@'].filter(c => s(c) !== null);
+    const empate = { outlookDe: s('ana@outlook.de'), yahooCl: s('ana@yahoo.cl'), hotmalCl: dominioDe('ana@hotmal.cl') };
+    assert(noCorreo.length === 0 && empate.outlookDe === null && empate.yahooCl === null && empate.hotmalCl === 'hotmail.cl',
+      'Bloque 2c (d): sin «@» o sin una de sus partes → null; si dos candidatas empatan no se sugiere ninguna; con una sola a la distancia mínima, sí', JSON.stringify({ noCorreo, empate }));
+
+    const dist = { transposicion: win.distanciaOsa('gmial', 'gmail'), borrado: win.distanciaOsa('gmai', 'gmail'), cambio: win.distanciaOsa('gmeil', 'gmail'),
+      dos: win.distanciaOsa('gmial.con', 'gmail.com'), igual: win.distanciaOsa('gmail', 'gmail'), lejos: win.distanciaOsa('uoh.cl', 'live.cl') };
+    assert(dist.transposicion === 1 && dist.borrado === 1 && dist.cambio === 1 && dist.dos === 2 && dist.igual === 0 && dist.lejos === 4,
+      'Bloque 2c (e): distanciaOsa() cuenta la transposición de letras vecinas como un solo error', JSON.stringify(dist));
+  }
+
   // ==================== C2b · la sync se evalúa con cada sesión (banderas por usuario) ====================
   // Eventos reales de onAuthStateChange (auth._notifyAllSubscribers, sin broadcast) sobre un stub de
   // supa: from() registra qué cuenta consulta config_dispositivo y nada sale a la red. Las

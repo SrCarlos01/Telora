@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-sIFweWTkegfuwNdleK3YAGZn5CGH/jzt4dQGECaddKU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-IDCy23HyOiycO9dmtP2c1x1de7qYSondtolgFwMb7gU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -19113,6 +19113,60 @@ const OTP_VIGENCIA_SEG = 600;
 function correoValido(s){
   const c = String(s == null ? '' : s).trim();
   return c.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[^\s@.]{2,}$/.test(c);
+}
+
+// Bloque 2c: el usuario nace en auth.users al pedir el código, así que un dominio mal
+// escrito deja una cuenta sin verificar y manda el código a un dominio ajeno. Se sugiere
+// el proveedor probable antes de enviar; nunca se bloquea.
+const DOMINIOS_REFERENCIA = ['gmail.com', 'hotmail.com', 'hotmail.cl', 'hotmail.es', 'outlook.com', 'outlook.cl',
+  'outlook.es', 'live.com', 'live.cl', 'yahoo.com', 'yahoo.es', 'icloud.com'];
+const DOMINIOS_LEGITIMOS = new Set([...DOMINIOS_REFERENCIA, 'mail.com', 'gmx.com', 'me.com', 'msn.com', 'googlemail.com']);
+const DISTANCIA_MAX_SUGERENCIA = 2;
+
+// Damerau-Levenshtein en su variante OSA: inserción, borrado, cambio y transposición de
+// dos letras vecinas, cada una a costo 1 («gmial» está a 1 de «gmail»).
+function distanciaOsa(a, b){
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for(let j = 1; j <= b.length; j++) d[0][j] = j;
+  for(let i = 1; i <= a.length; i++){
+    for(let j = 1; j <= b.length; j++){
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + costo);
+      if(i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]){
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[a.length][b.length];
+}
+
+function dominioPorRegla(dominio){
+  if(dominio === 'gmail.cl') return 'gmail.com';
+  const m = dominio.match(/^(.+)\.(?:con|cm|om)$/);
+  const conCom = m ? `${m[1]}.com` : '';
+  return DOMINIOS_REFERENCIA.includes(conCom) ? conCom : null;
+}
+
+// Solo responde si la distancia mínima la alcanza una sola candidata: un empate no se adivina.
+function dominioPorDistancia(dominio){
+  const cerca = DOMINIOS_REFERENCIA.map(ref => ({ ref, dist: distanciaOsa(dominio, ref) }))
+    .filter(c => c.dist <= DISTANCIA_MAX_SUGERENCIA);
+  const minima = Math.min(...cerca.map(c => c.dist));
+  const mejores = cerca.filter(c => c.dist === minima);
+  return mejores.length === 1 ? mejores[0].ref : null;
+}
+
+// correo → null | { sugerido, dominioEscrito, dominioSugerido }. El dominio se compara en
+// minúsculas; la parte local no se toca (puntos y «+» incluidos).
+function sugerirCorreo(correo){
+  const c = String(correo == null ? '' : correo).trim();
+  const arroba = c.lastIndexOf('@');
+  if(arroba < 1 || arroba === c.length - 1) return null;
+  const dominioEscrito = c.slice(arroba + 1);
+  const dominio = dominioEscrito.toLowerCase();
+  if(DOMINIOS_LEGITIMOS.has(dominio)) return null;
+  const dominioSugerido = dominioPorRegla(dominio) || dominioPorDistancia(dominio);
+  return dominioSugerido ? { sugerido: `${c.slice(0, arroba)}@${dominioSugerido}`, dominioEscrito, dominioSugerido } : null;
 }
 
 function normalizarCodigoOtp(s){
