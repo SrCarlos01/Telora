@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-QDw8BKU1eVYDlsNmPNfXnSejhfxoJu3/niRwyXhb/bs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-Kw31H0C/sosxSVAU0pW8cW+kZ4O+AXEWNi8HBWkdWDo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -19130,7 +19130,8 @@ function correoValido(s){
 // el proveedor probable antes de enviar; nunca se bloquea.
 const DOMINIOS_REFERENCIA = ['gmail.com', 'hotmail.com', 'hotmail.cl', 'hotmail.es', 'outlook.com', 'outlook.cl',
   'outlook.es', 'live.com', 'live.cl', 'yahoo.com', 'yahoo.es', 'icloud.com'];
-const DOMINIOS_LEGITIMOS = new Set([...DOMINIOS_REFERENCIA, 'mail.com', 'gmx.com', 'me.com', 'msn.com', 'googlemail.com']);
+const DOMINIOS_LEGITIMOS = new Set([...DOMINIOS_REFERENCIA, 'mail.com', 'gmx.com', 'me.com', 'msn.com', 'googlemail.com',
+  'ymail.com', 'email.com', 'yahoo.fr', 'yahoo.de']);
 const DISTANCIA_MAX_SUGERENCIA = 2;
 
 // Damerau-Levenshtein en su variante OSA: inserción, borrado, cambio y transposición de

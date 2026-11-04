@@ -4253,7 +4253,7 @@ async function runTests(){
     assert(malas.length === 0, 'Bloque 2c (a): sugerirCorreo() corrige los errores de tipeo de proveedores conocidos (distancia y reglas directas)', JSON.stringify(malas));
 
     const sinSugerencia = ['gmail.com', 'GMAIL.COM', 'mail.com', 'gmx.com', 'me.com', 'msn.com', 'googlemail.com', 'uoh.cl', 'pregrado.uoh.cl',
-      'live.cl', 'outlook.cl', 'hotmail.es', 'yahoo.es', 'icloud.com', 'ejemplo.cl'];
+      'live.cl', 'outlook.cl', 'hotmail.es', 'yahoo.es', 'icloud.com', 'ejemplo.cl', 'ymail.com', 'email.com', 'yahoo.fr', 'yahoo.de', 'YMAIL.COM'];
     const sobran = sinSugerencia.filter(dom => s('ana@' + dom) !== null);
     assert(sobran.length === 0, 'Bloque 2c (b): sin sugerencia para los dominios legítimos ni para los que no se parecen a un proveedor', JSON.stringify(sobran));
 
