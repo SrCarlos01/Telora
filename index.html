@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-IDCy23HyOiycO9dmtP2c1x1de7qYSondtolgFwMb7gU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-QDw8BKU1eVYDlsNmPNfXnSejhfxoJu3/niRwyXhb/bs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -1130,6 +1130,9 @@ a.nb-ghost{text-decoration:none;}
 .login-correo .login-error{color:var(--danger-text); margin:0 0 10px;}
 .login-correo .login-aviso{margin:0 0 10px;}
 .login-correo .login-aviso:empty{display:none;}
+.login-sugerencia{margin:0 0 2px;}
+.login-sugerencia .sheet-note{margin:0 0 8px; color:var(--cream); overflow-wrap:anywhere;}
+.login-sugerencia button{display:block; width:100%; min-height:44px; margin:0 0 8px; overflow-wrap:anywhere;}
 .field input.login-codigo{font-size:16px; letter-spacing:.35em; font-variant-numeric:tabular-nums;}
 .login-correo button:disabled{opacity:.45; cursor:default;}
 .login-acciones{display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin-top:8px;}
@@ -3312,6 +3315,13 @@ button:active{ transform:scale(0.93); }
           <input type="email" id="inpLoginCorreo" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="nombre@correo.cl" aria-describedby="loginCorreoError1">
         </div>
         <p class="sheet-note login-error" id="loginCorreoError1" role="alert" hidden></p>
+        <!-- Bloque 2c: el foco llega al primer botón, y su aria-describedby lee la pregunta una
+             sola vez. Sin aria-live: junto al cambio de foco se anunciaría dos veces. -->
+        <div class="login-sugerencia" id="loginCorreoSugerencia" hidden>
+          <p class="sheet-note" id="loginCorreoSugerenciaTxt"></p>
+          <button type="button" class="btn-primary" id="btnLoginUsarSugerido" aria-describedby="loginCorreoSugerenciaTxt"></button>
+          <button type="button" class="btn-ghost" id="btnLoginMantenerEscrito"></button>
+        </div>
         <button type="submit" class="btn-ghost" id="btnLoginEnviarCodigo" style="margin-top:0;">Enviarme un código</button>
       </form>
       <form id="loginCorreoPaso2" class="login-correo" novalidate hidden>
@@ -19234,7 +19244,8 @@ function estadoLoginCorreo({ ocupado = false, enLinea = true, ahoraMs = 0, envia
 }
 
 const loginCorreo = { paso: 1, correo: '', enviadoMs: 0, ocupado: false,
-                      bloqueoEnvioHastaMs: 0, bloqueoVerifHastaMs: 0, ultimoAuto: '' };
+                      bloqueoEnvioHastaMs: 0, bloqueoVerifHastaMs: 0, ultimoAuto: '',
+                      sugerencia: null, correoMantenido: '' };
 let loginCorreoTimer = null;
 
 function pintarLoginCorreo(){
@@ -19258,11 +19269,25 @@ function mostrarErrorLogin(paso, texto){
 }
 function avisoLogin(texto){ document.getElementById('loginCorreoAviso').textContent = texto || ''; }
 
+function mostrarSugerenciaLogin(s){
+  loginCorreo.sugerencia = s;
+  document.getElementById('loginCorreoSugerenciaTxt').textContent = `¿Quisiste decir ${s.sugerido}?`;
+  document.getElementById('btnLoginUsarSugerido').textContent = `Usar @${s.dominioSugerido}`;
+  document.getElementById('btnLoginMantenerEscrito').textContent = `Mantener @${s.dominioEscrito}`;
+  document.getElementById('loginCorreoSugerencia').hidden = false;
+  document.getElementById('btnLoginUsarSugerido').focus();
+}
+function ocultarSugerenciaLogin(){
+  loginCorreo.sugerencia = null;
+  document.getElementById('loginCorreoSugerencia').hidden = true;
+}
+
 function reiniciarLoginCorreo(){
-  Object.assign(loginCorreo, { paso: 1, correo: '', enviadoMs: 0, ocupado: false, ultimoAuto: '' });
+  Object.assign(loginCorreo, { paso: 1, correo: '', enviadoMs: 0, ocupado: false, ultimoAuto: '', correoMantenido: '' });
   document.getElementById('inpLoginCorreo').value = '';
   document.getElementById('inpLoginCodigo').value = '';
   mostrarErrorLogin(1, ''); mostrarErrorLogin(2, ''); avisoLogin('');
+  ocultarSugerenciaLogin();
   pintarLoginCorreo();
 }
 
@@ -19274,6 +19299,7 @@ async function enviarCodigoLogin(esReenvio){
   const correo = esReenvio ? loginCorreo.correo : inpCorreo.value.trim();
   const foco = () => (paso === 1 ? inpCorreo : inpCodigo).focus();
   mostrarErrorLogin(1, ''); mostrarErrorLogin(2, ''); avisoLogin('');
+  ocultarSugerenciaLogin();
   if(!esReenvio && !correoValido(correo)){
     mostrarErrorLogin(1, correo ? 'Revisa el correo: debe tener la forma nombre@correo.cl.' : 'Escribe tu correo.');
     foco();
@@ -19282,6 +19308,12 @@ async function enviarCodigoLogin(esReenvio){
   if(!supa || navigator.onLine === false){
     mostrarErrorLogin(paso, mensajeErrorOtp(null, { enLinea: false }).texto);
     pintarLoginCorreo(); foco();
+    return;
+  }
+  // Va después del control de conexión: sin red no se pregunta algo que igual no se puede enviar.
+  const sugerencia = esReenvio || correo === loginCorreo.correoMantenido ? null : sugerirCorreo(correo);
+  if(sugerencia){
+    mostrarSugerenciaLogin(sugerencia);
     return;
   }
   loginCorreo.ocupado = true; pintarLoginCorreo();
@@ -19346,6 +19378,15 @@ async function verificarCodigoLogin(){
 document.getElementById('loginCorreoPaso1').addEventListener('submit', ev => { ev.preventDefault(); enviarCodigoLogin(false); });
 document.getElementById('loginCorreoPaso2').addEventListener('submit', ev => { ev.preventDefault(); verificarCodigoLogin(); });
 document.getElementById('btnLoginReenviar').onclick = ()=> enviarCodigoLogin(true);
+document.getElementById('btnLoginUsarSugerido').onclick = ()=>{
+  document.getElementById('inpLoginCorreo').value = loginCorreo.sugerencia.sugerido;
+  enviarCodigoLogin(false);
+};
+document.getElementById('btnLoginMantenerEscrito').onclick = ()=>{
+  loginCorreo.correoMantenido = document.getElementById('inpLoginCorreo').value.trim();
+  enviarCodigoLogin(false);
+};
+document.getElementById('inpLoginCorreo').addEventListener('input', ocultarSugerenciaLogin);
 document.getElementById('btnLoginCambiarCorreo').onclick = ()=>{
   if(loginCorreo.ocupado) return;
   Object.assign(loginCorreo, { paso: 1, ultimoAuto: '' });
