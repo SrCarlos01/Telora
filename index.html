@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-mPQ1+d1+Wf9SvDdQXQ9uc6V/pkUNdMSMm6Lxau8kryk=' 'sha256-Kw31H0C/sosxSVAU0pW8cW+kZ4O+AXEWNi8HBWkdWDo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-q3TB+dgzNpyRalP9uupATYClTcvWmyVD4zr+iVeNJP4=' 'sha256-8p20850OFfjCgXpDZRpInTFdyULVorFMuPkvi2aoCWE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -14628,6 +14628,24 @@ function isIOSDevice(){
   return /iphone|ipad|ipod/i.test(ua) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS se hace pasar por Mac
 }
+// true solo dentro de la app nativa; en la web window.Capacitor no existe. `w` permite probarla.
+// Vive en este <script> porque initDataShieldBanners la llama durante la carga, antes de que
+// corra el <script> de Cuenta de usuario (que también la usa).
+function esAppNativa(w){
+  try{
+    const cap = (w || window).Capacitor;
+    return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  }catch(_){ return false; }
+}
+// Bloque 2e: ¿proponer «Instala Telora»? (función pura). Solo en el navegador de un teléfono o
+// tablet, donde instalar protege los datos del borrado de 7 días; ni en la app nativa, ni con la
+// PWA instalada, ni en escritorio. iOS primero (un iPad apaisado pasa de 1024 px y aun así instala
+// desde Safari); escritorio con el mismo criterio de textoAvisoInstalar.
+function debeOfrecerInstalar({ instalada, nativa, ios, ancho, tactil }){
+  if(instalada || nativa) return false;
+  if(ios) return true;
+  return !(ancho >= 1024 || !tactil);
+}
 // Tanda L1: texto del aviso «Instala Telora» (función pura). iOS primero (un iPad apaisado
 // pasa de 1024 px y aun así instala desde Safari); en escritorio (≥1024 px o sin pantalla
 // táctil) Chrome y Edge ofrecen el ícono de instalar en la barra de direcciones.
@@ -14681,9 +14699,9 @@ function prepararRecordatorioRespaldo(){
 (function initDataShieldBanners(){
   prepararRecordatorioRespaldo();
 
-  // pto 3 · invitación a instalar (solo si la app corre en el navegador)
+  // pto 3 · invitación a instalar (solo en el navegador de un teléfono o tablet)
   const ib = document.getElementById('installBanner');
-  if(ib && !appIsInstalled()){
+  if(ib && debeOfrecerInstalar({ instalada: appIsInstalled(), nativa: esAppNativa(), ios: isIOSDevice(), ancho: window.innerWidth, tactil: ('ontouchstart' in window) || navigator.maxTouchPoints > 0 })){
     let dismissedAt = 0;
     try{ dismissedAt = parseInt(localStorage.getItem('misfinanzas_install_dismissed') || '0', 10) || 0; }catch(_){}
     if((Date.now() - dismissedAt) > 7 * DIA_MS){
@@ -14799,9 +14817,8 @@ if('serviceWorker' in navigator){
   function arrancarServiceWorker(){
     // C3a: en la app nativa los archivos vienen en el APK y las versiones llegan por la tienda:
     // sin SW (ni su caché ni el aviso de versión nueva) y se quita el que hayan dejado C1/C2.
-    // esAppNativa vive en el <script> de Cuenta de usuario; si ese no cargó, se sigue como web.
     // C3b: también se borran las cajas de su caché, que el desregistro no quita.
-    if(typeof esAppNativa === 'function' && esAppNativa()){
+    if(esAppNativa()){
       quitarServiceWorkers(navigator.serviceWorker);
       quitarCachesSw(window.caches);
       return;
@@ -18912,13 +18929,6 @@ let cierreSesionPropio = false;   // true mientras esta pestaña cierra la sesi�
 const URL_RETORNO_NATIVO = 'cl.telora.app://auth/callback';
 const CLAVE_RETORNO_AUTH = 'telora_retorno_auth';   // sessionStorage: última URL de retorno ya procesada
 
-// true solo dentro de la app nativa; en la web window.Capacitor no existe. `w` permite probarla.
-function esAppNativa(w){
-  try{
-    const cap = (w || window).Capacitor;
-    return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-  }catch(_){ return false; }
-}
 // null = createClient con los mismos dos argumentos de siempre (web).
 function opcionesClienteSupabase(esNativa){
   return esNativa ? { auth: { flowType: 'pkce', detectSessionInUrl: false } } : null;
