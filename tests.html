@@ -4032,6 +4032,14 @@ async function runTests(){
       const ESC = 'En Chrome o Edge: usa el ícono de instalar en la barra de direcciones.';
       assert(rE.pc === ESC && rE.sinTactil === ESC && /^En Chrome: menú ⋮/.test(rE.movil) && /^En Safari/.test(rE.ios) && rE.ipad === rE.ios,
         'T21 C (e): aviso «Instala Telora»: a ≥1024 px o sin pantalla táctil habla del ícono de la barra de direcciones; móvil e iOS sin cambios', JSON.stringify(rE));
+      const ofrece = (instalada, nativa, ios, ancho, tactil) => win.debeOfrecerInstalar({ instalada, nativa, ios, ancho, tactil });
+      const rI = { instaladaAndroid: ofrece(true, false, false, 412, true), instaladaIos: ofrece(true, false, true, 390, true), instaladaPc: ofrece(true, false, false, 1440, false),
+                   nativa: ofrece(false, true, false, 412, true), iphone: ofrece(false, false, true, 390, true), ipad: ofrece(false, false, true, 1180, true),
+                   android: ofrece(false, false, false, 412, true), pc: ofrece(false, false, false, 1440, false), pcTactil: ofrece(false, false, false, 1440, true),
+                   ventanaAngosta: ofrece(false, false, false, 800, false) };
+      assert(!rI.instaladaAndroid && !rI.instaladaIos && !rI.instaladaPc && !rI.nativa && !rI.pc && !rI.pcTactil && !rI.ventanaAngosta
+        && rI.iphone === true && rI.ipad === true && rI.android === true,
+        'Bloque 2e: debeOfrecerInstalar — sí en iPhone, iPad (aunque pase de 1024 px) y Android en el navegador; no instalada, en la app nativa ni en escritorio (portátil táctil y ventana angosta incluidos)', JSON.stringify(rI));
     }
 
     // (f) Caso A de intentarSubidaInicial(): sin datos se asocia directo; con datos se pregunta.
@@ -6205,6 +6213,15 @@ async function runTests(){
       JSON.stringify(al && (al.error || al.trasRecargar)));
     assert(al && !al.error && al.tabla.join() === 'legal,legal,instalar',
       'Tanda C: elegirAviso da prioridad al aviso legal con y sin sesión; sin él, sigue el orden de siempre', JSON.stringify(al && (al.error || al.tabla)));
+
+    const inst = await correr(pruebasInstalarNativa);
+    assert(inst && !inst.error && inst.web.tactil && !inst.web.nativa && inst.web.ancho < 1024 && inst.web.pendiente === true,
+      'Bloque 2e: en un navegador táctil angosto (control) initDataShieldBanners sí deja avisosPendientes.instalar en true',
+      JSON.stringify(inst && (inst.error || inst.web)));
+    assert(inst && !inst.error && inst.app.tactil && inst.app.nativa && inst.app.ancho < 1024 && inst.app.pendiente === false && inst.app.oculto
+      && inst.app.swFalso > 0 && inst.app.cachesFalsas > 0,
+      'Bloque 2e: con window.Capacitor.isNativePlatform() true, initDataShieldBanners no deja avisosPendientes.instalar en true y la barra queda oculta',
+      JSON.stringify(inst && (inst.error || inst.app)));
   }
 
   {
@@ -6902,6 +6919,9 @@ async function pruebasAvisoLegal(){
     localStorage.setItem('misfinanzas_data', JSON.stringify(fixtureBase()));
     p = cargar(); w.location.reload(); await p;
     w = f.contentWindow; const $ = id => w.document.getElementById(id);
+    // Estas pruebas son del árbitro, no de la detección: la candidata se fija a mano (la detección
+    // real solo la propone en un teléfono o tablet; ver pruebasInstalarNativa).
+    w.eval('avisosPendientes.instalar = true;'); w.arbitrarAvisos();
     const visibles = () => ['avisoLegal', 'invitacionCuenta', 'backupReminder', 'installBanner'].filter(id => !$(id).hidden);
     const r = el => { const b = el.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom) }; };
     const barra = r($('avisoLegal')), zona = r(w.document.querySelector('.bottom-zone'));
@@ -6928,6 +6948,62 @@ async function pruebasAvisoLegal(){
     f.remove();
     // Sin datos previos, restaurar quita misfinanzas_data: sin esto el iframe principal recargaba
     // (listener de borrado local) DESPUÉS de las pruebas y volvía a escribir misfinanzas_metasCheckMk.
+    await restaurarLocalStorageSinRecargar(document.getElementById('appFrame').contentWindow, lsAntes);
+  }
+}
+
+// Bloque 2e: initDataShieldBanners corre una sola vez, durante la carga, y lo simulado debe existir
+// antes de ella: cada caso abre un iframe srcdoc con index.html (sin la CSP, como hace
+// servidor_pruebas.py) y los simulados como primer <script>. El srcdoc tiene el origen de esta
+// página, así que comparte localStorage. Táctil en los dos casos: si no, «no propone» pasaría
+// también por escritorio. En el caso nativo, arrancarServiceWorker desregistra y borra cajas: van
+// un service worker y unas cachés falsos para no tocar los reales de este origen (y se cuenta su
+// uso para saber que los simulados llegaron a la página).
+async function pruebasInstalarNativa(){
+  const tick = ms => new Promise(r => setTimeout(r, ms));
+  const lsAntes = {};
+  for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); lsAntes[k] = localStorage.getItem(k); }
+  const html = (await fetch('index.html', { cache: 'no-store' }).then(x => x.text()))
+    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
+  const simulados = nativa => {
+    window.ontouchstart = null;
+    const uso = window.__usoSimulados = { sw: 0, caches: 0 };
+    if(!nativa) return;
+    window.Capacitor = { isNativePlatform: () => true, Plugins: {
+      App: { addListener(){}, getLaunchUrl: async () => ({}) }, Browser: { addListener(){} } } };
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: {
+      controller: null, ready: new Promise(() => {}), addEventListener(){},
+      getRegistrations: async () => { uso.sw++; return []; } } });
+    Object.defineProperty(window, 'caches', { configurable: true, value: {
+      keys: async () => { uso.caches++; return []; }, delete: async () => false } });
+  };
+  const abrir = async nativa => {
+    localStorage.removeItem('misfinanzas_install_dismissed');
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:absolute; left:-10000px; top:0; width:375px; height:812px; border:0;';
+    const cabeza = '<head><base href="' + location.href + '"><script>(' + simulados.toString() + ')(' + nativa + ');<\/script>';
+    f.srcdoc = html.replace('<head>', () => cabeza);
+    try{
+      await new Promise(res => {
+        f.addEventListener('load', async () => {
+          for(let n = 0; n < 250; n++){
+            try{ if(typeof f.contentWindow.arbitrarAvisos === 'function' && f.contentWindow.document.readyState === 'complete') break; }catch(_){}
+            await tick(20);
+          }
+          setTimeout(res, 50);
+        }, { once: true });
+        document.body.appendChild(f);
+      });
+      const w = f.contentWindow;
+      return { tactil: 'ontouchstart' in w, nativa: w.esAppNativa(), ancho: w.innerWidth, pendiente: w.eval('avisosPendientes.instalar'),
+        oculto: w.document.getElementById('installBanner').hidden, swFalso: w.__usoSimulados.sw, cachesFalsas: w.__usoSimulados.caches };
+    }finally{
+      f.remove();
+    }
+  };
+  try{
+    return { web: await abrir(false), app: await abrir(true) };
+  }finally{
     await restaurarLocalStorageSinRecargar(document.getElementById('appFrame').contentWindow, lsAntes);
   }
 }
