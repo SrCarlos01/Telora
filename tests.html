@@ -4290,7 +4290,7 @@ async function runTests(){
     const tick = ms => new Promise(r => setTimeout(r, ms));
     const $ = id => d.getElementById(id);
     const auth = win.eval('supa').auth;
-    const origOtp = auth.signInWithOtp;
+    const origOtp = auth.signInWithOtp, origGetSession = auth.getSession, origSignOut = auth.signOut;
     const envios = [];
     const inpC = $('inpLoginCorreo');
     const visible = id => !$(id).hidden && $(id).offsetParent !== null;
@@ -4388,11 +4388,49 @@ async function runTests(){
       assert(!editar.pregunta && editar.envios === 0 && trasReiniciar.pregunta && trasReiniciar.envios === 0
         && !sinRed.pregunta && sinRed.envios === 0 && /Sin conexión/.test(sinRed.error),
         'Bloque 2c (k): editar el campo oculta la pregunta; reiniciar el formulario olvida «Mantener»; sin conexión no se pregunta y se ve el error de siempre', JSON.stringify({ editar, trasReiniciar, sinRed }));
+
+      // (l)–(n) Reautenticación de «Eliminar mi cuenta»: el correo de la sesión no se cuestiona,
+      // lo que la persona escribe sí. lider.cl activa sugerirCorreo (→ live.cl).
+      const sesionLider = { access_token: 'tok', user: { id: 'uid-2c5', email: 'ana@lider.cl', app_metadata: { provider: 'email' }, user_metadata: {} } };
+      auth.getSession = async () => ({ data: { session: sesionLider }, error: null });
+      auth.signOut = async () => ({ error: null });
+      $('btnEliminarCuentaReauth').dataset.metodo = 'correo';
+      const reautenticar = async () => { reiniciar(); await $('btnEliminarCuentaReauth').onclick(); await tick(10); };
+
+      await reautenticar();
+      const antes = { sugiere: (win.sugerirCorreo('ana@lider.cl') || {}).dominioSugerido, campo: inpC.value, foco: d.activeElement === $('btnLoginEnviarCodigo'), envios: envios.length };
+      await pulsar('btnLoginEnviarCodigo');
+      const reauth = { envios: envios.map(e => e.email), pregunta: !$('loginCorreoSugerencia').hidden, paso2: visible('loginCorreoPaso2'), destino: $('loginCorreoDestino').textContent };
+      assert(antes.sugiere === 'live.cl' && antes.campo === 'ana@lider.cl' && antes.foco && antes.envios === 0
+        && reauth.envios.join() === 'ana@lider.cl' && !reauth.pregunta && reauth.paso2 && reauth.destino === 'ana@lider.cl',
+        'Bloque 2c (l): reautenticación con un correo de sesión @lider.cl → «Enviarme un código» llama a signInWithOtp de inmediato con ese correo, sin pregunta', JSON.stringify({ antes, reauth }));
+
+      await reautenticar();
+      inpC.value = 'algo@gmial.com'; inpC.dispatchEvent(new win.Event('input', { bubbles: true }));
+      await pulsar('btnLoginEnviarCodigo');
+      const editado = { envios: envios.length, pregunta: preguntaVisible(), usar: $('btnLoginUsarSugerido').textContent };
+      await reautenticar();
+      inpC.value = 'otra@lider.cl'; inpC.dispatchEvent(new win.Event('input', { bubbles: true }));
+      await pulsar('btnLoginEnviarCodigo');
+      const mismoDominio = { envios: envios.length, pregunta: preguntaVisible() };
+      assert(editado.envios === 0 && editado.pregunta && editado.usar === 'Usar @gmail.com' && mismoDominio.envios === 0 && mismoDominio.pregunta,
+        'Bloque 2c (m): tras la reautenticación, si la persona cambia el campo se pregunta (algo@gmial.com, y también otro correo del mismo dominio)', JSON.stringify({ editado, mismoDominio }));
+
+      reiniciar();
+      await pedir('ana@gmial.com');
+      const normal = { envios: envios.length, pregunta: preguntaVisible() };
+      reiniciar();
+      await pedir('ana@lider.cl');
+      const normalLider = { envios: envios.length, pregunta: preguntaVisible() };
+      assert(normal.envios === 0 && normal.pregunta && normalLider.envios === 0 && normalLider.pregunta,
+        'Bloque 2c (n): el login normal sigue preguntando con @gmial.com, y con @lider.cl fuera de la reautenticación', JSON.stringify({ normal, normalLider }));
     }catch(e){
       assert(false, 'Bloque 2c: excepción durante las pruebas de la interfaz', e && e.stack || String(e));
     }finally{
       try{ delete win.navigator.onLine; }catch(_){}
-      auth.signInWithOtp = origOtp;
+      auth.signInWithOtp = origOtp; auth.getSession = origGetSession; auth.signOut = origSignOut;
+      delete $('btnEliminarCuentaReauth').dataset.metodo;
+      try{ win.sessionStorage.removeItem('telora_reauth_eliminar'); }catch(_){}
       try{
         win.eval('loginCorreo.bloqueoEnvioHastaMs = 0;');
         win.reiniciarLoginCorreo();

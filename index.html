@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-q3TB+dgzNpyRalP9uupATYClTcvWmyVD4zr+iVeNJP4=' 'sha256-8p20850OFfjCgXpDZRpInTFdyULVorFMuPkvi2aoCWE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-oYoBZ4xjcs+iFLJx4VpYP6sgUw2ioAgNZW/JG9XoLTQ=' 'sha256-q3TB+dgzNpyRalP9uupATYClTcvWmyVD4zr+iVeNJP4=' 'sha256-PO0ZIAZ19vFXMVU0oMfbnWfbZGuXYqMZvelQo/hvgvA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://ekavuxaznjbvrzpxtslz.supabase.co wss://ekavuxaznjbvrzpxtslz.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
 /* Hotfix iOS H1: iOS/iPadOS amplía la página al enfocar un campo y, con el zoom de
@@ -19793,7 +19793,11 @@ document.getElementById('btnEliminarCuentaReauth').onclick = async ()=>{
   await cerrarSesionLocal();
   closeSheet('sheetEliminarCuenta');
   reiniciarLoginCorreo();
-  document.getElementById('inpLoginCorreo').value = correo;
+  const inpCorreo = document.getElementById('inpLoginCorreo');
+  inpCorreo.value = correo;
+  // Es el correo de la propia sesión, no algo escrito: no se cuestiona su dominio. Va después
+  // de reiniciarLoginCorreo(), que borra la marca; editar el campo la deja sin efecto.
+  loginCorreo.correoMantenido = inpCorreo.value.trim();
   abrirCuenta(correo ? 'btnLoginEnviarCodigo' : 'inpLoginCorreo');
 };
 document.getElementById('inpEliminarCuentaConfirma').addEventListener('input', ()=> actualizarBotonesEliminarCuenta());
